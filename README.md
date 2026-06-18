@@ -235,56 +235,64 @@ base, packed into a u64), `mlx_fast_scaled_dot_product_attention` with
 
 ## What you can build with it
 
-mlx-ts today is a **local LLM inference + LoRA-training runtime for decoder-only
-text models** — Bun-only, Apple-Silicon-only, run as scripts in this repo (not
-yet an npm package). Sampling supports greedy, temperature, top-p, **top-k**, and
-**repetition penalty** (`bun stream.ts --temp 0.8 --topp 0.95 --topk 40 --reppenalty 1.1 "…"`).
+mlx-ts today is a **local inference runtime for text LLMs *and* Whisper
+speech-to-text** (plus LoRA training) — Bun-only, Apple-Silicon-only, run as
+scripts in this repo (not yet an npm package). Sampling supports greedy,
+temperature, top-p, **top-k**, and **repetition penalty**
+(`bun stream.ts --temp 0.8 --topp 0.95 --topk 40 --reppenalty 1.1 "…"`).
 
 ### ✅ Buildable now (everything needed exists)
 - **Local chat assistant / CLI** — streaming replies, multi-turn via chat
   templates, temp/top-p/top-k/repetition-penalty sampling (`chat.ts`, `stream.ts`).
-- **A local inference HTTP server + chat UI** — `server.ts` does this: an
-  OpenAI-compatible `/v1/chat/completions` (SSE/JSON) over `Bun.serve` plus a
-  self-contained chat page at `/`. Single-process / low-concurrency, not multi-tenant.
+- **OpenAI-compatible server + chat web UI** — `server.ts` over `Bun.serve`:
+  `/v1/chat/completions` (SSE/JSON), `/v1/embeddings`, `/v1/audio/transcriptions`,
+  and a self-contained chat page at `/` with a **live mic** (record → transcribe →
+  edit → send). Single-process / low-concurrency, not multi-tenant.
+- **Speech-to-text (Whisper), multilingual** — `audio.ts` (log-Mel, ~1e-6 vs numpy
+  FFT) + `whisper.ts` (Conv1d stem, bidirectional encoder, cross-attention decoder,
+  KV cache) + `whisper-tokenizer.ts`. **Token-for-token identical to `mlx_whisper`**
+  (`whisper-transcribe-test.ts`). Runs `large-v3-turbo` with **auto language
+  detection** and a **sliding window** for unbounded dictation; Danish/Swedish/
+  English verified. `bun whisper.ts audio.flac` (setup below).
+- **Multilingual chat** — the server injects a system prompt so replies come back
+  in the user's language (Danish in → Danish out).
 - **Local RAG** — `POST /v1/embeddings` returns L2-normalized sentence vectors
-  (mean-pooled Qwen3 hidden states); pair with any JS vector store for retrieval.
+  (mean-pooled Qwen3 hidden states); pair with any JS vector store.
 - **Prompt-driven text tools** — summarize / rewrite / classify / extract /
-  translate, batched over a dataset (one-at-a-time or equal-length).
-- **Agent loops** — tool use via prompting + JS-side parsing.
+  translate; **agent loops** (tool use via prompting + JS parsing).
 - **LoRA fine-tuning** of 4-bit Qwen3 (Adam + cross-entropy, `lora-train.ts`).
 - **Research / inspection** — pull logits, hidden states; the `MX` op surface is open.
 
+Whisper setup (weights/assets are git-ignored — fetched, like the LLM weights):
+
+```sh
+W=https://huggingface.co/mlx-community/whisper-large-v3-turbo/resolve/main
+curl -sL $W/config.json -o config-turbo.json
+curl -sL $W/weights.safetensors -o whisper-turbo.safetensors
+pip install mlx-whisper   # validation oracle; ships the mel filterbank + tiktoken vocab (use a venv)
+WA=$(python3 -c 'import mlx_whisper,os;print(os.path.dirname(mlx_whisper.__file__))')/assets
+cp "$WA/multilingual.tiktoken" whisper-multilingual.tiktoken
+python3 -c "import mlx.core as mx,numpy as np;np.array(mx.load('$WA/mel_filters.npz')['mel_128']).astype('float32').tofile('whisper-mel-filters-128.f32')"
+bun whisper.ts audio.flac          # auto-detects language; any ffmpeg-decodable file
+```
+
 ### 🟡 Needs modest code (clear path, no feasibility risk)
 - **More architectures** (Llama, Mistral, Gemma, Phi…) — a forward over `nn`
-  modules + weight-key mapping (`olmoe.ts` is the template).
-- **Better embeddings** — a *dedicated* embedding model (e.g. a BERT encoder with
-  WordPiece, or Qwen3-Embedding with last-token pooling) for stronger retrieval
-  than the current mean-pooled base-LLM vectors.
+  modules + weight-key mapping (`olmoe.ts` / `whisper.ts` are templates).
+- **Better embeddings** — a *dedicated* embedding model (BERT encoder + WordPiece,
+  or Qwen3-Embedding with last-token pooling) for stronger retrieval than the
+  current mean-pooled base-LLM vectors.
 - **npm packaging** — bundle a prebuilt `libmlxc`, replace the hardcoded
   `/opt/homebrew/...` dylib paths with runtime resolution.
-- **OpenAI-compatible HTTP server** — app-level glue over `streamText`.
 
 ### ❌ Not yet (substantial new code or a real gap)
+- **Text-to-speech** — **de-risked, not built**: the novel vocoder step (iSTFT,
+  spectrum → audio) runs in mlx-c/TS, matching mlx-audio to 1.2e-7
+  (`spike-istft.ts`). A full talking pipeline needs the rest of a vocoder
+  (conv/norm variants — portable) plus a non-MLX grapheme→phoneme step
+  (`espeak-ng`, like ffmpeg). Scoped as product work — see `FINDINGS.md` §7c.
 - **Node.js / cross-platform** — Bun FFI only; Apple-Silicon + Metal only (no
   Linux/CUDA, Windows, Intel).
-- ✅ **Speech-to-text (Whisper)** — **end-to-end transcription works**: `audio.ts`
-  (log-Mel, ~1e-6 vs numpy FFT) + `whisper.ts` (Conv1d stem, bidirectional encoder,
-  causal decoder with cross-attention, tied logits) + `whisper-tokenizer.ts`
-  (tiktoken decode) + a greedy decode loop. `bun whisper.ts jfk.flac` →
-  *"And so my fellow Americans ask not what your country can do for you…"* —
-  **token-for-token identical to `mlx_whisper`** (`whisper-transcribe-test.ts`).
-
-  ```sh
-  W=https://huggingface.co/mlx-community/whisper-tiny/resolve/main
-  curl -sL $W/config.json -o config-whisper.json
-  curl -sL $W/weights.npz -o /tmp/whisper-tiny.npz
-  python3 -c 'import numpy as np, mlx.core as mx; d=np.load("/tmp/whisper-tiny.npz"); mx.save_safetensors("whisper-tiny.safetensors",{k:mx.array(d[k]) for k in d.files})'
-  pip install mlx-whisper   # ships the mel filterbank + tiktoken vocab (use a venv)
-  WA=$(python3 -c 'import mlx_whisper,os;print(os.path.dirname(mlx_whisper.__file__))')/assets
-  cp "$WA/multilingual.tiktoken" whisper-multilingual.tiktoken
-  python3 -c "import mlx.core as mx,numpy as np;np.array(mx.load('$WA/mel_filters.npz')['mel_80']).astype('float32').tofile('whisper-mel-filters-80.f32')"
-  bun whisper.ts /path/to/audio.flac          # transcribe (any ffmpeg-decodable file)
-  ```
 - **Vision / multimodal** (CLIP, LLaVA, image-gen) — no vision encoders wired yet.
 - **High-throughput multi-tenant serving** — only equal-length batching; ragged
   prompts need padding masks + continuous batching.

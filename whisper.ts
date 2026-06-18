@@ -4,7 +4,7 @@
 // features -> tied-embedding logits. Runs in fp16 like the reference.
 //   weights: whisper-tiny.safetensors (converted from mlx-community/whisper-tiny)
 
-import { MX, fromF32, fromI32, scalar, sample, tidy } from "./mx.ts";
+import { MX, fromF32, fromI32, scalar, sample, tidy, evalAll } from "./mx.ts";
 import { loadSafetensors, get } from "./loader.ts";
 import { decodeAudio, padOrTrim, loadMelFilters, logMel } from "./audio.ts";
 import { WhisperTokenizer, SOT, EN, TRANSCRIBE, NO_TIMESTAMPS, EOT } from "./whisper-tokenizer.ts";
@@ -12,6 +12,8 @@ import { WhisperTokenizer, SOT, EN, TRANSCRIBE, NO_TIMESTAMPS, EOT } from "./whi
 const FP16 = 9, EPS = 1e-5;
 
 type Lin = { wt: MX; b: MX | null };
+// per-layer decode cache: growing self-attn k/v + fixed cross-attn k/v (from audio).
+type WCache = { sk: MX | null; sv: MX | null; ck: MX | null; cv: MX | null };
 
 // sinusoids(length, channels) — Whisper's fixed encoder positional embedding.
 function sinusoids(length: number, channels: number): MX {
@@ -106,24 +108,64 @@ export class Whisper {
     return x.matmul(this.tokEmbT);                                  // tied-embedding logits
   }
 
-  // Greedy transcription of a 16 kHz mono PCM clip (<= 30 s) -> token ids.
-  // filtersT: Whisper's mel filterbank ([bins, n_mels]); prompt: SOT/lang/task.
+  private heads(t: MX, H: number, Dh: number): MX { const B = t.shape[0], L = t.shape[1]; return t.reshape([B, L, H, Dh]).transpose([0, 2, 1, 3]); }
+
+  // One cached decode call: process `tokens` ([1,T]) at sequence `offset`, updating
+  // `cache` in place. Self-attn k/v are concatenated onto the cache; cross-attn k/v
+  // are computed once from `audio` and reused. Returns logits [1, T, n_vocab].
+  decoderStep(tokens: Int32Array, T: number, offset: number, audio: MX, cache: WCache[]): MX {
+    const B = 1, D = this.D, H = this.nTextHead, Dh = D / H;
+    const posIdx = fromI32(Int32Array.from({ length: T }, (_, i) => offset + i), [T]);
+    let x = this.tokEmb.takeAxis(fromI32(tokens, [1, T]), 0).add(this.textPos.takeAxis(posIdx, 0));
+    for (let i = 0; i < this.dec.length; i++) {
+      const b = this.dec[i], c = cache[i];
+      // self-attention (causal); append new k/v to the cache
+      const n = x.layerNorm(b.attnLn.w, b.attnLn.b, EPS);
+      const q = this.heads(this.lf(n, b.q), H, Dh);
+      let k = this.heads(this.lf(n, b.k), H, Dh), v = this.heads(this.lf(n, b.v), H, Dh);
+      if (c.sk) { k = c.sk.concat(k, 2); v = c.sv!.concat(v, 2); }
+      c.sk = k; c.sv = v;
+      const sa = MX.sdpa(q, k, v, Dh ** -0.5, T > 1).transpose([0, 2, 1, 3]).reshape([B, T, D]);
+      x = x.add(this.lf(sa, b.o));
+      // cross-attention to audio; k/v computed once and cached
+      const cn = x.layerNorm(b.crossLn.w, b.crossLn.b, EPS);
+      const cq = this.heads(this.lf(cn, b.cq), H, Dh);
+      if (!c.ck) { c.ck = this.heads(this.lf(audio, b.ck), H, Dh); c.cv = this.heads(this.lf(audio, b.cv), H, Dh); }
+      const ca = MX.sdpa(cq, c.ck, c.cv!, Dh ** -0.5, false).transpose([0, 2, 1, 3]).reshape([B, T, D]);
+      x = x.add(this.lf(ca, b.co));
+      x = x.add(this.lf(this.lf(x.layerNorm(b.mlpLn.w, b.mlpLn.b, EPS), b.mlp1).gelu(), b.mlp2));
+    }
+    return x.layerNorm(this.lnW, this.lnB, EPS).matmul(this.tokEmbT);
+  }
+
+  // Greedy transcription of a 16 kHz mono PCM clip (<= 30 s) -> token ids, using a
+  // KV cache: cross-attn k/v are built once from the audio, self-attn k/v grow by
+  // one per step, so each step processes a single new token.
   transcribe(pcm: Float32Array, filtersT: MX, opts: { max?: number; prompt?: number[] } = {}): number[] {
-    const { mel, F } = logMel(padOrTrim(pcm), { filtersT, dropLast: true });
-    const audio = this.encoder(fromF32(mel, [1, F, mel.length / F]).astype(9)); // [1, 1500, D]
+    const { mel, F, nMels } = logMel(padOrTrim(pcm), { filtersT, dropLast: true });
+    const audio = this.encoder(fromF32(mel, [1, F, nMels]).astype(9)); // [1, 1500, D]
+    const cache: WCache[] = Array.from({ length: this.dec.length }, () => ({ sk: null, sv: null, ck: null, cv: null }));
+    const flatSelf = () => cache.flatMap((c) => (c.sk ? [c.sk, c.sv!] : []));
+    const flatCross = () => cache.flatMap((c) => (c.ck ? [c.ck, c.cv!] : []));
     const tokens = [...(opts.prompt ?? [SOT, EN, TRANSCRIBE, NO_TIMESTAMPS])];
     const start = tokens.length;
-    for (let i = 0; i < (opts.max ?? 224); i++) {
-      const T = tokens.length;
-      const nextMX = tidy(() => {
-        const logits = this.decoder(fromI32(Int32Array.from(tokens), [1, T]), audio);
+    let input = Int32Array.from(tokens), T = tokens.length, offset = 0;
+    for (let step = 0; step < (opts.max ?? 224); step++) {
+      const oldSelf = flatSelf(); // superseded by the concat this step; free after eval
+      const tokMX = tidy(() => {
+        const logits = this.decoderStep(input, T, offset, audio, cache);
         const last = logits.takeAxis(fromI32(Int32Array.from([T - 1]), [1]), 1).reshape([1, logits.shape[2]]);
-        return sample(last, 0, 0); // greedy argmax -> [1]
-      });
-      const next = nextMX.itemU(); nextMX.free();
+        return { t: sample(last, 0, 0), keep: [...flatSelf(), ...flatCross()] };
+      }).t;
+      evalAll(tokMX, ...flatSelf(), ...flatCross());
+      for (const m of oldSelf) m.free(); // safe: mlx refcounts keep them for the pending concat/eval
+      const next = tokMX.itemU(); tokMX.free();
+      offset += T;
       if (next === EOT) break;
       tokens.push(next);
+      input = Int32Array.from([next]); T = 1;
     }
+    for (const m of [...flatSelf(), ...flatCross()]) m.free();
     return tokens.slice(start);
   }
 }

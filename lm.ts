@@ -10,10 +10,12 @@
 // decode is compute-bound — overlap measured only ~1.01x at 0.6B). The async
 // overlap path stays available in spike-throughput.ts as a future option.
 
-import { MX, fromI32, sample, seed, evalAll, tidy } from "./mx.ts";
+import { MX, fromI32, sample, seed, evalAll, tidy, applyRepetitionPenalty } from "./mx.ts";
 import type { Tokenizer } from "./tokenizer.ts";
 
 export type KV = { k: MX; v: MX } | null;
+
+type SampleCfg = { temp: number; topP: number; topK: number; repetitionPenalty: number };
 
 // The only contract the generation loop needs from a model. Qwen3 satisfies it
 // directly; new architectures implement the same three members.
@@ -26,23 +28,27 @@ export interface Decoder {
 }
 
 export interface GenOptions {
-  max?: number;    // max tokens to generate (default 256)
-  temp?: number;   // 0 = greedy (default)
-  topP?: number;   // nucleus sampling; ignored when temp === 0
-  window?: number; // sliding-window KV cap; 0 = unbounded (default)
-  seed?: number;   // RNG seed for sampling (set once before the loop)
+  max?: number;               // max tokens to generate (default 256)
+  temp?: number;              // 0 = greedy (default)
+  topP?: number;              // nucleus sampling; ignored when temp === 0
+  topK?: number;              // keep only the k highest-prob tokens; 0 = off (default)
+  repetitionPenalty?: number; // CTRL/HF penalty on already-seen tokens; 1 = off (default)
+  repetitionContext?: number; // how many recent tokens the penalty considers (default: all)
+  window?: number;            // sliding-window KV cap; 0 = unbounded (default)
+  seed?: number;              // RNG seed for sampling (set once before the loop)
 }
 
 // One decode/prefill step under a tidy scope: keep only the sampled token and the
 // (new) KV cache, free every intermediate. The superseded cache is freed after
 // eval — safe: MLX retains op inputs by refcount until evaluated.
 function step(model: Decoder, input: Int32Array, L: number, offset: number, cache: KV[],
-             window: number, temp: number, topP: number): MX {
+             window: number, s: SampleCfg, prev: number[]): MX {
   const old = cache.slice();
   const flat = () => cache.flatMap((c) => (c ? [c.k, c.v] : []));
   const t = tidy(() => {
-    const logits = model.logitsLastMX(fromI32(input, [1, L]), 1, L, offset, cache, window);
-    return { t: sample(logits, temp, topP), keep: flat() };
+    let logits = model.logitsLastMX(fromI32(input, [1, L]), 1, L, offset, cache, window);
+    if (s.repetitionPenalty !== 1) logits = applyRepetitionPenalty(logits, prev, s.repetitionPenalty);
+    return { t: sample(logits, s.temp, s.topP, s.topK), keep: flat() };
   }).t;
   evalAll(t, ...flat());
   for (const c of old) if (c) { c.k.free(); c.v.free(); }
@@ -53,19 +59,25 @@ function step(model: Decoder, input: Int32Array, L: number, offset: number, cach
 // stops at eos or after `max` tokens. Frees the entire KV cache on exit.
 export async function* streamTokens(model: Decoder, prompt: number[], opts: GenOptions = {})
   : AsyncGenerator<{ token: number; position: number }> {
-  const { max = 256, temp = 0, topP = 0, window = 0 } = opts;
+  const { max = 256, temp = 0, topP = 0, topK = 0, window = 0 } = opts;
+  const repetitionPenalty = opts.repetitionPenalty ?? 1;
+  const repCtx = opts.repetitionContext ?? Infinity;
   if (opts.seed) seed(opts.seed);
+  const s: SampleCfg = { temp, topP, topK, repetitionPenalty };
   const cache: KV[] = Array(model.numLayers).fill(null);
+  const history = [...prompt]; // prompt + generated, for the repetition penalty
   try {
     let input = Int32Array.from(prompt);
     let L = prompt.length;
     let offset = 0;
     for (let i = 0; i < max; i++) {
-      const tokMX = step(model, input, L, offset, cache, window, temp, topP);
+      const prev = repetitionPenalty !== 1 ? history.slice(Math.max(0, history.length - repCtx)) : [];
+      const tokMX = step(model, input, L, offset, cache, window, s, prev);
       const token = tokMX.itemU();
       tokMX.free();
       if (token === model.eos) break;
       yield { token, position: prompt.length + i };
+      history.push(token);
       input = Int32Array.from([token]);
       offset += L;
       L = 1;

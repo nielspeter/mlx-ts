@@ -176,11 +176,35 @@ function categorical(logits: MX, axis: number): MX {
   const s = slot(); m.mlx_random_categorical(ptr(s), logits.h, axis, 0, stream); return new MX(Number(s[0]));
 }
 
+// top-k: keep the k highest logits along `ax`, mask the rest to ~-inf.
+function topKFilter(logits: MX, k: number, ax: number): MX {
+  const vocab = logits.shape[ax];
+  if (k <= 0 || k >= vocab) return logits;
+  const sortedAsc = logits.takeAlong(logits.argsort(ax), ax);                       // values ascending
+  const thr = sortedAsc.takeAxis(fromI32(Int32Array.from([vocab - k]), [1]), ax);   // k-th largest -> [B,1]
+  return thr.greater(logits).where(scalar(-1e9), logits);                           // drop logits below it
+}
+
+// Repetition penalty (CTRL/HF): logits of already-seen tokens are divided by
+// `penalty` when positive and multiplied when negative — discouraging repeats.
+// Apply to logits before sampling; `prev` is the token history (prompt + gen).
+export function applyRepetitionPenalty(logits: MX, prev: number[], penalty: number): MX {
+  if (penalty === 1 || prev.length === 0) return logits;
+  const vocab = logits.shape[logits.shape.length - 1];
+  const factor = new Float32Array(vocab).fill(1);
+  for (const id of prev) if (id >= 0 && id < vocab) factor[id] = penalty;
+  const f = fromF32(factor, [vocab]);
+  return logits.greater(scalar(0)).where(logits.div(f), logits.mul(f));
+}
+
 // ---- sampling: logits [B, vocab] -> token ids [B] ----
-export function sample(logits: MX, temp: number, topP: number): MX {
+// Filters compose as temp -> top-k -> top-p -> categorical (apply repetition
+// penalty to the logits beforehand, e.g. via applyRepetitionPenalty).
+export function sample(logits: MX, temp: number, topP: number, topK = 0): MX {
   const B = logits.shape[0], ax = 1;               // logits is [B, vocab]
   if (temp === 0) return logits.argmax(ax);        // greedy -> [B]
-  const scaled = logits.divScalar(temp);
+  let scaled = logits.divScalar(temp);
+  if (topK > 0) scaled = topKFilter(scaled, topK, ax);
   if (topP > 0 && topP < 1) {
     const probs = scaled.softmax(ax);
     const idx = probs.argsort(ax);                 // ascending order

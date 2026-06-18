@@ -163,12 +163,15 @@ async function chat(req: Request): Promise<Response> {
   const opts = toOptions(body);
   const stops: string[] = body.stop ? (Array.isArray(body.stop) ? body.stop : [body.stop]) : [];
   const id = rid(), created = now();
+  // reply in the user's language unless the caller set its own system message
+  const sys: Msg = { role: "system", content: "You are a helpful assistant. Always reply in the same language as the user's message." };
+  const msgs = messages.some((m) => m.role === "system") ? messages : [sys, ...messages];
 
   if (!body.stream) {
     const release = await acquire();
     try {
       let text = "", usage = { prompt_tokens: 0, completion_tokens: 0 };
-      for await (const p of run(messages, opts, stops, () => false)) {
+      for await (const p of run(msgs, opts, stops, () => false)) {
         if (p.done) usage = { prompt_tokens: p.prompt!, completion_tokens: p.completion! };
         else text += p.text;
       }
@@ -190,7 +193,7 @@ async function chat(req: Request): Promise<Response> {
       const release = await acquire();
       try {
         c.enqueue(chunk({ role: "assistant" }));
-        for await (const p of run(messages, opts, stops, () => cancelled)) {
+        for await (const p of run(msgs, opts, stops, () => cancelled)) {
           if (cancelled) break;
           if (!p.done && p.text) c.enqueue(chunk({ content: p.text }));
         }

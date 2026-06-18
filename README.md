@@ -70,7 +70,18 @@ token-for-token. Everything below is the validated machinery underneath it.
 bun qwen-nn.ts "The capital of France is"                      # greedy
 bun qwen-nn.ts --temp 0.8 --topp 0.95 --seed 42 "Once ..."     # sampling
 bun stream.ts "Write a haiku about the sea"                    # streaming API
+bun server.ts                                                   # OpenAI-compatible HTTP server (:8080)
 bun validate-prod.ts                                            # all three
+```
+
+`server.ts` is a working example of the local-server use case below — an
+OpenAI-compatible `/v1/chat/completions` endpoint (streaming SSE or JSON) over
+`Bun.serve`, generation serialized behind an async mutex:
+
+```sh
+bun server.ts   # then:
+curl localhost:8080/v1/chat/completions -H 'content-type: application/json' \
+  -d '{"messages":[{"role":"user","content":"Hi"}],"stream":true,"temperature":0.7,"top_k":40}'
 ```
 
 **Memory — why `tidy()` and not just `FinalizationRegistry`:** FR only fires

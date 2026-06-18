@@ -31,6 +31,7 @@ bun validate-all.sh   # full suite — 20 checks, TS vs MLX-Python / HF
 bun test tests/       # per-op binding parity vs MLX (fixtures from tests/gen-fixtures.py)
 bun chat.ts "Write a haiku about the sea"   # a real chat turn (4-bit Qwen3)
 bun stream.ts "Write a haiku about the sea" # streaming chat over the public lm.ts API
+bun server.ts                               # OpenAI-compatible HTTP server (:8080) over Bun.serve
 bun lora-train.ts     # LoRA fine-tune of 4-bit Qwen3 (loss 3.16 -> 0.0007)
 ```
 Every TS path has a `reference-*.py` MLX/HF mirror; parity is the bar.

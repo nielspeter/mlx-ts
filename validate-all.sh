@@ -25,6 +25,9 @@ bun spike-moe.ts 2>&1 | grep -q "match: true" && ok "MoE gather_qmm op (vs MLX)"
 bun spike-moe-layer.ts 2>&1 | grep -q "match: true" && ok "MoE full layer (vs MLX)" || no "spike-moe-layer" "match"
 bun spike-throughput.ts 2>&1 | grep -q "identical (sync == async): true" && ok "async-overlap == sync tokens" || no "spike-throughput" "tokens"
 bun stream-test.ts 2>&1 | grep -q "STREAM OK" && ok "public stream() == generate() (ids + text)" || no "stream-test" "parity"
+python3 tests/gen-fixtures.py >/dev/null 2>&1
+ncase=$(grep -o '"name"' tests/fixtures.json 2>/dev/null | wc -l | tr -d ' ')
+bun test tests/ 2>&1 | grep -q " 0 fail" && ok "op binding parity vs MLX (${ncase} cases, bun test)" || no "lib tests" "binding parity (bun test tests/)"
 bun validate-prod.ts 2>&1 | grep -q "reproducible (same seed -> same ids): true" && ok "sampling reproducible + batching" || no "validate-prod" "sampling"
 
 echo "=== synthetic parity (TS vs MLX Python) ==="

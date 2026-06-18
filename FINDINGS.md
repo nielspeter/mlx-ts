@@ -85,9 +85,9 @@ Each milestone is a runnable file validated against a reference.
 | 14 | **Training** — `value_and_grad` over a multi-param JS closure + SGD | `spike-train.ts` / `reference-train.py` | MLX Python | loss falls 0.237→0.009, final W bit-identical |
 | 15 | **LoRA fine-tune** of real 4-bit Qwen3 — Adam + cross_entropy, frozen base | `lora-train.ts` / `reference-lora.py` | MLX Python | loss falls 3.16→0.0007; tracks MLX to float tolerance |
 
-All fifteen are re-checked together by `validate-all.sh` — **19/19 green** (the
-fifteen above plus the codegen, async-overlap, public-`stream()`, and gather_qmm
-op checks).
+All fifteen are re-checked together by `validate-all.sh` — **20/20 green** (the
+fifteen above plus the codegen, async-overlap, public-`stream()`, gather_qmm op,
+and per-op binding-parity (`bun test tests/`) checks).
 
 The strongest checks are the **discrete** ones (#4, #6, #8, #9): greedy token ids
 must match MLX exactly, so any drift anywhere — cache concat, RoPE offset, mask

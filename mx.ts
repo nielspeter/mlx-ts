@@ -10,7 +10,7 @@
 import { ptr, toArrayBuffer } from "bun:ffi";
 import { m, stream } from "./generated.ts";
 
-const FLOAT32 = 10, INT32 = 7;
+const FLOAT32 = 10, INT32 = 7, UINT32 = 3;
 const reg = new FinalizationRegistry<number>((h) => { if (h) m.mlx_array_free(h); });
 
 // FinalizationRegistry is a *backstop*: it only fires after a GC, which never
@@ -128,6 +128,11 @@ export function fromF32(data: Float32Array, shape: number[]): MX {
 }
 export function fromI32(data: Int32Array, shape: number[]): MX {
   return new MX(m.mlx_array_new_data(ptr(data), ptr(new Int32Array(shape)), shape.length, INT32) as number, data);
+}
+// uint32 — e.g. packed quantized weights and gather indices (bit pattern matters,
+// so these can't round-trip through float32).
+export function fromU32(data: Uint32Array, shape: number[]): MX {
+  return new MX(m.mlx_array_new_data(ptr(data), ptr(new Int32Array(shape)), shape.length, UINT32) as number, data);
 }
 export const scalar = (x: number): MX => new MX(m.mlx_array_new_float(x) as number);
 // stack a list of arrays along a new axis (e.g. per-expert weights -> [E, ...])

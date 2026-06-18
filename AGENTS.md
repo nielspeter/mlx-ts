@@ -3,7 +3,7 @@
 A working proof-of-concept: a **TypeScript MLX SDK over Apple's `mlx-c` C API via
 Bun FFI** — no custom C/C++, no build step. It runs real dense and MoE LLMs
 (inference + LoRA training), every layer validated against MLX Python or HF.
-**`validate-all.sh` is 19/19 green.** Read `FINDINGS.md` first — it's the full,
+**`validate-all.sh` is 20/20 green.** Read `FINDINGS.md` first — it's the full,
 honest write-up; this file is the operational guide.
 
 ## Orientation (read in this order)
@@ -27,7 +27,8 @@ honest write-up; this file is the operational guide.
 ## How to run / validate
 ```sh
 bun codegen.ts        # REQUIRED first: regenerates generated.ts (the FFI binding) from mlx-c headers
-bun validate-all.sh   # full suite — 18 checks, TS vs MLX-Python / HF
+bun validate-all.sh   # full suite — 20 checks, TS vs MLX-Python / HF
+bun test tests/       # per-op binding parity vs MLX (fixtures from tests/gen-fixtures.py)
 bun chat.ts "Write a haiku about the sea"   # a real chat turn (4-bit Qwen3)
 bun stream.ts "Write a haiku about the sea" # streaming chat over the public lm.ts API
 bun lora-train.ts     # LoRA fine-tune of 4-bit Qwen3 (loss 3.16 -> 0.0007)
@@ -55,6 +56,11 @@ generalizes this: any opaque `mlx_*` type → `ptr`.
 - **`lm.ts`** — public generation surface: `Decoder` interface +
   `streamTokens` / `streamText` / `generate` (async generators, KV cache
   auto-freed; no caller-side `tidy()`). `MX` is `Disposable`.
+- **`tests/`** — per-op binding parity (`bun test`): `gen-fixtures.py` runs each
+  op through MLX Python and saves inputs+output to `fixtures.json`; `lib.test.ts`
+  feeds identical inputs through mlx-ts and asserts `allclose`. Covers elementwise,
+  reductions, shape, fast (rms_norm/rope/sdpa), and quantized/MoE (qmm/dequantize/
+  gather_qmm). **`benchmarks/`** — perf timing vs MLX Python (see its README).
 - **Models**: `qwen.ts` (bf16), `qwen-nn.ts` (4-bit), `olmoe.ts` (MoE),
   `chat.ts`, `lora-train.ts`. `spike-*.ts` = de-risking experiments.
 

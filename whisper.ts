@@ -4,8 +4,10 @@
 // features -> tied-embedding logits. Runs in fp16 like the reference.
 //   weights: whisper-tiny.safetensors (converted from mlx-community/whisper-tiny)
 
-import { MX, fromF32, fromI32, scalar } from "./mx.ts";
+import { MX, fromF32, fromI32, scalar, sample, tidy } from "./mx.ts";
 import { loadSafetensors, get } from "./loader.ts";
+import { decodeAudio, padOrTrim, loadMelFilters, logMel } from "./audio.ts";
+import { WhisperTokenizer, SOT, EN, TRANSCRIBE, NO_TIMESTAMPS, EOT } from "./whisper-tokenizer.ts";
 
 const FP16 = 9, EPS = 1e-5;
 
@@ -103,6 +105,42 @@ export class Whisper {
     x = x.layerNorm(this.lnW, this.lnB, EPS);
     return x.matmul(this.tokEmbT);                                  // tied-embedding logits
   }
+
+  // Greedy transcription of a 16 kHz mono PCM clip (<= 30 s) -> token ids.
+  // filtersT: Whisper's mel filterbank ([bins, n_mels]); prompt: SOT/lang/task.
+  transcribe(pcm: Float32Array, filtersT: MX, opts: { max?: number; prompt?: number[] } = {}): number[] {
+    const { mel, F } = logMel(padOrTrim(pcm), { filtersT, dropLast: true });
+    const audio = this.encoder(fromF32(mel, [1, F, mel.length / F]).astype(9)); // [1, 1500, D]
+    const tokens = [...(opts.prompt ?? [SOT, EN, TRANSCRIBE, NO_TIMESTAMPS])];
+    const start = tokens.length;
+    for (let i = 0; i < (opts.max ?? 224); i++) {
+      const T = tokens.length;
+      const nextMX = tidy(() => {
+        const logits = this.decoder(fromI32(Int32Array.from(tokens), [1, T]), audio);
+        const last = logits.takeAxis(fromI32(Int32Array.from([T - 1]), [1]), 1).reshape([1, logits.shape[2]]);
+        return sample(last, 0, 0); // greedy argmax -> [1]
+      });
+      const next = nextMX.itemU(); nextMX.free();
+      if (next === EOT) break;
+      tokens.push(next);
+    }
+    return tokens.slice(start);
+  }
+}
+
+// ---- CLI: bun whisper.ts <audio-file> ----
+if (import.meta.main) {
+  const file = process.argv[2];
+  if (!file) { console.error("usage: bun whisper.ts <audio-file>"); process.exit(1); }
+  const model = await loadWhisper();
+  const tok = await WhisperTokenizer.fromFile();
+  const filtersT = await loadMelFilters();
+  const pcm = await decodeAudio(file);
+  const t0 = performance.now();
+  const ids = model.transcribe(pcm, filtersT);
+  const secs = (performance.now() - t0) / 1000;
+  console.log(`text: ${tok.decode(ids).trim()}`);
+  console.log(`(${ids.length} tokens in ${secs.toFixed(2)}s)`);
 }
 
 export function loadWhisper(cfgPath = "config-whisper.json", weightsPath = "whisper-tiny.safetensors") {

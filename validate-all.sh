@@ -56,6 +56,10 @@ PYW=""; for c in /tmp/wvenv/bin/python python3; do "$c" -c "import mlx_whisper" 
 if [ -n "$PYW" ] && [ -f whisper-tiny.safetensors ]; then
   "$PYW" reference-whisper.py >/dev/null 2>&1
   bun whisper-test.ts 2>&1 | grep -q "WHISPER OK" && ok "Whisper-tiny encoder+decoder vs mlx_whisper" || no "whisper" "parity"
+  if [ -f whisper-mel-filters-80.f32 ] && [ -f whisper-multilingual.tiktoken ] && [ -f /tmp/jfk.flac ]; then
+    "$PYW" reference-whisper-transcribe.py >/dev/null 2>&1
+    bun whisper-transcribe-test.ts 2>&1 | grep -q "TRANSCRIBE OK" && ok "Whisper transcription token-exact vs mlx_whisper" || no "whisper-transcribe" "tokens"
+  fi
 fi
 
 if [ -f model-olmoe-sharded/model.safetensors.index.json ]; then

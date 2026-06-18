@@ -262,20 +262,23 @@ yet an npm package). Sampling supports greedy, temperature, top-p, **top-k**, an
 ### ❌ Not yet (substantial new code or a real gap)
 - **Node.js / cross-platform** — Bun FFI only; Apple-Silicon + Metal only (no
   Linux/CUDA, Windows, Intel).
-- **Speech-to-text (Whisper)** — **the model is built and validated**: `audio.ts`
-  (log-Mel front-end, ~1e-6 vs numpy FFT) + `whisper.ts` (Conv1d stem,
-  bidirectional encoder, causal decoder with cross-attention, tied logits). Matches
-  `mlx_whisper` — encoder mean err 2e-3, **decoder argmax token exact**
-  (`whisper-test.ts`). What's left for end-to-end transcription is glue: the
-  Whisper (tiktoken) tokenizer for token→text, a greedy decode loop with the
-  SOT/language/task prompt, and 30 s mel padding.
+- ✅ **Speech-to-text (Whisper)** — **end-to-end transcription works**: `audio.ts`
+  (log-Mel, ~1e-6 vs numpy FFT) + `whisper.ts` (Conv1d stem, bidirectional encoder,
+  causal decoder with cross-attention, tied logits) + `whisper-tokenizer.ts`
+  (tiktoken decode) + a greedy decode loop. `bun whisper.ts jfk.flac` →
+  *"And so my fellow Americans ask not what your country can do for you…"* —
+  **token-for-token identical to `mlx_whisper`** (`whisper-transcribe-test.ts`).
 
   ```sh
-  curl -sL https://huggingface.co/mlx-community/whisper-tiny/resolve/main/config.json -o config-whisper.json
-  curl -sL https://huggingface.co/mlx-community/whisper-tiny/resolve/main/weights.npz -o /tmp/whisper-tiny.npz
+  W=https://huggingface.co/mlx-community/whisper-tiny/resolve/main
+  curl -sL $W/config.json -o config-whisper.json
+  curl -sL $W/weights.npz -o /tmp/whisper-tiny.npz
   python3 -c 'import numpy as np, mlx.core as mx; d=np.load("/tmp/whisper-tiny.npz"); mx.save_safetensors("whisper-tiny.safetensors",{k:mx.array(d[k]) for k in d.files})'
-  pip install mlx-whisper                     # reference oracle (use a venv)
-  python3 reference-whisper.py && bun whisper-test.ts   # -> WHISPER OK
+  pip install mlx-whisper   # ships the mel filterbank + tiktoken vocab (use a venv)
+  WA=$(python3 -c 'import mlx_whisper,os;print(os.path.dirname(mlx_whisper.__file__))')/assets
+  cp "$WA/multilingual.tiktoken" whisper-multilingual.tiktoken
+  python3 -c "import mlx.core as mx,numpy as np;np.array(mx.load('$WA/mel_filters.npz')['mel_80']).astype('float32').tofile('whisper-mel-filters-80.f32')"
+  bun whisper.ts /path/to/audio.flac          # transcribe (any ffmpeg-decodable file)
   ```
 - **Vision / multimodal** (CLIP, LLaVA, image-gen) — no vision encoders wired yet.
 - **High-throughput multi-tenant serving** — only equal-length batching; ragged

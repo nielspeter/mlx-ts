@@ -12,7 +12,7 @@
 
 import { MX, fromF32, tidy } from "./mx.ts";
 
-export const SR = 16000, N_FFT = 400, HOP = 160, N_MELS = 80;
+export const SR = 16000, N_FFT = 400, HOP = 160, N_MELS = 80, N_SAMPLES = 30 * SR; // 30 s chunk
 
 const TWO_PI = 2 * Math.PI;
 const hann = (N: number) => Float32Array.from({ length: N }, (_, n) => 0.5 * (1 - Math.cos(TWO_PI * n / N)));
@@ -46,13 +46,34 @@ function melFilterT(): MX {
   return fromF32(fbT, [bins, N_MELS]);
 }
 
-// Decode any audio file to 16 kHz mono float32 PCM via ffmpeg.
+// Decode any audio file to 16 kHz mono PCM via ffmpeg, as s16 -> float32/32768
+// (matches Whisper's load_audio so mel/transcription line up bit-for-bit).
 export async function decodeAudio(path: string): Promise<Float32Array> {
-  const p = Bun.spawn(["ffmpeg", "-nostdin", "-i", path, "-f", "f32le", "-ac", "1", "-ar", String(SR), "-"],
+  const p = Bun.spawn(["ffmpeg", "-nostdin", "-i", path, "-f", "s16le", "-ac", "1", "-ar", String(SR), "-"],
     { stdout: "pipe", stderr: "ignore" });
   const buf = new Uint8Array(await new Response(p.stdout).arrayBuffer());
   await p.exited;
-  return new Float32Array(buf.buffer, buf.byteOffset, Math.floor(buf.byteLength / 4));
+  const i16 = new Int16Array(buf.buffer, buf.byteOffset, Math.floor(buf.byteLength / 2));
+  const f = new Float32Array(i16.length);
+  for (let i = 0; i < i16.length; i++) f[i] = i16[i] / 32768;
+  return f;
+}
+
+// Pad with zeros (or trim) to `length` samples — Whisper feeds the encoder a
+// fixed 30 s (N_SAMPLES) chunk.
+export function padOrTrim(pcm: Float32Array, length = N_SAMPLES): Float32Array {
+  if (pcm.length >= length) return pcm.subarray(0, length);
+  const out = new Float32Array(length);
+  out.set(pcm);
+  return out;
+}
+
+// Load Whisper's shipped librosa mel filterbank ([n_mels, bins]) -> [bins, n_mels]
+// for `power @ filtersT`. (The HTK filterbank above is only for the self-test.)
+export async function loadMelFilters(path = "whisper-mel-filters-80.f32", nMels = N_MELS): Promise<MX> {
+  const b = new Uint8Array(await Bun.file(path).arrayBuffer());
+  const data = new Float32Array(b.buffer, b.byteOffset, Math.floor(b.byteLength / 4));
+  return fromF32(data, [nMels, data.length / nMels]).transpose([1, 0]);
 }
 
 // Reflect-pad, frame (hop), and apply the Hann window -> [F, N_FFT] host buffer.
@@ -69,25 +90,30 @@ function frameSignal(pcm: Float32Array): { frames: Float32Array; F: number } {
   return { frames, F };
 }
 
-// log-Mel spectrogram [F, N_MELS] (row-major), Whisper-normalized.
-export function logMel(pcm: Float32Array): { mel: Float32Array; F: number; nMels: number } {
-  const { frames, F } = frameSignal(pcm);
+// log-Mel spectrogram [F, nMels] (row-major), Whisper-normalized.
+//   opts.filtersT: [bins, nMels] filterbank (default: HTK self-test filters).
+//   opts.dropLast: drop the final STFT frame (Whisper does this -> exactly 3000
+//                  frames for a 30 s chunk).
+export function logMel(pcm: Float32Array, opts: { filtersT?: MX; dropLast?: boolean } = {}): { mel: Float32Array; F: number; nMels: number } {
+  let { frames, F } = frameSignal(pcm);
+  if (opts.dropLast) { F -= 1; frames = frames.subarray(0, F * N_FFT); }
   const { cos, sin } = dftBasis(N_FFT);
-  const melT = melFilterT();
-  // DFT via matmul -> power -> mel; read [F, N_MELS] back, then log/normalize on host.
+  const ownFilters = !opts.filtersT;
+  const filtersT = opts.filtersT ?? melFilterT();
+  const nMels = filtersT.shape[1];
+  // DFT via matmul -> power -> mel; read [F, nMels] back, then log/normalize on host.
   const melPow = tidy(() => {
     const fr = fromF32(frames, [F, N_FFT]);
     const re = fr.matmul(cos), im = fr.matmul(sin);
-    const power = re.mul(re).add(im.mul(im));   // |rfft|^2  [F, bins]
-    return power.matmul(melT);                  // [F, N_MELS]
+    return re.mul(re).add(im.mul(im)).matmul(filtersT);   // |rfft|^2 @ mel  [F, nMels]
   });
   const raw = melPow.toF32(); melPow.free();
-  cos.free(); sin.free(); melT.free();
+  cos.free(); sin.free(); if (ownFilters) filtersT.free();
 
   const mel = new Float32Array(raw.length);
   let max = -Infinity;
   for (let i = 0; i < raw.length; i++) { const v = Math.log10(Math.max(raw[i], 1e-10)); mel[i] = v; if (v > max) max = v; }
   const floor = max - 8;
   for (let i = 0; i < mel.length; i++) mel[i] = (Math.max(mel[i], floor) + 4) / 4; // Whisper normalize
-  return { mel, F, nMels: N_MELS };
+  return { mel, F, nMels };
 }

@@ -262,11 +262,21 @@ yet an npm package). Sampling supports greedy, temperature, top-p, **top-k**, an
 ### ❌ Not yet (substantial new code or a real gap)
 - **Node.js / cross-platform** — Bun FFI only; Apple-Silicon + Metal only (no
   Linux/CUDA, Windows, Intel).
-- **Speech-to-text (Whisper)** — the **log-Mel audio front-end is built and
-  validated** (`audio.ts`: ffmpeg decode + rfft-as-matmul mel, matches numpy FFT
-  to ~1e-6). What remains is the encoder–decoder model (Conv1d stem — already
-  wrapped — bidirectional encoder, causal decoder with cross-attention), the
-  Whisper tokenizer, and the weights.
+- **Speech-to-text (Whisper)** — **the model is built and validated**: `audio.ts`
+  (log-Mel front-end, ~1e-6 vs numpy FFT) + `whisper.ts` (Conv1d stem,
+  bidirectional encoder, causal decoder with cross-attention, tied logits). Matches
+  `mlx_whisper` — encoder mean err 2e-3, **decoder argmax token exact**
+  (`whisper-test.ts`). What's left for end-to-end transcription is glue: the
+  Whisper (tiktoken) tokenizer for token→text, a greedy decode loop with the
+  SOT/language/task prompt, and 30 s mel padding.
+
+  ```sh
+  curl -sL https://huggingface.co/mlx-community/whisper-tiny/resolve/main/config.json -o config-whisper.json
+  curl -sL https://huggingface.co/mlx-community/whisper-tiny/resolve/main/weights.npz -o /tmp/whisper-tiny.npz
+  python3 -c 'import numpy as np, mlx.core as mx; d=np.load("/tmp/whisper-tiny.npz"); mx.save_safetensors("whisper-tiny.safetensors",{k:mx.array(d[k]) for k in d.files})'
+  pip install mlx-whisper                     # reference oracle (use a venv)
+  python3 reference-whisper.py && bun whisper-test.ts   # -> WHISPER OK
+  ```
 - **Vision / multimodal** (CLIP, LLaVA, image-gen) — no vision encoders wired yet.
 - **High-throughput multi-tenant serving** — only equal-length batching; ragged
   prompts need padding masks + continuous batching.

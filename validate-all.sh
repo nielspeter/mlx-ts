@@ -50,6 +50,14 @@ echo "=== real models (TS vs MLX Python) ==="
 python3 reference-qwen.py "The capital of France is" >/tmp/v_p.txt 2>&1; bun qwen.ts "The capital of France is" >/tmp/v_t.txt 2>&1;          cmp_pair "real Qwen3-0.6B bf16" /tmp/v_t.txt /tmp/v_p.txt genids
 python3 reference-qwen-q4.py "The capital of France is" >/tmp/v_p.txt 2>&1; bun qwen-nn.ts "The capital of France is" >/tmp/v_t.txt 2>&1;     cmp_pair "real Qwen3-0.6B 4-bit (nn)" /tmp/v_t.txt /tmp/v_p.txt genids
 python3 reference-olmoe.py "The capital of France is" >/tmp/v_p.txt 2>&1; bun olmoe.ts "The capital of France is" >/tmp/v_t.txt 2>&1;        cmp_pair "real OLMoE-1B-7B 4-bit (MoE)" /tmp/v_t.txt /tmp/v_p.txt genids
+# Whisper needs mlx_whisper for the oracle + the converted weights; run it only
+# when both are present (skipped gracefully otherwise — not a hard failure).
+PYW=""; for c in /tmp/wvenv/bin/python python3; do "$c" -c "import mlx_whisper" >/dev/null 2>&1 && { PYW=$c; break; }; done
+if [ -n "$PYW" ] && [ -f whisper-tiny.safetensors ]; then
+  "$PYW" reference-whisper.py >/dev/null 2>&1
+  bun whisper-test.ts 2>&1 | grep -q "WHISPER OK" && ok "Whisper-tiny encoder+decoder vs mlx_whisper" || no "whisper" "parity"
+fi
+
 if [ -f model-olmoe-sharded/model.safetensors.index.json ]; then
   MX_SHARDED=model-olmoe-sharded/model.safetensors.index.json bun olmoe.ts "The capital of France is" >/tmp/v_t.txt 2>&1
   cmp_pair "OLMoE sharded streaming load" /tmp/v_t.txt /tmp/v_p.txt genids

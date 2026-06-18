@@ -70,8 +70,17 @@ export class MX {
   reshape(sh: number[]) { return this.r(m.mlx_reshape, this.h, ptr(new Int32Array(sh)), BigInt(sh.length), stream); }
   transpose(ax: number[]) { return this.r(m.mlx_transpose_axes, this.h, ptr(new Int32Array(ax)), BigInt(ax.length), stream); }
 
+  // elementwise (activations)
+  erf() { return this.r(m.mlx_erf, this.h, stream); }
+  gelu() { return this.mul(scalar(0.5)).mul(this.divScalar(Math.SQRT2).erf().add(scalar(1))); } // exact: x·0.5·(1+erf(x/√2))
+  astype(dtype: number) { return this.r(m.mlx_astype, this.h, dtype, stream); }
+
+  // conv1d: this=input [N,L,C_in], w=[C_out,K,C_in] -> [N,L',C_out]
+  conv1d(w: MX, stride: number, padding: number) { return this.r(m.mlx_conv1d, this.h, w.h, stride, padding, 1, 1, stream); }
+
   // fast ops
   rmsNorm(w: MX, eps: number) { return this.r(m.mlx_fast_rms_norm, this.h, w.h, eps, stream); }
+  layerNorm(w: MX, b: MX, eps: number) { const s = slot(); m.mlx_fast_layer_norm(ptr(s), this.h, w.h, b.h, eps, stream); return new MX(Number(s[0])); }
   rope(dims: number, base: number, offset: number) { return this.r(m.mlx_fast_rope, this.h, dims, false, optF(base), 1.0, offset, 0, stream); }
   static sdpa(q: MX, k: MX, v: MX, scale: number, causal: boolean) {
     const s = slot(); m.mlx_fast_scaled_dot_product_attention(ptr(s), q.h, k.h, v.h, scale, ptr(causal ? CAUSAL : NONE), 0, 0, stream); return new MX(Number(s[0]));

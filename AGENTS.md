@@ -59,7 +59,12 @@ generalizes this: any opaque `mlx_*` type → `ptr`.
   auto-freed; no caller-side `tidy()`). `MX` is `Disposable`.
 - **`audio.ts`** — speech front-end: ffmpeg decode → 16 kHz mono PCM →
   Whisper-style log-Mel (rfft computed as a DFT matmul, no FFT binding needed).
-  Validated vs numpy FFT (`reference-mel.py` / `audio-test.ts`). Foundation for Whisper.
+  Validated vs numpy FFT (`reference-mel.py` / `audio-test.ts`).
+- **`whisper.ts`** — Whisper STT model (encoder + decoder w/ cross-attention),
+  mirrors mlx_whisper; matches it to decoder-argmax-exact (`whisper-test.ts`,
+  needs `whisper-tiny.safetensors` + `mlx_whisper`). Convert weights:
+  `np.load(weights.npz)` → `mx.save_safetensors`. Remaining for transcription:
+  tiktoken tokenizer + greedy decode loop + 30 s mel padding.
 - **`tests/`** — per-op binding parity (`bun test`): `gen-fixtures.py` runs each
   op through MLX Python and saves inputs+output to `fixtures.json`; `lib.test.ts`
   feeds identical inputs through mlx-ts and asserts `allclose`. Covers elementwise,

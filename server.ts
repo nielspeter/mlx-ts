@@ -35,10 +35,14 @@ console.log("model ready");
 
 // Whisper is optional: load it only if its assets are present, otherwise the
 // /v1/audio/transcriptions route reports unavailable instead of failing startup.
-const WHISPER_ID = "whisper-tiny";
+const WHISPER_ID = "whisper-large-v3-turbo";
 let whisper: { model: Whisper; tok: WhisperTokenizer; filtersT: MX } | null = null;
 try {
-  const [model, tok, filtersT] = await Promise.all([loadWhisper(), WhisperTokenizer.fromFile(), loadMelFilters()]);
+  const [model, tok, filtersT] = await Promise.all([
+    loadWhisper("config-turbo.json", "whisper-turbo.safetensors"),
+    WhisperTokenizer.fromFile(),
+    loadMelFilters("whisper-mel-filters-128.f32", 128),
+  ]);
   whisper = { model, tok, filtersT };
   console.log("whisper ready (/v1/audio/transcriptions)");
 } catch {

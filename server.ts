@@ -12,11 +12,15 @@
 // decode + per-request arenas — see README "not yet".)
 
 import { Qwen3 } from "./qwen-nn.ts";
-import { fromI32, tidy } from "./mx.ts";
+import { MX, fromI32, tidy } from "./mx.ts";
 import { streamTokens, type GenOptions } from "./lm.ts";
 import { Tokenizer } from "./tokenizer.ts";
 import { ChatTemplate } from "./chat-template.ts";
 import { loadSafetensors } from "./loader.ts";
+import { Whisper, loadWhisper } from "./whisper.ts";
+import { WhisperTokenizer } from "./whisper-tokenizer.ts";
+import { decodeAudio, loadMelFilters } from "./audio.ts";
+import { unlink } from "node:fs/promises";
 
 const MODEL_ID = "qwen3-0.6b-4bit";
 const PORT = Number(process.env.PORT ?? 8080);
@@ -28,6 +32,18 @@ const tok = await Tokenizer.fromFile("tokenizer.json");
 const ct = await ChatTemplate.fromConfig("tokenizer_config-qwen.json");
 const CHAT_HTML = await Bun.file(new URL("./chat.html", import.meta.url)).text();
 console.log("model ready");
+
+// Whisper is optional: load it only if its assets are present, otherwise the
+// /v1/audio/transcriptions route reports unavailable instead of failing startup.
+const WHISPER_ID = "whisper-tiny";
+let whisper: { model: Whisper; tok: WhisperTokenizer; filtersT: MX } | null = null;
+try {
+  const [model, tok, filtersT] = await Promise.all([loadWhisper(), WhisperTokenizer.fromFile(), loadMelFilters()]);
+  whisper = { model, tok, filtersT };
+  console.log("whisper ready (/v1/audio/transcriptions)");
+} catch {
+  console.log("whisper assets missing — /v1/audio/transcriptions disabled");
+}
 
 // ---- async mutex: one generation at a time ----
 let tail: Promise<void> = Promise.resolve();
@@ -109,6 +125,32 @@ async function embeddings(req: Request): Promise<Response> {
   } finally { release(); }
 }
 
+// OpenAI-compatible speech-to-text: multipart/form-data with a `file` audio part
+// -> {text} (or plain text for response_format=text). English transcribe only.
+async function transcriptions(req: Request): Promise<Response> {
+  if (!whisper) return json({ error: "audio transcription unavailable (whisper assets not loaded)" }, 501);
+  let form: FormData;
+  try { form = await req.formData(); } catch { return json({ error: "expected multipart/form-data" }, 400); }
+  const file = form.get("file");
+  if (!(file instanceof Blob)) return json({ error: "missing audio `file` field" }, 400);
+  const fmt = String(form.get("response_format") ?? "json");
+  const tmp = `/tmp/mlxts-upload-${Math.random().toString(36).slice(2)}`;
+  await Bun.write(tmp, file);
+  const release = await acquire();
+  try {
+    const pcm = await decodeAudio(tmp);                       // ffmpeg decode (no MLX) then transcribe
+    const text = whisper!.tok.decode(whisper!.model.transcribe(pcm, whisper!.filtersT)).trim();
+    return fmt === "text"
+      ? new Response(text, { headers: { "content-type": "text/plain; charset=utf-8", ...CORS } })
+      : json({ text });
+  } catch (e) {
+    return json({ error: String(e) }, 500);
+  } finally {
+    release();
+    await unlink(tmp).catch(() => {});
+  }
+}
+
 async function chat(req: Request): Promise<Response> {
   let body: any;
   try { body = await req.json(); } catch { return json({ error: "invalid JSON body" }, 400); }
@@ -166,10 +208,11 @@ Bun.serve({
     if (pathname === "/" || pathname === "/index.html") return new Response(CHAT_HTML, { headers: { "content-type": "text/html; charset=utf-8" } });
     if (pathname === "/favicon.ico") return new Response(null, { status: 204 });
     if (pathname === "/health") return json({ status: "ok", model: MODEL_ID });
-    if (pathname === "/v1/models") return json({ object: "list", data: [{ id: MODEL_ID, object: "model", created: now(), owned_by: "mlx-ts" }] });
+    if (pathname === "/v1/models") return json({ object: "list", data: [{ id: MODEL_ID, object: "model", created: now(), owned_by: "mlx-ts" }, ...(whisper ? [{ id: WHISPER_ID, object: "model", created: now(), owned_by: "mlx-ts" }] : [])] });
     if (pathname === "/v1/chat/completions" && req.method === "POST") return chat(req);
     if (pathname === "/v1/embeddings" && req.method === "POST") return embeddings(req);
-    return json({ error: "not found", routes: ["/ (chat UI)", "/health", "/v1/models", "POST /v1/chat/completions", "POST /v1/embeddings"] }, 404);
+    if (pathname === "/v1/audio/transcriptions" && req.method === "POST") return transcriptions(req);
+    return json({ error: "not found", routes: ["/ (chat UI)", "/health", "/v1/models", "POST /v1/chat/completions", "POST /v1/embeddings", "POST /v1/audio/transcriptions"] }, 404);
   },
 });
 console.log(`listening on http://localhost:${PORT}  (chat UI at / , API at POST /v1/chat/completions)`);

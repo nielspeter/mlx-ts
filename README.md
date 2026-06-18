@@ -85,7 +85,12 @@ curl localhost:8080/v1/chat/completions -H 'content-type: application/json' \
   -d '{"messages":[{"role":"user","content":"Hi"}],"stream":true,"temperature":0.7,"top_k":40}'
 curl localhost:8080/v1/embeddings -H 'content-type: application/json' \
   -d '{"input":["a sentence to embed","another one"]}'   # L2-normalized vectors for RAG
+curl localhost:8080/v1/audio/transcriptions -F file=@audio.flac   # -> {"text": "..."}
 ```
+
+`/v1/audio/transcriptions` (multipart `file`) is enabled when the Whisper assets
+are present (see below); otherwise it reports 501 and the rest of the server runs
+normally.
 
 The embeddings come from mean-pooling Qwen3's last-layer hidden states (same
 model/tokenizer, no extra weights) — RAG-useful similarity ranking, though a

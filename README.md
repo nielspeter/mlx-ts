@@ -210,8 +210,41 @@ base, packed into a u64), `mlx_fast_scaled_dot_product_attention` with
   struct → passed in one integer register → modeled as a `u64` with the float
   bits in the low 32 bits and `has_value` in byte 4.
 
-## Not covered (deliberately, for a PoC)
+## What you can build with it
 
-No `FinalizationRegistry` cleanup (handles leak), no KV-cache loop, no
-tokenizer, no quantized weights. These are breadth, not feasibility — see the
-op-codegen / inference-loop next steps.
+mlx-ts today is a **local LLM inference + LoRA-training runtime for decoder-only
+text models** — Bun-only, Apple-Silicon-only, run as scripts in this repo (not
+yet an npm package). Sampling supports greedy, temperature, top-p, **top-k**, and
+**repetition penalty** (`bun stream.ts --temp 0.8 --topp 0.95 --topk 40 --reppenalty 1.1 "…"`).
+
+### ✅ Buildable now (everything needed exists)
+- **Local chat assistant / CLI** — streaming replies, multi-turn via chat
+  templates, temp/top-p/top-k/repetition-penalty sampling (`chat.ts`, `stream.ts`).
+- **A local inference HTTP server** — wrap `streamText` (`lm.ts`) in `Bun.serve`
+  (SSE); ~50 lines of glue. Single-process / low-concurrency, not multi-tenant.
+- **Prompt-driven text tools** — summarize / rewrite / classify / extract /
+  translate, batched over a dataset (one-at-a-time or equal-length).
+- **Agent loops** — tool use via prompting + JS-side parsing.
+- **LoRA fine-tuning** of 4-bit Qwen3 (Adam + cross-entropy, `lora-train.ts`).
+- **Research / inspection** — pull logits, hidden states; the `MX` op surface is open.
+
+### 🟡 Needs modest code (clear path, no feasibility risk)
+- **More architectures** (Llama, Mistral, Gemma, Phi…) — a forward over `nn`
+  modules + weight-key mapping (`olmoe.ts` is the template).
+- **Embedding / retrieval models** — an encoder forward + pooling → local RAG.
+- **npm packaging** — bundle a prebuilt `libmlxc`, replace the hardcoded
+  `/opt/homebrew/...` dylib paths with runtime resolution.
+- **OpenAI-compatible HTTP server** — app-level glue over `streamText`.
+
+### ❌ Not yet (substantial new code or a real gap)
+- **Node.js / cross-platform** — Bun FFI only; Apple-Silicon + Metal only (no
+  Linux/CUDA, Windows, Intel).
+- **Vision / audio / multimodal** (CLIP, LLaVA, Whisper, image-gen) — no vision
+  encoders/conv models wired; the biggest architectural gap.
+- **High-throughput multi-tenant serving** — only equal-length batching; ragged
+  prompts need padding masks + continuous batching.
+- **Broad model compatibility** — only affine 4-bit quant (no AWQ/GPTQ), so many
+  HF quantized checkpoints won't load.
+- **Constrained/JSON decoding, beam search, speculative decoding** — none yet.
+- **Full/large-scale training** — only minibatch LoRA is proven; per-sample
+  gradients need `vmap`, the one genuine mlx-c capability gap.

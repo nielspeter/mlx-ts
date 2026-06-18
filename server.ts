@@ -25,6 +25,7 @@ const cfg = await Bun.file("config-4bit.json").json();
 const model = new Qwen3(cfg, loadSafetensors("model-q4.safetensors"));
 const tok = await Tokenizer.fromFile("tokenizer.json");
 const ct = await ChatTemplate.fromConfig("tokenizer_config-qwen.json");
+const CHAT_HTML = await Bun.file(new URL("./chat.html", import.meta.url)).text();
 console.log("model ready");
 
 // ---- async mutex: one generation at a time ----
@@ -138,10 +139,12 @@ Bun.serve({
   async fetch(req) {
     const { pathname } = new URL(req.url);
     if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
+    if (pathname === "/" || pathname === "/index.html") return new Response(CHAT_HTML, { headers: { "content-type": "text/html; charset=utf-8" } });
+    if (pathname === "/favicon.ico") return new Response(null, { status: 204 });
     if (pathname === "/health") return json({ status: "ok", model: MODEL_ID });
     if (pathname === "/v1/models") return json({ object: "list", data: [{ id: MODEL_ID, object: "model", created: now(), owned_by: "mlx-ts" }] });
     if (pathname === "/v1/chat/completions" && req.method === "POST") return chat(req);
-    return json({ error: "not found", routes: ["/health", "/v1/models", "POST /v1/chat/completions"] }, 404);
+    return json({ error: "not found", routes: ["/ (chat UI)", "/health", "/v1/models", "POST /v1/chat/completions"] }, 404);
   },
 });
-console.log(`listening on http://localhost:${PORT}  (POST /v1/chat/completions)`);
+console.log(`listening on http://localhost:${PORT}  (chat UI at / , API at POST /v1/chat/completions)`);

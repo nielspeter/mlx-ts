@@ -13,3 +13,4 @@ node_modules/
 # editor / tool metadata
 .idea/
 .serena/
+/.playwright-mcp/

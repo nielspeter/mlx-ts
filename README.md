@@ -76,10 +76,11 @@ bun validate-prod.ts                                            # all three
 
 `server.ts` is a working example of the local-server use case below — an
 OpenAI-compatible `/v1/chat/completions` endpoint (streaming SSE or JSON) over
-`Bun.serve`, generation serialized behind an async mutex:
+`Bun.serve`, generation serialized behind an async mutex. It also serves a tiny
+self-contained chat web UI (`chat.html`) at `/`:
 
 ```sh
-bun server.ts   # then:
+bun server.ts                       # open http://localhost:8080 for the chat UI, or:
 curl localhost:8080/v1/chat/completions -H 'content-type: application/json' \
   -d '{"messages":[{"role":"user","content":"Hi"}],"stream":true,"temperature":0.7,"top_k":40}'
 ```
@@ -231,8 +232,9 @@ yet an npm package). Sampling supports greedy, temperature, top-p, **top-k**, an
 ### ✅ Buildable now (everything needed exists)
 - **Local chat assistant / CLI** — streaming replies, multi-turn via chat
   templates, temp/top-p/top-k/repetition-penalty sampling (`chat.ts`, `stream.ts`).
-- **A local inference HTTP server** — wrap `streamText` (`lm.ts`) in `Bun.serve`
-  (SSE); ~50 lines of glue. Single-process / low-concurrency, not multi-tenant.
+- **A local inference HTTP server + chat UI** — `server.ts` does this: an
+  OpenAI-compatible `/v1/chat/completions` (SSE/JSON) over `Bun.serve` plus a
+  self-contained chat page at `/`. Single-process / low-concurrency, not multi-tenant.
 - **Prompt-driven text tools** — summarize / rewrite / classify / extract /
   translate, batched over a dataset (one-at-a-time or equal-length).
 - **Agent loops** — tool use via prompting + JS-side parsing.

@@ -14,5 +14,5 @@ node_modules/
 .idea/
 .serena/
 /.playwright-mcp/
-whisper-mel-filters-80.f32
+whisper-mel-filters-*.f32
 *.tiktoken

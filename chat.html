@@ -110,47 +110,57 @@ input.addEventListener("keydown", (e) => {
 });
 $("reset").addEventListener("click", () => { messages = []; log.innerHTML = ""; });
 
-// --- live speech: record mic audio and re-transcribe the rolling buffer ---
-// MediaRecorder emits a chunk ~every second; we POST the accumulated buffer (a
-// valid growing webm) to /v1/audio/transcriptions and replace the input text with
-// the fresh full-buffer transcription. Re-transcribing the whole clip (Whisper is
-// ~100x real-time) avoids words being cut at chunk boundaries.
+// --- live speech with a sliding window (unbounded dictation) ---
+// Whisper only sees a 30 s window, so we segment: the current segment is
+// re-transcribed live (rolling, ~1/s) and shown after the committed text; before
+// it hits ~25 s we finalize it into `committed` and start a fresh segment (a new
+// webm with its own header — required, since a MediaRecorder stream is only
+// decodable from the start). Display = committed segments + the live one.
 const mic = $("mic");
-let recorder = null, chunks = [], inflight = false, appliedLen = 0, liveBase = "";
+let stream = null, rec = null, recording = false, rotateTimer = null;
+let chunks = [], inflight = false, appliedLen = 0, segId = 0;
+let committed = "", segText = "", liveBase = "";
+const SEG_MS = 25000; // rotate before Whisper's 30 s cap
 
-async function rollingTranscribe(final) {
-  if ((inflight && !final) || !chunks.length) return;
-  inflight = true;
-  const n = chunks.length;
+function render() {
+  input.value = [liveBase, committed, segText].filter(Boolean).join(" ").trim();
+  input.dispatchEvent(new Event("input"));
+}
+async function transcribeBuf(buf) {
   const fd = new FormData();
-  fd.append("file", new Blob(chunks, { type: recorder.mimeType || "audio/webm" }), "rec.webm");
-  try {
-    const res = await fetch("/v1/audio/transcriptions", { method: "POST", body: fd });
-    const text = ((await res.json()).text || "").trim();
-    if (text && n >= appliedLen) {           // ignore a stale (shorter-buffer) response
-      appliedLen = n;
-      input.value = (liveBase ? liveBase + " " : "") + text;
-      input.dispatchEvent(new Event("input"));
-    }
-  } catch { /* keep recording; try again next chunk */ }
+  fd.append("file", new Blob(buf, { type: rec?.mimeType || "audio/webm" }), "rec.webm");
+  try { const r = await fetch("/v1/audio/transcriptions", { method: "POST", body: fd }); return ((await r.json()).text || "").trim(); }
+  catch { return null; }
+}
+async function rolling() { // live update of the current segment
+  if (inflight || !chunks.length) return;
+  inflight = true;
+  const n = chunks.length, sid = segId;
+  const t = await transcribeBuf(chunks);
+  if (t !== null && sid === segId && n >= appliedLen) { appliedLen = n; segText = t; render(); }
   inflight = false;
 }
-
+function startSegment() {
+  chunks = []; appliedLen = 0; segText = ""; segId++;
+  rec = new MediaRecorder(stream);
+  rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); rolling(); };
+  rec.onstop = async () => {
+    const dead = chunks, fallback = segText; // this finished segment's audio + last live text
+    if (recording) startSegment();           // resume capturing immediately (fresh webm)
+    const t = await transcribeBuf(dead);      // finalize the segment into committed
+    committed = [committed, (t || fallback)].filter(Boolean).join(" ").trim();
+    if (recording) { render(); }
+    else { stream.getTracks().forEach((x) => x.stop()); segText = ""; render(); mic.textContent = "🎤"; mic.disabled = false; input.focus(); }
+  };
+  rec.start(1000);
+  rotateTimer = setTimeout(() => { if (recording && rec.state === "recording") rec.stop(); }, SEG_MS);
+}
 mic.addEventListener("click", async () => {
-  if (recorder && recorder.state === "recording") { recorder.stop(); return; }
-  let stream;
+  if (recording) { recording = false; clearTimeout(rotateTimer); mic.classList.remove("recording"); mic.textContent = "⏳"; mic.disabled = true; rec.stop(); return; }
   try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
   catch (e) { alert("Microphone access denied: " + e); return; }
-  chunks = []; inflight = false; appliedLen = 0; liveBase = input.value.trim();
-  recorder = new MediaRecorder(stream);
-  recorder.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); rollingTranscribe(false); };
-  recorder.onstop = async () => {
-    stream.getTracks().forEach((t) => t.stop());
-    mic.classList.remove("recording"); mic.textContent = "⏳"; mic.disabled = true;
-    await rollingTranscribe(true);           // final pass over the whole buffer
-    mic.textContent = "🎤"; mic.disabled = false; input.focus();
-  };
-  recorder.start(1000);                       // -> a chunk (and a re-transcribe) ~every second
+  recording = true; committed = ""; segText = ""; liveBase = input.value.trim();
+  startSegment();
   mic.classList.add("recording"); mic.textContent = "⏹";
 });
 

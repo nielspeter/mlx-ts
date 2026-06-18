@@ -7,9 +7,20 @@
 import { MX, fromF32, fromI32, scalar, sample, tidy, evalAll } from "./mx.ts";
 import { loadSafetensors, get } from "./loader.ts";
 import { decodeAudio, padOrTrim, loadMelFilters, logMel } from "./audio.ts";
-import { WhisperTokenizer, SOT, EN, TRANSCRIBE, NO_TIMESTAMPS, EOT } from "./whisper-tokenizer.ts";
+import { WhisperTokenizer } from "./whisper-tokenizer.ts";
 
 const FP16 = 9, EPS = 1e-5;
+
+// Whisper special-token ids depend on the language count (99 for v1/v2 -> 51865
+// vocab, 100 for v3 -> 51866). Byte-BPE base is 50257; specials follow in order:
+// eot, sot, [nLang langs], translate, transcribe, +3, notimestamps, [1501 ts].
+const BASE = 50257;
+function specials(nVocab: number) {
+  const nLang = nVocab - BASE - 1509; // 8 scalar specials + 1501 timestamps
+  const sot = BASE + 1;
+  return { eot: BASE, sot, langStart: sot + 1, translate: BASE + 2 + nLang, transcribe: BASE + 3 + nLang, noTimestamps: BASE + 7 + nLang, nLang };
+}
+type Specials = ReturnType<typeof specials>;
 
 type Lin = { wt: MX; b: MX | null };
 // per-layer decode cache: growing self-attn k/v + fixed cross-attn k/v (from audio).
@@ -30,13 +41,13 @@ function sinusoids(length: number, channels: number): MX {
 }
 
 export class Whisper {
-  nAudioHead: number; nTextHead: number; nTextLayer: number; D: number;
+  nAudioHead: number; nTextHead: number; nTextLayer: number; D: number; sp: Specials;
   conv1w: MX; conv1b: MX; conv2w: MX; conv2b: MX; encPos: MX; lnPostW: MX; lnPostB: MX;
   enc: any[]; tokEmb: MX; tokEmbT: MX; textPos: MX; dec: any[]; lnW: MX; lnB: MX;
 
   constructor(cfg: any, w: number) {
     this.nAudioHead = cfg.n_audio_head; this.nTextHead = cfg.n_text_head;
-    this.nTextLayer = cfg.n_text_layer; this.D = cfg.n_audio_state;
+    this.nTextLayer = cfg.n_text_layer; this.D = cfg.n_audio_state; this.sp = specials(cfg.n_vocab);
     const W = (n: string) => new MX(get(w, n));
     const lin = (n: string, bias = true): Lin => ({ wt: W(`${n}.weight`).transpose([1, 0]), b: bias ? W(`${n}.bias`) : null });
     const ln = (n: string) => ({ w: W(`${n}.weight`), b: W(`${n}.bias`) });
@@ -138,16 +149,29 @@ export class Whisper {
     return x.layerNorm(this.lnW, this.lnB, EPS).matmul(this.tokEmbT);
   }
 
-  // Greedy transcription of a 16 kHz mono PCM clip (<= 30 s) -> token ids, using a
-  // KV cache: cross-attn k/v are built once from the audio, self-attn k/v grow by
-  // one per step, so each step processes a single new token.
-  transcribe(pcm: Float32Array, filtersT: MX, opts: { max?: number; prompt?: number[] } = {}): number[] {
+  // Detect the spoken language: one decode step on [sot] over the audio, argmax
+  // over the language-token range. Returns the language token id.
+  private detectLanguage(audio: MX): number {
+    const cache: WCache[] = Array.from({ length: this.dec.length }, () => ({ sk: null, sv: null, ck: null, cv: null }));
+    const lg = tidy(() => this.decoderStep(Int32Array.from([this.sp.sot]), 1, 0, audio, cache).reshape([this.tokEmb.shape[0]]));
+    const v = lg.copy().toF32(); lg.free();
+    let best = this.sp.langStart, bv = -Infinity;
+    for (let i = 0; i < this.sp.nLang; i++) { const x = v[this.sp.langStart + i]; if (x > bv) { bv = x; best = this.sp.langStart + i; } }
+    return best;
+  }
+
+  // Greedy transcription of a 16 kHz mono PCM clip (<= 30 s) -> token ids, with a
+  // KV cache (cross-attn k/v built once, self-attn k/v grow by one per step).
+  // Auto-detects the language unless opts.langToken / opts.prompt is given.
+  transcribe(pcm: Float32Array, filtersT: MX, opts: { max?: number; prompt?: number[]; langToken?: number } = {}): number[] {
+    const sp = this.sp;
     const { mel, F, nMels } = logMel(padOrTrim(pcm), { filtersT, dropLast: true });
     const audio = this.encoder(fromF32(mel, [1, F, nMels]).astype(9)); // [1, 1500, D]
+    const lang = opts.langToken ?? this.detectLanguage(audio);
     const cache: WCache[] = Array.from({ length: this.dec.length }, () => ({ sk: null, sv: null, ck: null, cv: null }));
     const flatSelf = () => cache.flatMap((c) => (c.sk ? [c.sk, c.sv!] : []));
     const flatCross = () => cache.flatMap((c) => (c.ck ? [c.ck, c.cv!] : []));
-    const tokens = [...(opts.prompt ?? [SOT, EN, TRANSCRIBE, NO_TIMESTAMPS])];
+    const tokens = [...(opts.prompt ?? [sp.sot, lang, sp.transcribe, sp.noTimestamps])];
     const start = tokens.length;
     let input = Int32Array.from(tokens), T = tokens.length, offset = 0;
     for (let step = 0; step < (opts.max ?? 224); step++) {
@@ -161,7 +185,7 @@ export class Whisper {
       for (const m of oldSelf) m.free(); // safe: mlx refcounts keep them for the pending concat/eval
       const next = tokMX.itemU(); tokMX.free();
       offset += T;
-      if (next === EOT) break;
+      if (next === sp.eot) break;
       tokens.push(next);
       input = Int32Array.from([next]); T = 1;
     }
@@ -174,9 +198,9 @@ export class Whisper {
 if (import.meta.main) {
   const file = process.argv[2];
   if (!file) { console.error("usage: bun whisper.ts <audio-file>"); process.exit(1); }
-  const model = await loadWhisper();
+  const model = await loadWhisper("config-turbo.json", "whisper-turbo.safetensors");
   const tok = await WhisperTokenizer.fromFile();
-  const filtersT = await loadMelFilters();
+  const filtersT = await loadMelFilters("whisper-mel-filters-128.f32", 128);
   const pcm = await decodeAudio(file);
   const t0 = performance.now();
   const ids = model.transcribe(pcm, filtersT);

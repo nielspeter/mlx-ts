@@ -138,8 +138,18 @@ export function stack(arrs: MX[], axis: number): MX {
   m.mlx_stack_axis(ptr(s), vh, axis, stream); m.mlx_vector_array_free(vh); return new MX(Number(s[0]));
 }
 
-// batched eval: force everything before reading (keeps the lazy graph from growing)
-export function evalAll(...xs: MX[]) { for (const x of xs) m.mlx_array_eval(x.h); }
+// batched eval: force everything before reading (keeps the lazy graph from
+// growing). One mlx_eval over a vector, not N per-array evals — each per-array
+// eval is a separate GPU sync, so batching is ~Nx faster for multi-output steps
+// (measured: 20-output take 1.84 -> 0.14 ms). Used on the decode hot path
+// (token + all KV-cache arrays).
+export function evalAll(...xs: MX[]) {
+  if (xs.length === 0) return;
+  if (xs.length === 1) { m.mlx_array_eval(xs[0].h); return; }
+  const buf = new BigUint64Array(xs.map((x) => BigInt(x.h)));
+  const vh = m.mlx_vector_array_new_data(ptr(buf), BigInt(xs.length)) as number;
+  m.mlx_eval(vh); m.mlx_vector_array_free(vh);
+}
 // async eval: queue the graph on the stream and return immediately (no host sync),
 // so the next step's graph can be built while the GPU runs this one.
 export function asyncEval(...xs: MX[]) {

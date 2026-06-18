@@ -56,6 +56,13 @@
     padding: 10px 16px; font: inherit; font-weight: 600; cursor: pointer;
   }
   button.send:disabled { opacity: .5; cursor: default; }
+  button.mic {
+    background: var(--panel); color: var(--txt); border: 1px solid var(--line);
+    border-radius: 10px; padding: 10px 12px; font-size: 16px; line-height: 1; cursor: pointer;
+  }
+  button.mic:hover { border-color: var(--muted); }
+  button.mic.recording { background: #b3261e; border-color: #b3261e; color: #fff; }
+  button.mic:disabled { opacity: .6; cursor: default; }
 </style>
 </head>
 <body>
@@ -70,6 +77,7 @@
   <div id="log"></div>
   <form id="form">
     <textarea id="input" rows="1" placeholder="Message…  (Enter to send, Shift+Enter for newline)"></textarea>
+    <button class="mic" id="mic" type="button" title="Record speech to transcribe">🎤</button>
     <button class="send" id="send" type="submit">Send</button>
   </form>
 </div>
@@ -101,6 +109,36 @@ input.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); }
 });
 $("reset").addEventListener("click", () => { messages = []; log.innerHTML = ""; });
+
+// --- speech: record mic audio -> /v1/audio/transcriptions -> input box ---
+const mic = $("mic");
+let recorder = null, chunks = [];
+mic.addEventListener("click", async () => {
+  if (recorder && recorder.state === "recording") { recorder.stop(); return; }
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  catch (e) { alert("Microphone access denied: " + e); return; }
+  chunks = [];
+  recorder = new MediaRecorder(stream);
+  recorder.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+  recorder.onstop = async () => {
+    stream.getTracks().forEach((t) => t.stop());
+    mic.classList.remove("recording"); mic.textContent = "⏳"; mic.disabled = true;
+    const blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
+    const fd = new FormData();
+    fd.append("file", blob, "recording.webm");
+    try {
+      const res = await fetch("/v1/audio/transcriptions", { method: "POST", body: fd });
+      const text = ((await res.json()).text || "").trim();
+      input.value = (input.value.trim() ? input.value.trim() + " " : "") + text;
+      input.dispatchEvent(new Event("input"));
+      input.focus();
+    } catch (e) { alert("Transcription failed: " + e); }
+    mic.textContent = "🎤"; mic.disabled = false;
+  };
+  recorder.start();
+  mic.classList.add("recording"); mic.textContent = "⏹";
+});
 
 form.addEventListener("submit", async (e) => {
   e.preventDefault();

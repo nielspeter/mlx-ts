@@ -342,6 +342,41 @@ start to pay); MoE is proven at the op level but not yet wired into a full model
 and Node FFI parity remains deliberately deferred (Bun-only is the recommended v1
 scope).
 
+## 7c. Audio: speech-to-text (done) and text-to-speech (de-risked)
+
+A second modality, carried to the same bar. The reusable insight: for a fixed,
+small `n_fft`, **the FFT is a matmul** — no FFT binding needed. The forward rfft
+(audio → spectrum) is `frames @ cos / @ sin`; the inverse rfft (spectrum → audio)
+is the same with the inverse-DFT basis (Hermitian 2× weighting). Both run on ops
+we already have, validated to ~1e-6/1e-7 against numpy / mlx-audio.
+
+**Speech-to-text — done, validated.**
+- `audio.ts`: ffmpeg-decode → 16 kHz mono → Whisper log-Mel (rfft-as-matmul + the
+  shipped librosa filterbank). Matches numpy FFT to ~1e-6.
+- `whisper.ts`: the full Whisper architecture over mlx-c — Conv1d stem,
+  bidirectional encoder, causal decoder with **cross-attention** + a KV cache
+  (self-attn grows, cross-attn k/v computed once), tied-embedding logits. Greedy
+  transcription is **token-for-token identical to `mlx_whisper`**
+  (`whisper-transcribe-test.ts`), encoder/decoder parity separately checked
+  (`whisper-test.ts`). Special-token ids derived from `n_vocab` (handles v3's 100
+  languages), with **language auto-detection** and a **sliding 25 s window** for
+  unbounded dictation. Runs `whisper-large-v3-turbo` (128-mel); Danish and Swedish
+  verified end to end (macOS `say` clips). Served at `/v1/audio/transcriptions`.
+  The only non-MLX step is ffmpeg decoding — preprocessing, not the model.
+
+**Text-to-speech — de-risked, then scoped out.** A neural vocoder's one *novel*
+unknown is audio synthesis (spectrum → samples). `spike-istft.ts` implements the
+iSTFT in mlx-c/TS (inverse rfft matmul + windowed overlap-add) and matches
+mlx-audio's `istft` to **1.2e-7**. So TTS feasibility is **proven at the kill-risk
+level**. The remainder of a Kokoro-class port — weight-norm conv, AdaIN,
+instance-norm, snake, transposed conv, and the acoustic transformer/predictors —
+are conv/norm/transformer variants this project has **already** shown portable;
+porting them is labor, not new evidence. And **grapheme→phoneme (G2P) is not an
+MLX computation in any TTS** (it is rules + lexicon, i.e. `espeak-ng`), so a full
+talking pipeline would pull in a non-MLX dependency analogous to ffmpeg. That is a
+*product* decision, deliberately out of scope for a feasibility study: the study's
+TTS question — "does the audio-synthesis math run in mlx-c/TS?" — is answered yes.
+
 ## 8. File map
 
 **Runtime & codegen**
@@ -359,12 +394,17 @@ scope).
   (multi-file, mmap-evictable) + `freeMap`
 - `tokenizer.ts` — pure-TS byte-level BPE
 - `chat-template.ts` — HF chat template via `@huggingface/jinja`
+- `audio.ts` — speech front-end: ffmpeg decode + log-Mel (rfft-as-matmul)
+- `whisper.ts` / `whisper-tokenizer.ts` — Whisper STT (encoder + cross-attn decoder
+  + KV cache, multilingual, auto language detect); tiktoken decode
 
 **Models / demos**
 - `qwen.ts` — config-driven Qwen3-0.6B (bf16)
 - `qwen-nn.ts` — config-driven Qwen3-0.6B-4bit over `nn.Module` (CLI: sampling, window)
 - `chat.ts` — end-to-end chat: message → template → tokenizer → model → reply
 - `stream.ts` — streaming chat over the public `lm.streamText` API (tokens printed live)
+- `server.ts` / `chat.html` — Bun.serve OpenAI-compatible server (chat / embeddings /
+  audio transcriptions) + a chat web UI with live mic transcription
 - `lora-train.ts` — **LoRA fine-tune** of real 4-bit Qwen3 (Adam + cross_entropy)
 - `olmoe.ts` — config-driven **OLMoE-1B-7B MoE** (single-file or `MX_SHARDED`)
 - `block*.ts`, `model-*.ts` — the staged PoCs (block, decode, safetensors, quant)
@@ -374,7 +414,7 @@ scope).
 **Spikes** — `spike-throughput.ts` (async overlap / serving viability),
 `spike-bench.py` (Python tok/s bar), `spike-moe.ts` (gather_qmm op),
 `spike-moe-layer.ts` (full MoE layer), `spike-train.ts` (training: value_and_grad
-+ SGD).
++ SGD), `spike-istft.ts` (iSTFT vocoder synthesis — TTS de-risk).
 
 **References & validation**
 - `reference*.py` — MLX Python mirrors for every milestone

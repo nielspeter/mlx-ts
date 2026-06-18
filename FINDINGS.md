@@ -85,8 +85,9 @@ Each milestone is a runnable file validated against a reference.
 | 14 | **Training** — `value_and_grad` over a multi-param JS closure + SGD | `spike-train.ts` / `reference-train.py` | MLX Python | loss falls 0.237→0.009, final W bit-identical |
 | 15 | **LoRA fine-tune** of real 4-bit Qwen3 — Adam + cross_entropy, frozen base | `lora-train.ts` / `reference-lora.py` | MLX Python | loss falls 3.16→0.0007; tracks MLX to float tolerance |
 
-All fifteen are re-checked together by `validate-all.sh` — **18/18 green** (the
-fifteen above plus the codegen, async-overlap, and gather_qmm op checks).
+All fifteen are re-checked together by `validate-all.sh` — **19/19 green** (the
+fifteen above plus the codegen, async-overlap, public-`stream()`, and gather_qmm
+op checks).
 
 The strongest checks are the **discrete** ones (#4, #6, #8, #9): greedy token ids
 must match MLX exactly, so any drift anywhere — cache concat, RoPE offset, mask
@@ -239,9 +240,17 @@ decode is compute-bound).
 
 **Genuinely remaining:**
 
-- **Public streaming / disposable API.** The async-eval mechanism and `tidy()`
-  both work; what's missing is the *surface*: an async-generator `stream()` and a
-  `using`-based disposable so callers never call `tidy()` or free handles by hand.
+- ~~**Public streaming / disposable API.**~~ **Done** (`lm.ts`). An async-generator
+  `streamTokens()` / `streamText()` drives the decode loop over a model-agnostic
+  `Decoder` interface; a `try/finally` frees the whole KV cache on completion, on
+  early `break`, and on throw — so callers never call `tidy()` or free a handle.
+  `MX` is now `Disposable` (`using a = x.add(y)`), and the async generators carry
+  `[Symbol.asyncDispose]`. Greedy output is token-for-token identical to the
+  proven `generate()` (`stream-test.ts`, in `validate-all.sh`); memory is flat
+  across repeated early-broken streams (338 MB steady state, no leak). The
+  `Decoder` interface (`numLayers`, `eos`, `logitsLastMX`) is proven across both
+  families: **Qwen3** (dense) and **OLMoE** (MoE) generate through the identical
+  `streamTokens`/`generate` path, each token-exact vs MLX Python.
 - **Ragged-batch padding masks.** Batching is proven at equal length; ragged
   prompts need an additive mask (`sdpa`'s `mask_arr` already accepts one) plus
   left-padding/position bookkeeping.
@@ -344,6 +353,8 @@ scope).
 - `optim.ts` — `Adam` (pytree-aware); `loss.ts` — `crossEntropy`
 - `pytree.ts` — `treeFlatten` / `treeUnflattenLike` / `treeMap`;
   `train.ts` — tree-based `valueAndGrad` (the ergonomic training layer)
+- `lm.ts` — public generation surface: `Decoder` interface + async-generator
+  `streamTokens` / `streamText` / `generate` (auto KV-cache cleanup, no manual `tidy`)
 - `loader.ts` — safetensors loading; `singleFileWeights` / **`shardedWeights`**
   (multi-file, mmap-evictable) + `freeMap`
 - `tokenizer.ts` — pure-TS byte-level BPE
@@ -353,6 +364,7 @@ scope).
 - `qwen.ts` — config-driven Qwen3-0.6B (bf16)
 - `qwen-nn.ts` — config-driven Qwen3-0.6B-4bit over `nn.Module` (CLI: sampling, window)
 - `chat.ts` — end-to-end chat: message → template → tokenizer → model → reply
+- `stream.ts` — streaming chat over the public `lm.streamText` API (tokens printed live)
 - `lora-train.ts` — **LoRA fine-tune** of real 4-bit Qwen3 (Adam + cross_entropy)
 - `olmoe.ts` — config-driven **OLMoE-1B-7B MoE** (single-file or `MX_SHARDED`)
 - `block*.ts`, `model-*.ts` — the staged PoCs (block, decode, safetensors, quant)

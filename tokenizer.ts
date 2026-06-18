@@ -106,4 +106,26 @@ export class Tokenizer {
     for (const ch of s) { const b = this.c2b.get(ch); if (b !== undefined) bytes.push(b); }
     return this.dec.decode(Uint8Array.from(bytes));
   }
+
+  // Incremental detokenizer for streaming: a token can split a multi-byte UTF-8
+  // char across token boundaries, so per-token decode would emit U+FFFD. A
+  // streaming TextDecoder buffers the incomplete byte sequence until the next
+  // token completes it. `add(id)` returns the newly-decodable text (may be "");
+  // `flush()` drains any trailing buffered bytes at end of stream.
+  detokenizer(skipSpecial = true): { add(id: number): string; flush(): string } {
+    const dec = new TextDecoder("utf-8");
+    const { idToTok, c2b, specialById } = this;
+    return {
+      add(id: number): string {
+        if (specialById.has(id)) { // flush buffered bytes first, then the literal special (boundary)
+          return dec.decode() + (skipSpecial ? "" : (specialById.get(id) ?? ""));
+        }
+        const tok = idToTok[id] ?? "";
+        const bytes: number[] = [];
+        for (const ch of tok) { const b = c2b.get(ch); if (b !== undefined) bytes.push(b); }
+        return dec.decode(Uint8Array.from(bytes), { stream: true });
+      },
+      flush: (): string => dec.decode(),
+    };
+  }
 }

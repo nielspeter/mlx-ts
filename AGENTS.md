@@ -3,7 +3,7 @@
 A working proof-of-concept: a **TypeScript MLX SDK over Apple's `mlx-c` C API via
 Bun FFI** — no custom C/C++, no build step. It runs real dense and MoE LLMs
 (inference + LoRA training), every layer validated against MLX Python or HF.
-**`validate-all.sh` is 18/18 green.** Read `FINDINGS.md` first — it's the full,
+**`validate-all.sh` is 19/19 green.** Read `FINDINGS.md` first — it's the full,
 honest write-up; this file is the operational guide.
 
 ## Orientation (read in this order)
@@ -29,6 +29,7 @@ honest write-up; this file is the operational guide.
 bun codegen.ts        # REQUIRED first: regenerates generated.ts (the FFI binding) from mlx-c headers
 bun validate-all.sh   # full suite — 18 checks, TS vs MLX-Python / HF
 bun chat.ts "Write a haiku about the sea"   # a real chat turn (4-bit Qwen3)
+bun stream.ts "Write a haiku about the sea" # streaming chat over the public lm.ts API
 bun lora-train.ts     # LoRA fine-tune of 4-bit Qwen3 (loss 3.16 -> 0.0007)
 ```
 Every TS path has a `reference-*.py` MLX/HF mirror; parity is the bar.
@@ -51,6 +52,9 @@ generalizes this: any opaque `mlx_*` type → `ptr`.
 - **`tokenizer.ts`** (byte-level BPE), **`chat-template.ts`** (`@huggingface/jinja`).
 - **Training**: `optim.ts` (Adam), `loss.ts` (cross_entropy), `pytree.ts`,
   `train.ts` (tree-based `valueAndGrad`).
+- **`lm.ts`** — public generation surface: `Decoder` interface +
+  `streamTokens` / `streamText` / `generate` (async generators, KV cache
+  auto-freed; no caller-side `tidy()`). `MX` is `Disposable`.
 - **Models**: `qwen.ts` (bf16), `qwen-nn.ts` (4-bit), `olmoe.ts` (MoE),
   `chat.ts`, `lora-train.ts`. `spike-*.ts` = de-risking experiments.
 
@@ -84,9 +88,11 @@ generalizes this: any opaque `mlx_*` type → `ptr`.
   quantized router, `norm_topk_prob`) as the template for real-model quirks.
 
 ## What's next (from FINDINGS §7 — none are feasibility risks)
-- **Public streaming / disposable API**: async-generator `stream()` and a
-  `using`-based disposable so callers don't call `tidy()` by hand. (Mechanism is
-  proven in `spike-throughput.ts`.)
+- ✅ **Public streaming / disposable API** — done in `lm.ts`: async-generator
+  `streamTokens` / `streamText` over a model-agnostic `Decoder` interface, KV
+  cache auto-freed via `try/finally` (completion / early `break` / throw), `MX`
+  is `Disposable`. Validated in `stream-test.ts`. Both `Qwen3` (dense) and
+  `OLMoE` (MoE) implement `Decoder` and generate through the same path.
 - **Ragged-batch padding masks** (sdpa's `mask_arr` already accepts one).
 - **Training breadth**: AdamW/schedulers, more losses, multi-example batches, the
   backward-memory regime at scale (`tidy()` *after* the step).

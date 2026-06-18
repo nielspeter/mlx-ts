@@ -59,12 +59,17 @@ token-for-token. Everything below is the validated machinery underneath it.
 - `qwen-nn.ts` / `reference-qwen-q4.py` — **real 4-bit Qwen3-0.6B**
   (mlx-community format) over `nn.Module`; greedy ids match MLX Python
   token-for-token. Supports temp/top-p sampling, batching, sliding window.
+- `lm.ts` — public generation surface: a model-agnostic `Decoder` interface and
+  async-generator `streamTokens` / `streamText` / `generate`. The KV cache is
+  freed automatically (completion / early `break` / throw), so callers never call
+  `tidy()` or free a handle; `MX` is `Disposable`. `stream.ts` is the live demo.
 - `validate-prod.ts` — checks sampling reproducibility, batching, and bounded
-  memory.
+  memory. `stream-test.ts` — stream output is identical to `generate()`.
 
 ```sh
 bun qwen-nn.ts "The capital of France is"                      # greedy
 bun qwen-nn.ts --temp 0.8 --topp 0.95 --seed 42 "Once ..."     # sampling
+bun stream.ts "Write a haiku about the sea"                    # streaming API
 bun validate-prod.ts                                            # all three
 ```
 

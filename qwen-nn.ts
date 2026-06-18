@@ -9,12 +9,12 @@ import { MX, fromI32, sample, seed, evalAll, activeMemoryMB, tidy } from "./mx.t
 import { RMSNorm, QuantizedLinear, QuantizedEmbedding } from "./nn.ts";
 import { loadSafetensors, get, freeMap } from "./loader.ts";
 import { Tokenizer } from "./tokenizer.ts";
+import type { Decoder, KV } from "./lm.ts";
 
-type KV = { k: MX; v: MX } | null;
-
-class Qwen3 {
+class Qwen3 implements Decoder {
   D: number; NL: number; nH: number; nKV: number; Dh: number;
   eps: number; theta: number; scale: number; vocab: number; eos: number;
+  get numLayers() { return this.NL; }
   embed: QuantizedEmbedding; finalNorm: RMSNorm;
   layers: { inNorm: RMSNorm; postNorm: RMSNorm; qNorm: RMSNorm; kNorm: RMSNorm;
             q: QuantizedLinear; k: QuantizedLinear; v: QuantizedLinear; o: QuantizedLinear;

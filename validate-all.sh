@@ -24,6 +24,7 @@ bun chat-test.ts 2>&1 | grep -q "4/4" && ok "chat template vs Python jinja2 (4/4
 bun spike-moe.ts 2>&1 | grep -q "match: true" && ok "MoE gather_qmm op (vs MLX)" || no "spike-moe" "match"
 bun spike-moe-layer.ts 2>&1 | grep -q "match: true" && ok "MoE full layer (vs MLX)" || no "spike-moe-layer" "match"
 bun spike-throughput.ts 2>&1 | grep -q "identical (sync == async): true" && ok "async-overlap == sync tokens" || no "spike-throughput" "tokens"
+bun stream-test.ts 2>&1 | grep -q "STREAM OK" && ok "public stream() == generate() (ids + text)" || no "stream-test" "parity"
 bun validate-prod.ts 2>&1 | grep -q "reproducible (same seed -> same ids): true" && ok "sampling reproducible + batching" || no "validate-prod" "sampling"
 
 echo "=== synthetic parity (TS vs MLX Python) ==="

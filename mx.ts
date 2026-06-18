@@ -47,6 +47,7 @@ export class MX {
   private pin?: ArrayBufferView; // keep source buffer alive for zero-copy arrays
   constructor(h: number, pin?: ArrayBufferView) { this.h = h; this.pin = pin; reg.register(this, h, this); ARENA?.add(this); }
   free() { reg.unregister(this); if (this.h) m.mlx_array_free(this.h); this.h = 0; }
+  [Symbol.dispose]() { this.free(); } // `using a = x.add(y)` frees deterministically at scope end
 
   private r(fn: any, ...a: any[]): MX { const s = slot(); fn(ptr(s), ...a); return new MX(Number(s[0])); }
 

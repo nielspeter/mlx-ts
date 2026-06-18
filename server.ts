@@ -12,6 +12,7 @@
 // decode + per-request arenas — see README "not yet".)
 
 import { Qwen3 } from "./qwen-nn.ts";
+import { fromI32, tidy } from "./mx.ts";
 import { streamTokens, type GenOptions } from "./lm.ts";
 import { Tokenizer } from "./tokenizer.ts";
 import { ChatTemplate } from "./chat-template.ts";
@@ -85,6 +86,29 @@ const CORS = { "access-control-allow-origin": "*", "access-control-allow-headers
 const rid = () => "chatcmpl-" + Math.random().toString(36).slice(2);
 const now = () => Math.floor(Date.now() / 1000);
 
+// OpenAI-compatible embeddings: input string | string[] -> L2-normalized vectors.
+// Each text is embedded separately (B=1) so ragged lengths need no padding.
+async function embeddings(req: Request): Promise<Response> {
+  let body: any;
+  try { body = await req.json(); } catch { return json({ error: "invalid JSON body" }, 400); }
+  const inputs: string[] = Array.isArray(body.input) ? body.input : [body.input];
+  if (inputs.length === 0 || inputs.some((x) => typeof x !== "string")) return json({ error: "input (string | string[]) required" }, 400);
+
+  const release = await acquire();
+  try {
+    let total = 0;
+    const data = inputs.map((text, index) => {
+      const ids = tok.encode(text);
+      total += ids.length;
+      const e = tidy(() => model.embeddingMX(fromI32(Int32Array.from(ids), [1, ids.length]), 1, ids.length));
+      const embedding = Array.from(e.toF32());
+      e.free();
+      return { object: "embedding", index, embedding };
+    });
+    return json({ object: "list", data, model: MODEL_ID, usage: { prompt_tokens: total, total_tokens: total } });
+  } finally { release(); }
+}
+
 async function chat(req: Request): Promise<Response> {
   let body: any;
   try { body = await req.json(); } catch { return json({ error: "invalid JSON body" }, 400); }
@@ -144,7 +168,8 @@ Bun.serve({
     if (pathname === "/health") return json({ status: "ok", model: MODEL_ID });
     if (pathname === "/v1/models") return json({ object: "list", data: [{ id: MODEL_ID, object: "model", created: now(), owned_by: "mlx-ts" }] });
     if (pathname === "/v1/chat/completions" && req.method === "POST") return chat(req);
-    return json({ error: "not found", routes: ["/ (chat UI)", "/health", "/v1/models", "POST /v1/chat/completions"] }, 404);
+    if (pathname === "/v1/embeddings" && req.method === "POST") return embeddings(req);
+    return json({ error: "not found", routes: ["/ (chat UI)", "/health", "/v1/models", "POST /v1/chat/completions", "POST /v1/embeddings"] }, 404);
   },
 });
 console.log(`listening on http://localhost:${PORT}  (chat UI at / , API at POST /v1/chat/completions)`);

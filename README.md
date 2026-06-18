@@ -83,7 +83,13 @@ self-contained chat web UI (`chat.html`) at `/`:
 bun server.ts                       # open http://localhost:8080 for the chat UI, or:
 curl localhost:8080/v1/chat/completions -H 'content-type: application/json' \
   -d '{"messages":[{"role":"user","content":"Hi"}],"stream":true,"temperature":0.7,"top_k":40}'
+curl localhost:8080/v1/embeddings -H 'content-type: application/json' \
+  -d '{"input":["a sentence to embed","another one"]}'   # L2-normalized vectors for RAG
 ```
+
+The embeddings come from mean-pooling Qwen3's last-layer hidden states (same
+model/tokenizer, no extra weights) — RAG-useful similarity ranking, though a
+dedicated embedding model would rank better.
 
 **Memory — why `tidy()` and not just `FinalizationRegistry`:** FR only fires
 after a GC, which never happens inside a tight synchronous decode loop, so
@@ -235,6 +241,8 @@ yet an npm package). Sampling supports greedy, temperature, top-p, **top-k**, an
 - **A local inference HTTP server + chat UI** — `server.ts` does this: an
   OpenAI-compatible `/v1/chat/completions` (SSE/JSON) over `Bun.serve` plus a
   self-contained chat page at `/`. Single-process / low-concurrency, not multi-tenant.
+- **Local RAG** — `POST /v1/embeddings` returns L2-normalized sentence vectors
+  (mean-pooled Qwen3 hidden states); pair with any JS vector store for retrieval.
 - **Prompt-driven text tools** — summarize / rewrite / classify / extract /
   translate, batched over a dataset (one-at-a-time or equal-length).
 - **Agent loops** — tool use via prompting + JS-side parsing.
@@ -244,7 +252,9 @@ yet an npm package). Sampling supports greedy, temperature, top-p, **top-k**, an
 ### 🟡 Needs modest code (clear path, no feasibility risk)
 - **More architectures** (Llama, Mistral, Gemma, Phi…) — a forward over `nn`
   modules + weight-key mapping (`olmoe.ts` is the template).
-- **Embedding / retrieval models** — an encoder forward + pooling → local RAG.
+- **Better embeddings** — a *dedicated* embedding model (e.g. a BERT encoder with
+  WordPiece, or Qwen3-Embedding with last-token pooling) for stronger retrieval
+  than the current mean-pooled base-LLM vectors.
 - **npm packaging** — bundle a prebuilt `libmlxc`, replace the hardcoded
   `/opt/homebrew/...` dylib paths with runtime resolution.
 - **OpenAI-compatible HTTP server** — app-level glue over `streamText`.

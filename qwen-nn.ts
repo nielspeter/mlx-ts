@@ -76,6 +76,20 @@ class Qwen3 implements Decoder {
     const last = h.takeAxis(fromI32(Int32Array.from([L - 1]), [1]), 1).reshape([B, this.D]);
     return this.embed.asLinear(last);
   }
+
+  // Sentence embedding [B, D]: mean-pool the last-layer hidden states and
+  // L2-normalize (so cosine similarity = dot product). Reuses the decoder
+  // forward (causal); fine for local-RAG similarity, though a dedicated
+  // embedding model would rank better. Single full-sequence pass, no KV reuse.
+  embeddingMX(idsMX: MX, B: number, L: number): MX {
+    const cache: KV[] = Array(this.NL).fill(null);
+    let h = this.embed.forward(idsMX);
+    for (let i = 0; i < this.NL; i++) h = this.block(i, h, B, L, 0, cache, 0);
+    h = this.finalNorm.forward(h);                          // [B, L, D]
+    const pooled = h.sumAxes([1], false).divScalar(L);      // mean over tokens -> [B, D]
+    const norm = pooled.mul(pooled).sumAxes([1], true).sqrt(); // [B, 1]
+    return pooled.div(norm);
+  }
 }
 
 function trimSeq(x: MX, window: number): MX {

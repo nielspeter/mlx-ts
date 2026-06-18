@@ -57,6 +57,9 @@ generalizes this: any opaque `mlx_*` type → `ptr`.
 - **`lm.ts`** — public generation surface: `Decoder` interface +
   `streamTokens` / `streamText` / `generate` (async generators, KV cache
   auto-freed; no caller-side `tidy()`). `MX` is `Disposable`.
+- **`audio.ts`** — speech front-end: ffmpeg decode → 16 kHz mono PCM →
+  Whisper-style log-Mel (rfft computed as a DFT matmul, no FFT binding needed).
+  Validated vs numpy FFT (`reference-mel.py` / `audio-test.ts`). Foundation for Whisper.
 - **`tests/`** — per-op binding parity (`bun test`): `gen-fixtures.py` runs each
   op through MLX Python and saves inputs+output to `fixtures.json`; `lib.test.ts`
   feeds identical inputs through mlx-ts and asserts `allclose`. Covers elementwise,

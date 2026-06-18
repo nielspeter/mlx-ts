@@ -262,8 +262,12 @@ yet an npm package). Sampling supports greedy, temperature, top-p, **top-k**, an
 ### ❌ Not yet (substantial new code or a real gap)
 - **Node.js / cross-platform** — Bun FFI only; Apple-Silicon + Metal only (no
   Linux/CUDA, Windows, Intel).
-- **Vision / audio / multimodal** (CLIP, LLaVA, Whisper, image-gen) — no vision
-  encoders/conv models wired; the biggest architectural gap.
+- **Speech-to-text (Whisper)** — the **log-Mel audio front-end is built and
+  validated** (`audio.ts`: ffmpeg decode + rfft-as-matmul mel, matches numpy FFT
+  to ~1e-6). What remains is the encoder–decoder model (Conv1d stem — already
+  wrapped — bidirectional encoder, causal decoder with cross-attention), the
+  Whisper tokenizer, and the weights.
+- **Vision / multimodal** (CLIP, LLaVA, image-gen) — no vision encoders wired yet.
 - **High-throughput multi-tenant serving** — only equal-length batching; ragged
   prompts need padding masks + continuous batching.
 - **Broad model compatibility** — only affine 4-bit quant (no AWQ/GPTQ), so many

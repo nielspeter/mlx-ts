@@ -1,0 +1,15 @@
+# native model downloads & HF artifacts (fetch via the curl commands in README.md)
+*.safetensors
+model-*-sharded/
+config*.json
+tokenizer*.json
+tokenizer_config*.json
+
+# generated / derived
+generated.ts
+*-fixtures.json
+node_modules/
+
+# editor / tool metadata
+.idea/
+.serena/

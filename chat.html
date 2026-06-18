@@ -110,33 +110,47 @@ input.addEventListener("keydown", (e) => {
 });
 $("reset").addEventListener("click", () => { messages = []; log.innerHTML = ""; });
 
-// --- speech: record mic audio -> /v1/audio/transcriptions -> input box ---
+// --- live speech: record mic audio and re-transcribe the rolling buffer ---
+// MediaRecorder emits a chunk ~every second; we POST the accumulated buffer (a
+// valid growing webm) to /v1/audio/transcriptions and replace the input text with
+// the fresh full-buffer transcription. Re-transcribing the whole clip (Whisper is
+// ~100x real-time) avoids words being cut at chunk boundaries.
 const mic = $("mic");
-let recorder = null, chunks = [];
+let recorder = null, chunks = [], inflight = false, appliedLen = 0, liveBase = "";
+
+async function rollingTranscribe(final) {
+  if ((inflight && !final) || !chunks.length) return;
+  inflight = true;
+  const n = chunks.length;
+  const fd = new FormData();
+  fd.append("file", new Blob(chunks, { type: recorder.mimeType || "audio/webm" }), "rec.webm");
+  try {
+    const res = await fetch("/v1/audio/transcriptions", { method: "POST", body: fd });
+    const text = ((await res.json()).text || "").trim();
+    if (text && n >= appliedLen) {           // ignore a stale (shorter-buffer) response
+      appliedLen = n;
+      input.value = (liveBase ? liveBase + " " : "") + text;
+      input.dispatchEvent(new Event("input"));
+    }
+  } catch { /* keep recording; try again next chunk */ }
+  inflight = false;
+}
+
 mic.addEventListener("click", async () => {
   if (recorder && recorder.state === "recording") { recorder.stop(); return; }
   let stream;
   try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
   catch (e) { alert("Microphone access denied: " + e); return; }
-  chunks = [];
+  chunks = []; inflight = false; appliedLen = 0; liveBase = input.value.trim();
   recorder = new MediaRecorder(stream);
-  recorder.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+  recorder.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); rollingTranscribe(false); };
   recorder.onstop = async () => {
     stream.getTracks().forEach((t) => t.stop());
     mic.classList.remove("recording"); mic.textContent = "⏳"; mic.disabled = true;
-    const blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
-    const fd = new FormData();
-    fd.append("file", blob, "recording.webm");
-    try {
-      const res = await fetch("/v1/audio/transcriptions", { method: "POST", body: fd });
-      const text = ((await res.json()).text || "").trim();
-      input.value = (input.value.trim() ? input.value.trim() + " " : "") + text;
-      input.dispatchEvent(new Event("input"));
-      input.focus();
-    } catch (e) { alert("Transcription failed: " + e); }
-    mic.textContent = "🎤"; mic.disabled = false;
+    await rollingTranscribe(true);           // final pass over the whole buffer
+    mic.textContent = "🎤"; mic.disabled = false; input.focus();
   };
-  recorder.start();
+  recorder.start(1000);                       // -> a chunk (and a re-transcribe) ~every second
   mic.classList.add("recording"); mic.textContent = "⏹";
 });
 

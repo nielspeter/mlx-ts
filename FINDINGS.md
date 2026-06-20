@@ -270,7 +270,8 @@ decode is compute-bound).
   What's left is just more breadth: AdamW/schedulers, more losses, multi-example
   batches, and the backward-memory regime at scale (activations held for backward,
   so `tidy()` runs *after* the step). Standard minibatch training needs no `vmap`;
-  only per-sample-gradient methods do (the one genuine mlx-c capability gap).
+  only per-sample-gradient methods do — and `vmap` itself turned out to be
+  **recoverable over FFI** (see below), so even that is no longer a hard gap.
 - **Breadth.** More architectures (dense + MoE families proven; each new one is
   key-mapping), more quant formats (AWQ/GPTQ, other bit-widths), more sampling
   (top-k, repetition penalties, min-p), and **npm packaging of a prebuilt
@@ -332,6 +333,20 @@ museum in Paris.\n\nThe Eiffel Tower is a famous iron lattice tower..."` at
 router*, full-projection q/k-norm (vs Qwen3's per-head), untied lm_head, and
 `norm_topk_prob=false`. The tokenizer (`tokenizer.ts`) also handled OLMoE's
 GPT-NeoX BPE unchanged. MoE is fully proven — op, layer, and real model.
+
+**Spike D — `vmap` recovered over FFI (the last asterisk).** `mlx-c` exposes no
+public `vmap`, only the internal `mlx_detail_vmap_trace` / `mlx_detail_vmap_replace`
+primitives its own `vmap` composes from. `spike-vmap.ts` `dlopen`s those two and
+replicates the composition (trace the function once, then replace with the real
+batched inputs) — the per-op batching rules live in the C++ core and run inside
+`vmap_replace`, so we only orchestrate; the closure plumbing is the same
+`mlx_closure_new_func` + `JSCallback` trick as `train.ts`. Validated three ways:
+single-input `vmap` (sum-of-squares), a **shared (non-mapped) input** via the
+`-1` axis sentinel (`A @ x`), and **per-sample gradients** `vmap(grad(f))` — `grad
+of sum(x²)` per example equals `2x` exactly. So the one capability previously
+called a genuine gap is reachable; per-sample-gradient methods (DP-SGD, etc.) are
+no longer blocked. Caveat: these are `mlx_detail_*` (internal, version-unstable),
+so it's a capability spike, not a committed public API.
 
 **Net:** none of the suspected unknowns kill or even meaningfully partial the
 project. The two that *could* have — "too slow to serve" and "MoE impossible
@@ -414,7 +429,8 @@ TTS question — "does the audio-synthesis math run in mlx-c/TS?" — is answere
 **Spikes** — `spike-throughput.ts` (async overlap / serving viability),
 `spike-bench.py` (Python tok/s bar), `spike-moe.ts` (gather_qmm op),
 `spike-moe-layer.ts` (full MoE layer), `spike-train.ts` (training: value_and_grad
-+ SGD), `spike-istft.ts` (iSTFT vocoder synthesis — TTS de-risk).
++ SGD), `spike-istft.ts` (iSTFT vocoder synthesis — TTS de-risk),
+`spike-vmap.ts` (`vmap` recovered from the detail trace/replace primitives).
 
 **References & validation**
 - `reference*.py` — MLX Python mirrors for every milestone

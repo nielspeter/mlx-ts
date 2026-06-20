@@ -91,8 +91,11 @@ generalizes this: any opaque `mlx_*` type → `ptr`.
    near instabilities). Validation criterion: identical start + both converge.
 9. The codegen **skips function-pointer params** (closures) → `dlopen`
    `mlx_closure_new_func` by hand (see `train.ts` / `spike-train.ts`).
-10. **`vmap` is not in mlx-c** — the one genuine capability gap. Not needed for
-    minibatch training; only per-sample-gradient methods need it.
+10. **`vmap` has no public mlx-c symbol**, but is **recoverable** over FFI from
+    the internal `mlx_detail_vmap_trace`/`_replace` primitives (`spike-vmap.ts`:
+    single-input, shared-input `-1` axis, and per-sample gradients `vmap(grad)` all
+    validated). Not needed for minibatch training anyway. Caveat: `mlx_detail_*`
+    are internal/version-unstable — a capability spike, not a public API.
 
 ## How to extend (the patterns that work)
 - **New op**: usually already wrapped (ops.h/fast.h) — just add an `MX` method

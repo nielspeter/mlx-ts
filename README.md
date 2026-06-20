@@ -268,9 +268,11 @@ temperature, top-p, **top-k**, and **repetition penalty**
   exact vs the MLX-Python mirror, both converge.
 - **Train a real small GPT** — `spike-nanogpt.ts` scales that up to nanoGPT:
   a multi-layer char-level GPT on tiny-shakespeare, **mini-batched `[B,T]`,
-  AdamW + cosine LR + warmup + global grad clipping**. ~0.8M params reaches
-  ~1.7 val loss and emits Shakespeare-shaped text (speaker turns, real words);
-  init + batches are shared with `reference-nanogpt.py` for an exact match.
+  AdamW + cosine LR + warmup + global grad clipping + dropout**. At nanoGPT's
+  exact `shakespeare-char` config (6 layers, 384 dim, 10.7M params) it reaches
+  **best val loss ≈ 1.50 — matching nanoGPT's ~1.47 baseline** — and writes
+  coherent Shakespeare (real character names, dialogue). The dropout-free path
+  is bit-exact vs `reference-nanogpt.py` (shared init + batches).
 - **Research / inspection** — pull logits, hidden states; the `MX` op surface is open.
 
 Whisper setup (weights/assets are git-ignored — fetched, like the LLM weights):

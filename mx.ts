@@ -185,6 +185,20 @@ function categorical(logits: MX, axis: number): MX {
   const s = slot(); m.mlx_random_categorical(ptr(s), logits.h, axis, 0, stream); return new MX(Number(s[0]));
 }
 
+// Inverted dropout (device-side): keep each element w.p. (1-p) via a Bernoulli
+// mask, scale survivors by 1/(1-p). `seedNum` derives the RNG key — pass a value
+// that varies per call (e.g. step*K + site) so masks differ across steps but are
+// reproducible (MLX's bernoulli is deterministic given key + shape, so a Python
+// mirror using the same seeds gets identical masks). No-op at p<=0 (eval/inference).
+export function dropout(x: MX, p: number, seedNum: number): MX {
+  if (p <= 0) return x;
+  const keep = 1 - p;
+  const ks = slot(); m.mlx_random_key(ptr(ks), BigInt(seedNum)); const key = new MX(Number(ks[0]));
+  const sh = x.shape;
+  const s = slot(); m.mlx_random_bernoulli(ptr(s), scalar(keep).h, ptr(new Int32Array(sh)), BigInt(sh.length), key.h, stream);
+  return x.mul(new MX(Number(s[0])).astype(FLOAT32)).divScalar(keep);
+}
+
 // top-k: keep the k highest logits along `ax`, mask the rest to ~-inf.
 function topKFilter(logits: MX, k: number, ax: number): MX {
   const vocab = logits.shape[ax];

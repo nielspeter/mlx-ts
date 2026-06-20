@@ -24,14 +24,16 @@ Faithful to nanoGPT's `shakespeare-char` recipe, scaled to run on a single Mac:
 | **Cosine LR + linear warmup** | ✅ `lrAt()` mirrors nanoGPT's `get_lr` |
 | **Global grad-norm clipping** | ✅ clip at 1.0 across all grads |
 | Char-level tokenizer | ✅ sorted-unique vocab (65 chars) |
-| train/val split + val-loss eval | ✅ 90/10, averaged over fixed eval batches |
+| train/val split + best-val eval | ✅ 90/10, periodic eval, tracks best checkpoint |
+| **Dropout** | ✅ device-side `mx.dropout` (`mlx_random_bernoulli`), train-only |
 | Autograd | **real MLX `value_and_grad`** over FFI (`train.ts`) |
 | DDP / `torch.compile` | N/A — single device; MLX has its own lazy graph |
 
 Default config: 4 layers, 4 heads, `n_embd=128`, `block_size=64`, batch 32,
 2000 iters, lr `1e-3`→`1e-4` cosine, weight decay `0.1`, grad clip `1.0`,
-AdamW betas `(0.9, 0.95)`. ~**0.8M params**. All knobs are env-overridable
-(`N_LAYER`, `N_HEAD`, `N_EMBD`, `BLOCK`, `BATCH`, `ITERS`).
+AdamW betas `(0.9, 0.95)`, dropout 0. ~**0.8M params**. All knobs are
+env-overridable (`N_LAYER`, `N_HEAD`, `N_EMBD`, `BLOCK`, `BATCH`, `ITERS`,
+`BETA2`, `DROPOUT`, `EVAL_INTERVAL`).
 
 ## Run it
 ```sh
@@ -61,6 +63,48 @@ It learns Shakespeare's *shape* from raw characters: `SPEAKER:` turns, line
 breaks, and real words ("against", "widow's", "swear", "king", "eyes"). nanoGPT's
 own char baseline reaches ~1.47 val with a 10.7M model (6 layers / 384 dim / 256
 block); ~1.7 with **13× fewer params** is right where it should be.
+
+## Scaling up: chasing nanoGPT's 1.47 baseline
+nanoGPT's published `shakespeare-char` result is **~1.47 val loss** with a 10.7M
+model (6 layers / 6 heads / 384 dim / block 256 / batch 64 / dropout 0.2 / 5000
+iters / β2 0.99). Running that exact config:
+
+```sh
+N_LAYER=6 N_HEAD=6 N_EMBD=384 BLOCK=256 BATCH=64 ITERS=5000 BETA2=0.99 \
+  DROPOUT=0.2 bun spike-nanogpt.ts
+```
+
+```
+iter 1250: train 1.1826 val 1.4964 (best 1.4964, lr 8.8e-4)   <- minimum
+...
+FINAL train loss=0.5640
+VAL loss=2.1513          (final step — overfit)
+BEST VAL loss=1.4964     <- matches nanoGPT's ~1.47
+
+--- sample (from the trained model) ---
+And I am innocent as your face,
+That apprehended you fair, which you may
+...
+PERDITA:
+One of these love!
+
+Clown:
+Hath been been so coldly?
+...
+Shepherd:
+Ay, an't please you
+```
+
+**Best val 1.4964 ≈ the 1.47 baseline** — 10.7M params, trained from scratch in
+TypeScript over MLX. The sample produces real *Winter's Tale* characters
+(PERDITA, Clown, Shepherd), dialogue structure and grammatical lines.
+
+Two honest notes: (1) val bottoms out at iter ~1250 then climbs as a 10.7M model
+memorizes 1 MB of text — textbook overfitting, which is exactly why nanoGPT (and
+this spike) report the *best* checkpoint, not the final step. (2) We apply
+residual dropout (embeddings, attn output, MLP output) but not attention-weight
+dropout, since MLX's *fused* `scaled_dot_product_attention` has no dropout
+parameter; the best-val still lands on the baseline.
 
 ## Validation (parity vs MLX-Python)
 `reference-nanogpt.py` trains the identical model from the **same init**

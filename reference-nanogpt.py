@@ -10,7 +10,8 @@ import mlx.core as mx
 NL = int(os.environ.get("N_LAYER", 4)); NH = int(os.environ.get("N_HEAD", 4)); D = int(os.environ.get("N_EMBD", 128))
 T = int(os.environ.get("BLOCK", 64)); B = int(os.environ.get("BATCH", 32)); DH = D // NH; FF = 4 * D
 ITERS = int(os.environ.get("ITERS", 2000)); WARMUP = 100; EVAL_ITERS = 40
-LR0, MIN_LR, WD, CLIP, B1, B2, EPSA = 1e-3, 1e-4, 0.1, 1.0, 0.9, 0.95, 1e-8
+LR0, MIN_LR, WD, CLIP, B1, EPSA = 1e-3, 1e-4, 0.1, 1.0, 0.9, 1e-8
+B2 = float(os.environ.get("BETA2", 0.95)); DROP = float(os.environ.get("DROPOUT", 0.0))
 EPS, ASCALE = 1e-5, 1.0 / (DH ** 0.5)
 
 text = open("input.txt").read()
@@ -56,39 +57,47 @@ def unflatten(tmpl, leaves):
     return build(tmpl)
 
 pos = mx.arange(T)
-def forward(w, idx):
+DSEED = 0  # per-step dropout base seed (set in the loop)
+def drop(x, site, training):
+    if not training or DROP <= 0: return x
+    keep = 1 - DROP
+    mask = mx.random.bernoulli(keep, x.shape, key=mx.random.key(DSEED + site)).astype(mx.float32)
+    return x * mask / keep
+def forward(w, idx, training=False):
     Bc = idx.shape[0]
-    x = w["wte"][idx] + w["wpe"][pos]
+    x = drop(w["wte"][idx] + w["wpe"][pos], 1, training)
     heads = lambda t, wt, b: (t @ wt + b).reshape(Bc, T, NH, DH).transpose(0, 2, 1, 3)
-    for blk in w["blocks"]:
+    for i, blk in enumerate(w["blocks"]):
         n1 = mx.fast.layer_norm(x, blk["ln1w"], blk["ln1b"], EPS)
         q, k, v = heads(n1, blk["wq"], blk["bq"]), heads(n1, blk["wk"], blk["bk"]), heads(n1, blk["wv"], blk["bv"])
         att = mx.fast.scaled_dot_product_attention(q, k, v, scale=ASCALE, mask="causal")
-        x = x + (att.transpose(0, 2, 1, 3).reshape(Bc, T, D) @ blk["wo"] + blk["bo"])
+        x = x + drop(att.transpose(0, 2, 1, 3).reshape(Bc, T, D) @ blk["wo"] + blk["bo"], 10 + i * 2, training)
         n2 = mx.fast.layer_norm(x, blk["ln2w"], blk["ln2b"], EPS)
         h = gelu(n2 @ blk["wfc"] + blk["bfc"])
-        x = x + (h @ blk["wproj"] + blk["bproj"])
+        x = x + drop(h @ blk["wproj"] + blk["bproj"], 11 + i * 2, training)
     return mx.fast.layer_norm(x, w["lnfw"], w["lnfb"], EPS) @ w["wte"].T
 
 def gelu(x):
     return x * 0.5 * (1 + mx.erf(x / (2 ** 0.5)))
 
-def loss_fn(w, idx, tgt):
-    logits = forward(w, idx).reshape(B * T, V)
+def loss_fn(w, idx, tgt, training=False):
+    logits = forward(w, idx, training).reshape(B * T, V)
     p = mx.softmax(logits, axis=-1)
     return -mx.take_along_axis(mx.log(p), tgt.reshape(B * T, 1), axis=-1).mean()
+train_loss = lambda w, idx, tgt: loss_fn(w, idx, tgt, True)
 
 def lr_at(it):
     if it < WARMUP: return LR0 * (it + 1) / WARMUP
     r = (it - WARMUP) / (ITERS - WARMUP)
     return MIN_LR + 0.5 * (1 + np.cos(np.pi * r)) * (LR0 - MIN_LR)
 
-vg = mx.value_and_grad(loss_fn)
+vg = mx.value_and_grad(train_loss)
 mS = vS = None
 print(f"=== nanoGPT MLX-Python oracle: {off/1e6:.2f}M params ===")
 loss = step0 = 0.0
 for it in range(ITERS):
     lr = lr_at(it); bc1 = 1 - B1 ** (it + 1); bc2 = 1 - B2 ** (it + 1)
+    DSEED = it * 100
     idx, tgt = get_batch(train, train_idx, it * B)
     loss, grads = vg(params, idx, tgt)
     fp, fg = flatten(params), flatten(grads)

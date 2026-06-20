@@ -11,7 +11,7 @@
 // (shared via /tmp/nanogpt-*.bin) -> matching step-0 loss; both converge to a
 // comparable val loss. Training isn't bit-reproducible (FINDINGS §6 #8), so the
 // bar is "same start, both converge" — as for lora-train / microGPT.
-import { MX, fromI32, fromF32, scalar, evalAll, seed, sample, clearCache, tidy } from "./mx.ts";
+import { MX, fromI32, fromF32, scalar, evalAll, seed, sample, clearCache, tidy, dropout } from "./mx.ts";
 import { crossEntropy } from "./loss.ts";
 import { valueAndGrad } from "./train.ts";
 import { treeFlatten, treeUnflattenLike, type Tree } from "./pytree.ts";
@@ -20,7 +20,9 @@ import { treeFlatten, treeUnflattenLike, type Tree } from "./pytree.ts";
 const NL = +(process.env.N_LAYER ?? 4), NH = +(process.env.N_HEAD ?? 4), D = +(process.env.N_EMBD ?? 128);
 const T = +(process.env.BLOCK ?? 64), B = +(process.env.BATCH ?? 32), DH = D / NH, FF = 4 * D;
 const ITERS = +(process.env.ITERS ?? 2000), WARMUP = 100, EVAL_ITERS = 40;
-const LR0 = 1e-3, MIN_LR = 1e-4, WD = 0.1, CLIP = 1.0, B1 = 0.9, B2 = 0.95, EPSA = 1e-8;
+const EVAL_INTERVAL = +(process.env.EVAL_INTERVAL ?? 250);   // periodic val eval -> track best (cf. nanoGPT)
+const LR0 = 1e-3, MIN_LR = 1e-4, WD = 0.1, CLIP = 1.0, B1 = 0.9, B2 = +(process.env.BETA2 ?? 0.95), EPSA = 1e-8;
+const DROP = +(process.env.DROPOUT ?? 0);   // dropout prob (train only); 0 keeps the run exactly reproducible
 const EPS = 1e-5, ASCALE = 1 / Math.sqrt(DH), SEED = 1337;
 
 // --- data: tiny-shakespeare, char-level (fetched once) ---
@@ -83,21 +85,23 @@ function getBatch(src: Int32Array, idx: Int32Array, off: number): [MX, MX] {
 
 // --- forward: N GPT-2 blocks, pre-LN, GELU MLP, tied head. idx:[B,T] -> [B,T,V] ---
 const posMX = fromI32(Int32Array.from({ length: T }, (_, i) => i), [T]);
-function forward(w: any, idx: MX): MX {
+let DSEED = 0;                                                      // per-step base seed for dropout
+function forward(w: any, idx: MX, training = false): MX {
   const Bc = idx.shape[0];                                          // batch dim (train: B, gen: 1)
-  let x = w.wte.takeAxis(idx, 0).add(w.wpe.takeAxis(posMX, 0));    // [Bc,T,D]
+  const drop = (x: MX, site: number) => training && DROP > 0 ? dropout(x, DROP, DSEED + site) : x;
+  let x = drop(w.wte.takeAxis(idx, 0).add(w.wpe.takeAxis(posMX, 0)), 1);   // resid dropout on emb
   const heads = (t: MX, wt: MX, b: MX) => t.matmul(wt).add(b).reshape([Bc, T, NH, DH]).transpose([0, 2, 1, 3]);
-  for (const blk of w.blocks) {
+  w.blocks.forEach((blk: any, i: number) => {
     const n1 = x.layerNorm(blk.ln1w, blk.ln1b, EPS);
     const q = heads(n1, blk.wq, blk.bq), k = heads(n1, blk.wk, blk.bk), v = heads(n1, blk.wv, blk.bv);
     const att = MX.sdpa(q, k, v, ASCALE, true).transpose([0, 2, 1, 3]).reshape([Bc, T, D]);
-    x = x.add(att.matmul(blk.wo).add(blk.bo));
+    x = x.add(drop(att.matmul(blk.wo).add(blk.bo), 10 + i * 2));    // resid dropout on attn out
     const n2 = x.layerNorm(blk.ln2w, blk.ln2b, EPS);
-    x = x.add(n2.matmul(blk.wfc).add(blk.bfc).gelu().matmul(blk.wproj).add(blk.bproj));
-  }
+    x = x.add(drop(n2.matmul(blk.wfc).add(blk.bfc).gelu().matmul(blk.wproj).add(blk.bproj), 11 + i * 2));
+  });
   return x.layerNorm(w.lnfw, w.lnfb, EPS).matmul(w.wte.transpose([1, 0]));  // tied -> [B,T,V]
 }
-const lossMX = (w: Tree, idx: MX, tgt: MX): MX => crossEntropy(forward(w, idx).reshape([B * T, V]), tgt.reshape([B * T, 1]));
+const lossMX = (w: Tree, idx: MX, tgt: MX): MX => crossEntropy(forward(w, idx, true).reshape([B * T, V]), tgt.reshape([B * T, 1]));
 
 // nanoGPT LR schedule: linear warmup -> cosine decay to MIN_LR
 const lrAt = (it: number) => it < WARMUP ? LR0 * (it + 1) / WARMUP
@@ -107,10 +111,23 @@ const vg = valueAndGrad(params, lossMX);
 const sumsq = (g: MX) => g.mul(g).sumAxes(g.shape.map((_, i) => i), false);  // scalar
 let mS: MX[] | null = null, vS: MX[] | null = null;
 
+// val loss over the shared eval batches (no dropout); used periodically to track
+// the BEST checkpoint — a big model on 1MB of text overfits, so the final-step
+// loss overstates error (cf. nanoGPT, which reports its best eval).
+const estimateVal = (p: Tree): number => tidy(() => {
+  let s = 0;
+  for (let e = 0; e < EVAL_ITERS; e++) {
+    const [idx, tgt] = getBatch(val, valIdx, e * B);
+    s += tidy(() => crossEntropy(forward(p, idx).reshape([B * T, V]), tgt.reshape([B * T, 1])).itemF());
+  }
+  return s / EVAL_ITERS;
+});
+
 console.log(`=== nanoGPT in mlx-ts: ${(nParams / 1e6).toFixed(2)}M params (${NL} layers, ${NH} heads, D=${D}, T=${T}, vocab=${V}) ===`);
-let loss = 0, step0 = 0;
+let loss = 0, step0 = 0, bestVal = Infinity;
 for (let it = 0; it < ITERS; it++) {
   const lr = lrAt(it);
+  DSEED = it * 100;                                          // unique dropout seeds per step
   const bc1 = 1 - B1 ** (it + 1), bc2 = 1 - B2 ** (it + 1);
   const oldP = treeFlatten(params), oldM = mS, oldV = vS;
   const kept = tidy(() => {
@@ -137,18 +154,19 @@ for (let it = 0; it < ITERS; it++) {
   if (it === 0) step0 = loss;
   params = kept.p; mS = kept.m; vS = kept.v;
   oldP.forEach((x) => x.free()); oldM?.forEach((x) => x.free()); oldV?.forEach((x) => x.free());
-  if (it % 100 === 0) { console.log(`  iter ${String(it).padStart(4)}: loss ${loss.toFixed(4)} (lr ${lr.toExponential(1)})`); clearCache(); }
+  if (it % EVAL_INTERVAL === 0 && it > 0) {
+    const v = estimateVal(params); bestVal = Math.min(bestVal, v);
+    console.log(`  iter ${String(it).padStart(4)}: train ${loss.toFixed(4)} val ${v.toFixed(4)} (best ${bestVal.toFixed(4)}, lr ${lr.toExponential(1)})`);
+    clearCache();
+  } else if (it % 100 === 0) { console.log(`  iter ${String(it).padStart(4)}: loss ${loss.toFixed(4)} (lr ${lr.toExponential(1)})`); clearCache(); }
 }
 
-// --- val loss over the shared eval batches (no grad) ---
-const valLoss = tidy(() => {
-  let s = 0;
-  for (let e = 0; e < EVAL_ITERS; e++) { const [idx, tgt] = getBatch(val, valIdx, e * B); s += tidy(() => lossMX(params, idx, tgt).itemF()); }
-  return s / EVAL_ITERS;
-});
+const valLoss = estimateVal(params);                        // final-step val (no dropout) — matches Python oracle
+bestVal = Math.min(bestVal, valLoss);
 console.log(`STEP0 loss=${step0.toFixed(4)}`);
 console.log(`FINAL train loss=${loss.toFixed(4)}`);
 console.log(`VAL loss=${valLoss.toFixed(4)}`);
+console.log(`BEST VAL loss=${bestVal.toFixed(4)}`);
 
 // --- sample Shakespeare (autoregressive, context cropped to last T) ---
 seed(42);

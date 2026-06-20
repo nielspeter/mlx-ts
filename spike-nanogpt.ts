@@ -111,6 +111,12 @@ const vg = valueAndGrad(params, lossMX);
 const sumsq = (g: MX) => g.mul(g).sumAxes(g.shape.map((_, i) => i), false);  // scalar
 let mS: MX[] | null = null, vS: MX[] | null = null;
 
+// Hoisted Adam constants: these never change, so allocate the scalar arrays ONCE
+// instead of re-creating ~10 of them per parameter per step (the dominant per-step
+// host overhead — hundreds of FFI mlx_array_new_float calls per iteration).
+const sB1 = scalar(B1), sB1m = scalar(1 - B1), sB2 = scalar(B2), sB2m = scalar(1 - B2);
+const sEPSA = scalar(EPSA), sWD = scalar(WD);
+
 // val loss over the shared eval batches (no dropout); used periodically to track
 // the BEST checkpoint — a big model on 1MB of text overfits, so the final-step
 // loss overstates error (cf. nanoGPT, which reports its best eval).
@@ -129,23 +135,25 @@ for (let it = 0; it < ITERS; it++) {
   const lr = lrAt(it);
   DSEED = it * 100;                                          // unique dropout seeds per step
   const bc1 = 1 - B1 ** (it + 1), bc2 = 1 - B2 ** (it + 1);
-  const oldP = treeFlatten(params), oldM = mS, oldV = vS;
+  const fp = treeFlatten(params), oldM = mS, oldV = vS;      // flatten once (reused to free below)
   const kept = tidy(() => {
     const [idx, tgt] = getBatch(train, trainIdx, it * B);
     const r = vg(params, idx, tgt);
-    const fp = treeFlatten(params), fg = treeFlatten(r.grads);
+    const fg = treeFlatten(r.grads);
     // global grad-norm clip
     let total = sumsq(fg[0]); for (let i = 1; i < fg.length; i++) total = total.add(sumsq(fg[i]));
     const gnorm = total.sqrt().itemF();
     const cs = gnorm > CLIP ? CLIP / gnorm : 1;
+    // per-step scalars: created ONCE per step (not once per parameter)
+    const sLr = scalar(lr), sBc1 = scalar(bc1), sBc2 = scalar(bc2), sCs = cs === 1 ? null : scalar(cs);
     const nP: MX[] = [], nM: MX[] = [], nV: MX[] = [];
     fp.forEach((pp, i) => {
-      const g = cs === 1 ? fg[i] : fg[i].mul(scalar(cs));
-      const mi = (mS ? mS[i].mul(scalar(B1)) : scalar(0)).add(g.mul(scalar(1 - B1)));
-      const vi = (vS ? vS[i].mul(scalar(B2)) : scalar(0)).add(g.mul(g).mul(scalar(1 - B2)));
-      let upd = mi.div(scalar(bc1)).div(vi.div(scalar(bc2)).sqrt().add(scalar(EPSA)));
-      if (pp.shape.length >= 2) upd = upd.add(pp.mul(scalar(WD)));   // decoupled weight decay (2D only)
-      nP.push(pp.sub(upd.mul(scalar(lr)))); nM.push(mi); nV.push(vi);
+      const g = sCs ? fg[i].mul(sCs) : fg[i];
+      const mi = mS ? mS[i].mul(sB1).add(g.mul(sB1m)) : g.mul(sB1m);       // 0-init: m0=0 -> g*(1-b1)
+      const vi = vS ? vS[i].mul(sB2).add(g.mul(g).mul(sB2m)) : g.mul(g).mul(sB2m);
+      let upd = mi.div(sBc1).div(vi.div(sBc2).sqrt().add(sEPSA));
+      if (pp.shape.length >= 2) upd = upd.add(pp.mul(sWD));   // decoupled weight decay (2D only)
+      nP.push(pp.sub(upd.mul(sLr))); nM.push(mi); nV.push(vi);
     });
     evalAll(...nP, ...nM, ...nV);
     return { p: treeUnflattenLike(params, nP), m: nM, v: nV, loss: r.loss };
@@ -153,7 +161,7 @@ for (let it = 0; it < ITERS; it++) {
   loss = kept.loss;
   if (it === 0) step0 = loss;
   params = kept.p; mS = kept.m; vS = kept.v;
-  oldP.forEach((x) => x.free()); oldM?.forEach((x) => x.free()); oldV?.forEach((x) => x.free());
+  fp.forEach((x) => x.free()); oldM?.forEach((x) => x.free()); oldV?.forEach((x) => x.free());
   if (it % EVAL_INTERVAL === 0 && it > 0) {
     const v = estimateVal(params); bestVal = Math.min(bestVal, v);
     console.log(`  iter ${String(it).padStart(4)}: train ${loss.toFixed(4)} val ${v.toFixed(4)} (best ${bestVal.toFixed(4)}, lr ${lr.toExponential(1)})`);

@@ -72,7 +72,9 @@ export class MX {
 
   // elementwise (activations)
   erf() { return this.r(m.mlx_erf, this.h, stream); }
-  gelu() { return this.mul(scalar(0.5)).mul(this.divScalar(Math.SQRT2).erf().add(scalar(1))); } // exact: x·0.5·(1+erf(x/√2))
+  // exact GELU: x·0.5·(1+erf(x/√2)). Constants are hoisted (module-load singletons,
+  // see below) so a training loop doesn't re-create three scalar arrays per call.
+  gelu() { return this.mul(GH).mul(this.div(GR).erf().add(G1)); }
   astype(dtype: number) { return this.r(m.mlx_astype, this.h, dtype, stream); }
 
   // conv1d: this=input [N,L,C_in], w=[C_out,K,C_in] -> [N,L',C_out]
@@ -144,6 +146,9 @@ export function fromU32(data: Uint32Array, shape: number[]): MX {
   return new MX(m.mlx_array_new_data(ptr(data), ptr(new Int32Array(shape)), shape.length, UINT32) as number, data);
 }
 export const scalar = (x: number): MX => new MX(m.mlx_array_new_float(x) as number);
+// GELU constant singletons — allocated once at module load (ARENA is null here, so
+// they're never captured/freed by a tidy() scope). Used by MX.prototype.gelu().
+const GH = scalar(0.5), G1 = scalar(1), GR = scalar(Math.SQRT2);
 // stack a list of arrays along a new axis (e.g. per-expert weights -> [E, ...])
 export function stack(arrs: MX[], axis: number): MX {
   const buf = new BigUint64Array(arrs.map((a) => BigInt(a.h)));

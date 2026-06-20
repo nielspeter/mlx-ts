@@ -72,7 +72,11 @@ generalizes this: any opaque `mlx_*` type → `ptr`.
   reductions, shape, fast (rms_norm/rope/sdpa), and quantized/MoE (qmm/dequantize/
   gather_qmm). **`benchmarks/`** — perf timing vs MLX Python (see its README).
 - **Models**: `qwen.ts` (bf16), `qwen-nn.ts` (4-bit), `olmoe.ts` (MoE),
-  `chat.ts`, `lora-train.ts`. `spike-*.ts` = de-risking experiments.
+  `chat.ts`, `lora-train.ts`. `spike-*.ts` = de-risking experiments —
+  e.g. `spike-microgpt.ts` trains Karpathy's ~4k-param microGPT from scratch
+  (real MLX `value_and_grad` over FFI, vs `reference-microgpt.py`: step-0 loss
+  exact, both converge). Per-step `tidy()` + freeing prior params/moments keeps
+  the 1000-step loop inside MLX's buffer limit (gotcha #5).
 
 ## Gotchas — do NOT re-learn these (full detail in FINDINGS §6)
 1. Empty handles return `null`, not `0` → normalize `?? 0`.

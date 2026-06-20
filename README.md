@@ -261,6 +261,11 @@ temperature, top-p, **top-k**, and **repetition penalty**
 - **Prompt-driven text tools** — summarize / rewrite / classify / extract /
   translate; **agent loops** (tool use via prompting + JS parsing).
 - **LoRA fine-tuning** of 4-bit Qwen3 (Adam + cross-entropy, `lora-train.ts`).
+- **Train a transformer from scratch** — `spike-microgpt.ts` builds Karpathy's
+  ~4k-param microGPT (embeddings → attention → MLP → tied head) and trains it
+  end-to-end on the names corpus with the autograd being **real MLX over FFI**
+  (his hand-rolled `Value` engine replaced by `value_and_grad`); step-0 loss is
+  exact vs the MLX-Python mirror, both converge.
 - **Research / inspection** — pull logits, hidden states; the `MX` op surface is open.
 
 Whisper setup (weights/assets are git-ignored — fetched, like the LLM weights):

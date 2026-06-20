@@ -16,3 +16,4 @@ node_modules/
 /.playwright-mcp/
 whisper-mel-filters-*.f32
 *.tiktoken
+names.txt

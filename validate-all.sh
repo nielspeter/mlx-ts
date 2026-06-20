@@ -46,6 +46,17 @@ if [ "$(grep 'step  0' /tmp/v_t.txt)" = "$(grep 'step  0' /tmp/v_p.txt)" ] && aw
   ok "LoRA fine-tune (Adam + cross_entropy) — converges, matches MLX (3.16 -> ${tf})"
 else no "lora-train" "TS final=$tf PY final=$pf"; fi
 
+# microGPT trained from scratch (real MLX autograd over FFI): identical init +
+# data -> exact step-0 loss; both converge (training drifts, FINDINGS §6 #8).
+if [ -f names.txt ]; then
+  bun spike-microgpt.ts >/tmp/v_t.txt 2>&1; python3 reference-microgpt.py >/tmp/v_p.txt 2>&1
+  t0=$(grep STEP0 /tmp/v_t.txt | grep -oE '[0-9.]+$'); p0=$(grep STEP0 /tmp/v_p.txt | grep -oE '[0-9.]+$')
+  tf=$(grep FINAL /tmp/v_t.txt | grep -oE '[0-9.]+$'); pf=$(grep FINAL /tmp/v_p.txt | grep -oE '[0-9.]+$')
+  if [ -n "$t0" ] && [ "$t0" = "$p0" ] && awk "BEGIN{exit !($tf<2.6 && $pf<2.6)}"; then
+    ok "microGPT from scratch (forward+autograd+Adam) — step0 ${t0}=PY, converges (-> ${tf})"
+  else no "spike-microgpt" "TS step0=$t0/final=$tf PY step0=$p0/final=$pf"; fi
+fi
+
 echo "=== real models (TS vs MLX Python) ==="
 python3 reference-qwen.py "The capital of France is" >/tmp/v_p.txt 2>&1; bun qwen.ts "The capital of France is" >/tmp/v_t.txt 2>&1;          cmp_pair "real Qwen3-0.6B bf16" /tmp/v_t.txt /tmp/v_p.txt genids
 python3 reference-qwen-q4.py "The capital of France is" >/tmp/v_p.txt 2>&1; bun qwen-nn.ts "The capital of France is" >/tmp/v_t.txt 2>&1;     cmp_pair "real Qwen3-0.6B 4-bit (nn)" /tmp/v_t.txt /tmp/v_p.txt genids

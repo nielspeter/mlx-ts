@@ -12,11 +12,21 @@ import {
 } from "./generated.ts";
 import { loadSafetensors, get } from "./loader.ts";
 import { Tokenizer, GPT2_SPLIT } from "./tokenizer.ts";
+import { MX, sample as mxSample, applyRepetitionPenalty, seed as mxSeed } from "./mx.ts";
 
 const cfg = await Bun.file("config-gpt2.json").json();
 const D = cfg.n_embd, NL = cfg.n_layer, nH = cfg.n_head, Dh = D / nH;
 const EPS = cfg.layer_norm_epsilon, SCALE = Dh ** -0.5, B = 1;
-const EOS = 50256;
+const EOS = 50256, VOCAB = cfg.vocab_size;
+
+// Sampling (env-configurable). Default = pure greedy argmax, which stays
+// token-exact vs reference-gpt2.py. Set TEMP>0 / TOP_K / TOP_P / REP to sample.
+//   TEMP=0.8 TOP_K=40 REP=1.3 SEED=1 bun gpt2.ts "Once upon a time"
+const TEMP = +(process.env.TEMP ?? 0), TOP_K = +(process.env.TOP_K ?? 0);
+const TOP_P = +(process.env.TOP_P ?? 0), REP = +(process.env.REP ?? 1);
+if (process.env.SEED) mxSeed(+process.env.SEED);
+const SAMPLING = TEMP > 0 || TOP_K > 0 || TOP_P > 0 || REP !== 1;
+let histIds: number[] = [];   // full context, for the repetition penalty
 
 const w = loadSafetensors("gpt2-model.safetensors");
 const tok = await Tokenizer.fromFile("gpt2-tokenizer.json", GPT2_SPLIT);
@@ -75,7 +85,15 @@ function step(ids: number[], offset: number): number {
   for (let li = 0; li < NL; li++) h = block(li, h, Lc);
   h = fastLayerNorm(h, lnfW, lnfB, EPS);
   const hLast = takeAxis(h, arrayI32(Int32Array.from([Lc - 1]), [1]), 1);             // [B,1,D]
-  const tk = itemU32(argmaxAxis(matmul(hLast, wteT), 2, false));
+  const logits = matmul(hLast, wteT);                                                 // [B,1,vocab]
+  let tk: number;
+  if (!SAMPLING) {
+    tk = itemU32(argmaxAxis(logits, 2, false));                                       // pure greedy (token-exact)
+  } else {
+    let lm = new MX(reshape(logits, [B, VOCAB]));                                     // [B,vocab]
+    if (REP !== 1) lm = applyRepetitionPenalty(lm, histIds, REP);
+    tk = mxSample(lm, TEMP, TOP_P, TOP_K).itemU();                                    // temp->top-k->top-p->categorical
+  }
   evalArray(...cache.flatMap((c) => (c ? [c.k, c.v] : [])));
   return tk;
 }
@@ -83,13 +101,16 @@ function step(ids: number[], offset: number): number {
 const prompt = process.argv[2] ?? "The capital of France is";
 const N_NEW = 24;
 const promptIds = tok.encode(prompt);
+histIds = [...promptIds];
 const gen: number[] = [];
 let tk = step(promptIds, 0), pos = promptIds.length;
 const t0 = performance.now();
-for (let i = 0; tk !== EOS && i < N_NEW; i++) { gen.push(tk); tk = step([tk], pos); pos++; }
+for (let i = 0; tk !== EOS && i < N_NEW; i++) { gen.push(tk); histIds.push(tk); tk = step([tk], pos); pos++; }
 const dt = (performance.now() - t0) / 1000;
 
+const mode = SAMPLING ? `sampling (temp=${TEMP}, top-k=${TOP_K}, top-p=${TOP_P}, rep=${REP})` : "greedy";
 console.log("=== GPT-2-124M (real OpenAI weights) — TS over mlx-c -> Metal ===");
+console.log(`decode:    ${mode}`);
 console.log(`prompt:    ${JSON.stringify(prompt)}`);
 console.log(`prompt ids: [${promptIds.join(", ")}]`);
 console.log(`gen ids:    [${gen.join(", ")}]`);

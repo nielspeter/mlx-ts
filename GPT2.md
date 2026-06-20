@@ -43,6 +43,21 @@ bun gpt2.ts "The capital of France is"
 python3 reference-gpt2.py "The capital of France is"   # MLX-Python oracle
 ```
 
+### Sampling
+Default decode is greedy argmax (deterministic, token-exact vs the oracle), which
+makes the 124M model loop ("…capital of the French Republic…"). Set any of
+`TEMP` / `TOP_K` / `TOP_P` / `REP` (repetition penalty) to sample — reusing
+`mx.ts`'s `sample()` + `applyRepetitionPenalty()`:
+
+```sh
+TEMP=0.8 TOP_K=40 SEED=1 bun gpt2.ts "Once upon a time, there was a"
+#  -> "...chance that you might actually be able to get a good start with your own skills..."
+TEMP=0.9 TOP_P=0.95 REP=1.3 SEED=2 bun gpt2.ts "Once upon a time, there was a"
+REP=1.3 bun gpt2.ts "Once upon a time, there was a"   # greedy + repetition penalty, no loop
+```
+Sampling kills the repetition and gives varied, coherent completions. `SEED`
+makes a sampled run reproducible.
+
 ## Result
 ```
 === GPT-2-124M (real OpenAI weights) — TS over mlx-c -> Metal ===

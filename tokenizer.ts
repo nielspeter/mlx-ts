@@ -16,9 +16,15 @@ function byteUnicodeMaps(): [Map<number, string>, Map<string, number>] {
   return [b2c, c2b];
 }
 
-// GPT-2 / Qwen pretokenization split. `(?i:...)` -> explicit case classes; `gu` flags.
+// Qwen pretokenization split (cl100k-style). `(?i:...)` -> explicit case classes.
 const SPLIT =
   /'(?:[sS]|[tT]|[rR][eE]|[vV][eE]|[mM]|[lL][lL]|[dD])|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+/gu;
+
+// Original GPT-2 (r50k) split — lowercase contractions, digit runs grouped. This
+// is what HF's ByteLevel pretokenizer applies for the `gpt2` tokenizer, so it's
+// required for token-exact GPT-2 encoding. Pass it to Tokenizer for GPT-2 models.
+export const GPT2_SPLIT =
+  /'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+/gu;
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -32,8 +38,12 @@ export class Tokenizer {
   private specialRe: RegExp;
   private enc = new TextEncoder();
   private dec = new TextDecoder();
+  private split: RegExp;
+  private nfc: boolean;
 
-  constructor(json: any) {
+  constructor(json: any, split: RegExp = SPLIT) {
+    this.split = split;
+    this.nfc = json.normalizer != null;   // GPT-2 has no normalizer; Qwen uses NFC
     [this.b2c, this.c2b] = byteUnicodeMaps();
     for (const [tok, id] of Object.entries<number>(json.model.vocab)) {
       this.vocab.set(tok, id); this.idToTok[id] = tok;
@@ -52,8 +62,8 @@ export class Tokenizer {
     this.specialRe = new RegExp("(" + specials.map(escapeRe).join("|") + ")");
   }
 
-  static async fromFile(path: string): Promise<Tokenizer> {
-    return new Tokenizer(await Bun.file(path).json());
+  static async fromFile(path: string, split: RegExp = SPLIT): Promise<Tokenizer> {
+    return new Tokenizer(await Bun.file(path).json(), split);
   }
 
   private bpe(token: string): string[] {
@@ -72,7 +82,7 @@ export class Tokenizer {
   }
 
   private encodeChunk(text: string, out: number[]): void {
-    for (const m of text.matchAll(SPLIT)) {
+    for (const m of text.matchAll(this.split)) {
       let mapped = "";
       for (const byte of this.enc.encode(m[0])) mapped += this.b2c.get(byte);
       for (const piece of this.bpe(mapped)) {
@@ -84,7 +94,7 @@ export class Tokenizer {
   }
 
   encode(text: string): number[] {
-    text = text.normalize("NFC");            // tokenizer.json normalizer = NFC
+    if (this.nfc) text = text.normalize("NFC");   // Qwen normalizer = NFC; GPT-2 = none
     const out: number[] = [];
     // split off special tokens, which map straight to their id
     for (const part of text.split(this.specialRe)) {

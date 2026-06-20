@@ -273,6 +273,10 @@ temperature, top-p, **top-k**, and **repetition penalty**
   **best val loss ≈ 1.50 — matching nanoGPT's ~1.47 baseline** — and writes
   coherent Shakespeare (real character names, dialogue). The dropout-free path
   is bit-exact vs `reference-nanogpt.py` (shared init + batches).
+- **Run real GPT-2-124M** — `gpt2.ts` loads the actual OpenAI `gpt2` weights and
+  generates with a **pure-TS GPT-2 BPE encoder** (`tokenizer.ts` + `GPT2_SPLIT`,
+  8/8 token-exact vs HF) — `gelu_new`, LayerNorm-with-bias, tied head, KV cache,
+  **token-exact vs `reference-gpt2.py`** at ~210 tok/s. See `GPT2.md`.
 - **Research / inspection** — pull logits, hidden states; the `MX` op surface is open.
 
 Whisper setup (weights/assets are git-ignored — fetched, like the LLM weights):

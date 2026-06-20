@@ -19,6 +19,10 @@ bun codegen.ts >/tmp/v_cg.txt 2>&1 && grep -q "wrappers" /tmp/v_cg.txt \
 echo "=== unit/self checks ==="
 python3 tok-reference.py >/dev/null 2>&1
 bun tok-test.ts 2>&1 | grep -q "11/11" && ok "tokenizer vs HF tokenizers (11/11)" || no "tokenizer" "parity"
+if [ -f gpt2-tokenizer.json ]; then
+  python3 reference-gpt2-tok.py >/dev/null 2>&1
+  bun gpt2-tok-test.ts 2>&1 | grep -q "8/8" && ok "GPT-2 BPE encoder vs HF tokenizers (8/8)" || no "gpt2-tok" "parity"
+fi
 python3 reference-chat.py >/dev/null 2>&1
 bun chat-test.ts 2>&1 | grep -q "4/4" && ok "chat template vs Python jinja2 (4/4)" || no "chat-template" "parity"
 bun spike-moe.ts 2>&1 | grep -q "match: true" && ok "MoE gather_qmm op (vs MLX)" || no "spike-moe" "match"
@@ -72,6 +76,9 @@ echo "=== real models (TS vs MLX Python) ==="
 python3 reference-qwen.py "The capital of France is" >/tmp/v_p.txt 2>&1; bun qwen.ts "The capital of France is" >/tmp/v_t.txt 2>&1;          cmp_pair "real Qwen3-0.6B bf16" /tmp/v_t.txt /tmp/v_p.txt genids
 python3 reference-qwen-q4.py "The capital of France is" >/tmp/v_p.txt 2>&1; bun qwen-nn.ts "The capital of France is" >/tmp/v_t.txt 2>&1;     cmp_pair "real Qwen3-0.6B 4-bit (nn)" /tmp/v_t.txt /tmp/v_p.txt genids
 python3 reference-olmoe.py "The capital of France is" >/tmp/v_p.txt 2>&1; bun olmoe.ts "The capital of France is" >/tmp/v_t.txt 2>&1;        cmp_pair "real OLMoE-1B-7B 4-bit (MoE)" /tmp/v_t.txt /tmp/v_p.txt genids
+if [ -f gpt2-model.safetensors ]; then  # own temp files: the sharded-OLMoE check below reuses /tmp/v_p.txt
+  python3 reference-gpt2.py "The capital of France is" >/tmp/vg_p.txt 2>&1; bun gpt2.ts "The capital of France is" >/tmp/vg_t.txt 2>&1; cmp_pair "real GPT-2-124M (BPE + tied head)" /tmp/vg_t.txt /tmp/vg_p.txt genids
+fi
 # Whisper needs mlx_whisper for the oracle + the converted weights; run it only
 # when both are present (skipped gracefully otherwise — not a hard failure).
 PYW=""; for c in /tmp/wvenv/bin/python python3; do "$c" -c "import mlx_whisper" >/dev/null 2>&1 && { PYW=$c; break; }; done

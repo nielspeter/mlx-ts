@@ -72,7 +72,9 @@ generalizes this: any opaque `mlx_*` type → `ptr`.
   reductions, shape, fast (rms_norm/rope/sdpa), and quantized/MoE (qmm/dequantize/
   gather_qmm). **`benchmarks/`** — perf timing vs MLX Python (see its README).
 - **Models**: `qwen.ts` (bf16), `qwen-nn.ts` (4-bit), `olmoe.ts` (MoE),
-  `chat.ts`, `lora-train.ts`. `spike-*.ts` = de-risking experiments —
+  `gpt2.ts` (real OpenAI GPT-2-124M: learned pos-emb, LayerNorm+bias, fused QKV,
+  `gelu_new`, tied head — token-exact vs `reference-gpt2.py`; uses `tokenizer.ts`'
+  `GPT2_SPLIT` BPE, 8/8 vs HF), `chat.ts`, `lora-train.ts`. `spike-*.ts` = de-risking experiments —
   e.g. `spike-microgpt.ts` trains Karpathy's ~4k-param microGPT from scratch
   (real MLX `value_and_grad` over FFI, vs `reference-microgpt.py`: step-0 loss
   exact, both converge). Per-step `tidy()` + freeing prior params/moments keeps

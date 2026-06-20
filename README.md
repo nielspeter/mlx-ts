@@ -292,6 +292,32 @@ python3 -c "import mlx.core as mx,numpy as np;np.array(mx.load('$WA/mel_filters.
 bun whisper.ts audio.flac          # auto-detects language; any ffmpeg-decodable file
 ```
 
+OLMoE-1B-7B 4-bit setup (the MoE model — weights git-ignored, ~3.9 GB):
+
+```sh
+O=https://huggingface.co/mlx-community/OLMoE-1B-7B-0125-Instruct-4bit/resolve/main
+curl -sL $O/config.json    -o config-olmoe.json
+curl -sL $O/tokenizer.json -o tokenizer-olmoe.json
+curl -sL $O/model.safetensors -o model-olmoe.safetensors
+python3 split-olmoe.py             # -> model-olmoe-sharded/ (for the sharded-loader test)
+bun olmoe.ts "The capital of France is"
+```
+
+Note: the original `0924` checkpoint was replaced upstream by `0125` (identical
+architecture: 16 layers, 64 experts, group_size 64 / 4-bit). The validate-all
+OLMoE checks compare `olmoe.ts` against `reference-olmoe.py` — both load the same
+`model-olmoe.safetensors` — so any matching 4-bit checkpoint restores parity.
+
+GPT-2-124M setup (real OpenAI weights — git-ignored, ~550 MB):
+
+```sh
+G=https://huggingface.co/openai-community/gpt2/resolve/main
+curl -sL $G/config.json    -o config-gpt2.json
+curl -sL $G/tokenizer.json -o gpt2-tokenizer.json
+curl -sL $G/model.safetensors -o gpt2-model.safetensors
+bun gpt2.ts "The capital of France is"   # greedy; TEMP/TOP_K/TOP_P/REP to sample (see GPT2.md)
+```
+
 ### 🟡 Needs modest code (clear path, no feasibility risk)
 - **More architectures** (Llama, Mistral, Gemma, Phi…) — a forward over `nn`
   modules + weight-key mapping (`olmoe.ts` / `whisper.ts` are templates).

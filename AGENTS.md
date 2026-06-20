@@ -76,7 +76,10 @@ generalizes this: any opaque `mlx_*` type → `ptr`.
   e.g. `spike-microgpt.ts` trains Karpathy's ~4k-param microGPT from scratch
   (real MLX `value_and_grad` over FFI, vs `reference-microgpt.py`: step-0 loss
   exact, both converge). Per-step `tidy()` + freeing prior params/moments keeps
-  the 1000-step loop inside MLX's buffer limit (gotcha #5).
+  the 1000-step loop inside MLX's buffer limit (gotcha #5). `spike-nanogpt.ts`
+  scales this to a real multi-layer char-level GPT (tiny-shakespeare,
+  mini-batched `[B,T]`, AdamW + cosine LR + warmup + grad clip) — ~0.8M params,
+  ~1.7 val loss, exact vs `reference-nanogpt.py` (shared init + batches).
 
 ## Gotchas — do NOT re-learn these (full detail in FINDINGS §6)
 1. Empty handles return `null`, not `0` → normalize `?? 0`.

@@ -266,6 +266,11 @@ temperature, top-p, **top-k**, and **repetition penalty**
   end-to-end on the names corpus with the autograd being **real MLX over FFI**
   (his hand-rolled `Value` engine replaced by `value_and_grad`); step-0 loss is
   exact vs the MLX-Python mirror, both converge.
+- **Train a real small GPT** — `spike-nanogpt.ts` scales that up to nanoGPT:
+  a multi-layer char-level GPT on tiny-shakespeare, **mini-batched `[B,T]`,
+  AdamW + cosine LR + warmup + global grad clipping**. ~0.8M params reaches
+  ~1.7 val loss and emits Shakespeare-shaped text (speaker turns, real words);
+  init + batches are shared with `reference-nanogpt.py` for an exact match.
 - **Research / inspection** — pull logits, hidden states; the `MX` op surface is open.
 
 Whisper setup (weights/assets are git-ignored — fetched, like the LLM weights):

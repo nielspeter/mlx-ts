@@ -57,6 +57,17 @@ if [ -f names.txt ]; then
   else no "spike-microgpt" "TS step0=$t0/final=$tf PY step0=$p0/final=$pf"; fi
 fi
 
+# nanoGPT: multi-layer char-level GPT, mini-batched, AdamW + cosine LR + grad clip.
+# 100 iters for speed; identical init + batches -> exact match vs MLX-Python.
+if [ -f input.txt ]; then
+  ITERS=100 bun spike-nanogpt.ts >/tmp/v_t.txt 2>&1; ITERS=100 python3 reference-nanogpt.py >/tmp/v_p.txt 2>&1
+  t0=$(grep STEP0 /tmp/v_t.txt | grep -oE '[0-9.]+$'); p0=$(grep STEP0 /tmp/v_p.txt | grep -oE '[0-9.]+$')
+  tv=$(grep '^VAL' /tmp/v_t.txt | grep -oE '[0-9.]+$'); pv=$(grep '^VAL' /tmp/v_p.txt | grep -oE '[0-9.]+$')
+  if [ -n "$t0" ] && [ "$t0" = "$p0" ] && [ -n "$tv" ] && awk "BEGIN{exit !($tv<3.0 && ($tv-$pv<0.05) && ($pv-$tv<0.05))}"; then
+    ok "nanoGPT multi-layer from scratch (AdamW+clip+cosine) — step0 ${t0}=PY, val ${tv}≈PY"
+  else no "spike-nanogpt" "TS step0=$t0/val=$tv PY step0=$p0/val=$pv"; fi
+fi
+
 echo "=== real models (TS vs MLX Python) ==="
 python3 reference-qwen.py "The capital of France is" >/tmp/v_p.txt 2>&1; bun qwen.ts "The capital of France is" >/tmp/v_t.txt 2>&1;          cmp_pair "real Qwen3-0.6B bf16" /tmp/v_t.txt /tmp/v_p.txt genids
 python3 reference-qwen-q4.py "The capital of France is" >/tmp/v_p.txt 2>&1; bun qwen-nn.ts "The capital of France is" >/tmp/v_t.txt 2>&1;     cmp_pair "real Qwen3-0.6B 4-bit (nn)" /tmp/v_t.txt /tmp/v_p.txt genids

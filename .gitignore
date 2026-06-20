@@ -17,3 +17,4 @@ node_modules/
 whisper-mel-filters-*.f32
 *.tiktoken
 names.txt
+input.txt

@@ -285,6 +285,10 @@ temperature, top-p, **top-k**, and **repetition penalty**
   (the nanochat RL stage): sample a group of completions, reward them, normalize
   advantage, policy-gradient update. Positivity-reward demo: mean reward rises ~9×;
   GRPO loss path validated vs `reference-rl.py`. See `RL.md`.
+- **Train a tokenizer** — `tok-train.py` trains a byte-level BPE in **native Rust**
+  (HF `tokenizers`, as nanochat does — training is a data-prep boundary step, not
+  MLX compute); our pure-TS `tokenizer.ts` then reproduces it **token-exact**
+  (`tok-train-test.ts`). The `tok_train` stage of a nanochat-style pipeline.
 - **Research / inspection** — pull logits, hidden states; the `MX` op surface is open.
 
 Whisper setup (weights/assets are git-ignored — fetched, like the LLM weights):

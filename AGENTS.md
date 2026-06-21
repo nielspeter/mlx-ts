@@ -51,7 +51,10 @@ generalizes this: any opaque `mlx_*` type → `ptr`.
 - **`nn.ts`** — `Module` (+ `parameters()`), `Linear`, `QuantizedLinear`, `RMSNorm`,
   `Embedding`, `QuantizedEmbedding`, `MoE`, `LoraDelta`.
 - **`loader.ts`** — safetensors: `singleFileWeights` / `shardedWeights` / `freeMap`.
-- **`tokenizer.ts`** (byte-level BPE), **`chat-template.ts`** (`@huggingface/jinja`).
+- **`tokenizer.ts`** (byte-level BPE inference), **`chat-template.ts`** (`@huggingface/jinja`).
+  Tokenizer *training* (`tok-train.py`) runs in native Rust (HF `tokenizers`, as
+  nanochat does — not MLX compute); output `tokenizer.json` is consumed token-exact
+  by `tokenizer.ts` (`tok-train-test.ts`, 4/4).
 - **Training**: `optim.ts` (Adam), `loss.ts` (cross_entropy), `pytree.ts`,
   `train.ts` (tree-based `valueAndGrad`).
 - **`lm.ts`** — public generation surface: `Decoder` interface +

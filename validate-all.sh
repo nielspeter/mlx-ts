@@ -23,6 +23,10 @@ if [ -f gpt2-tokenizer.json ]; then
   python3 reference-gpt2-tok.py >/dev/null 2>&1
   bun gpt2-tok-test.ts 2>&1 | grep -q "8/8" && ok "GPT-2 BPE encoder vs HF tokenizers (8/8)" || no "gpt2-tok" "parity"
 fi
+if [ -f input.txt ]; then   # tok_train: train BPE in native Rust -> our TS inference round-trips it
+  VOCAB=2048 python3 tok-train.py >/dev/null 2>&1
+  bun tok-train-test.ts 2>&1 | grep -q "4/4" && ok "BPE tokenizer training (Rust) -> TS inference (4/4)" || no "tok-train" "round-trip"
+fi
 python3 reference-chat.py >/dev/null 2>&1
 bun chat-test.ts 2>&1 | grep -q "4/4" && ok "chat template vs Python jinja2 (4/4)" || no "chat-template" "parity"
 bun spike-moe.ts 2>&1 | grep -q "match: true" && ok "MoE gather_qmm op (vs MLX)" || no "spike-moe" "match"

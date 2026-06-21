@@ -281,6 +281,10 @@ temperature, top-p, **top-k**, and **repetition penalty**
   instruction follower (chat format + completion-only loss), the nanochat chat
   stage. Step-0 loss matches `reference-sft.py`; after SFT it answers in-format,
   including a held-out question (Italy → Rome). See `SFT.md`.
+- **RL with GRPO** — `rl.ts` runs Group Relative Policy Optimization on GPT-2-124M
+  (the nanochat RL stage): sample a group of completions, reward them, normalize
+  advantage, policy-gradient update. Positivity-reward demo: mean reward rises ~9×;
+  GRPO loss path validated vs `reference-rl.py`. See `RL.md`.
 - **Research / inspection** — pull logits, hidden states; the `MX` op surface is open.
 
 Whisper setup (weights/assets are git-ignored — fetched, like the LLM weights):

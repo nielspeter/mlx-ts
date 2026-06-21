@@ -85,6 +85,10 @@ if [ -f gpt2-model.safetensors ]; then  # own temp files: the sharded-OLMoE chec
   if [ -n "$s0" ] && [ "$s0" = "$q0" ] && awk "BEGIN{exit !($sf<0.1 && $qf<0.1)}"; then
     ok "SFT GPT-2-124M (full FT, completion loss) — step0 ${s0}=PY, converges (-> ${sf})"
   else no "spike-sft" "TS step0=$s0/final=$sf PY step0=$q0/final=$qf"; fi
+  # RL (GRPO): validate the advantage-weighted-NLL loss path on a fixed batch
+  CHECK=1 bun rl.ts >/tmp/vr_t.txt 2>&1; python3 reference-rl.py >/tmp/vr_p.txt 2>&1
+  rt=$(grep RLLOSS /tmp/vr_t.txt); rp=$(grep RLLOSS /tmp/vr_p.txt)
+  if [ -n "$rt" ] && [ "$rt" = "$rp" ]; then ok "RL GRPO loss path vs MLX Python (${rt})"; else no "rl" "TS=$rt PY=$rp"; fi
 fi
 # Whisper needs mlx_whisper for the oracle + the converted weights; run it only
 # when both are present (skipped gracefully otherwise — not a hard failure).

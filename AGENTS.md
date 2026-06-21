@@ -76,6 +76,8 @@ generalizes this: any opaque `mlx_*` type → `ptr`.
   `gelu_new`, tied head — token-exact vs `reference-gpt2.py`; uses `tokenizer.ts`'
   `GPT2_SPLIT` BPE, 8/8 vs HF), `sft.ts` (full SFT of GPT-2-124M into a chatbot:
   chat format + completion-only loss, vs `reference-sft.py`; see SFT.md),
+  `rl.ts` (GRPO RL on GPT-2-124M: rollout + reward + group-relative advantage +
+  advantage-weighted-NLL update; loss path vs `reference-rl.py`; see RL.md),
   `chat.ts`, `lora-train.ts`. Note: `crossEntropy` (loss.ts) uses stable
   `log_softmax` (`x − logsumexp`) — naive `softmax().log()` NaNs in backward at
   saturation (hit by SFT memorizing examples). `spike-*.ts` = de-risking experiments —

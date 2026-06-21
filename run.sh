@@ -32,7 +32,9 @@ TOKENS=${TOKENS:-tokens} N_LAYER=${N_LAYER:-6} N_HEAD=${N_HEAD:-6} N_EMBD=${N_EM
   BLOCK=${BLOCK:-256} BATCH=${BATCH:-32} ITERS=${BASE_ITERS:-3000} bun base-train.ts
 
 echo "=== [4/5] chat_sft (story-aligned: instruction-tune on the corpus) ==="
-STORIES=$CORPUS ITERS=${SFT_ITERS:-1000} bun chat-sft.ts
+# gentler LR than pretrain: batch-1 SFT is high-variance, so a high LR makes it
+# ramble/degrade — 3e-4 gives coherent, complete stories with proper endings.
+STORIES=$CORPUS LR=${SFT_LR:-3e-4} ITERS=${SFT_ITERS:-1500} SFT_N=${SFT_N:-1200} bun chat-sft.ts
 
 echo "=== [5/5] chat ==="
 TEMP=0.7 bun chat-ckpt.ts "Tell me a story about a cat."

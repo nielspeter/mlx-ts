@@ -112,10 +112,8 @@ const sumsq = (g: MX) => g.mul(g).sumAxes(g.shape.map((_, i) => i), false);  // 
 let mS: MX[] | null = null, vS: MX[] | null = null;
 
 // Hoisted Adam constants: these never change, so allocate the scalar arrays ONCE
-// instead of re-creating ~10 of them per parameter per step (the dominant per-step
-// host overhead — hundreds of FFI mlx_array_new_float calls per iteration).
+// instead of re-creating them per parameter per step (FFI alloc overhead).
 const sB1 = scalar(B1), sB1m = scalar(1 - B1), sB2 = scalar(B2), sB2m = scalar(1 - B2);
-const sEPSA = scalar(EPSA), sWD = scalar(WD);
 
 // val loss over the shared eval batches (no dropout); used periodically to track
 // the BEST checkpoint — a big model on 1MB of text overfits, so the final-step
@@ -144,16 +142,21 @@ for (let it = 0; it < ITERS; it++) {
     let total = sumsq(fg[0]); for (let i = 1; i < fg.length; i++) total = total.add(sumsq(fg[i]));
     const gnorm = total.sqrt().itemF();
     const cs = gnorm > CLIP ? CLIP / gnorm : 1;
-    // per-step scalars: created ONCE per step (not once per parameter)
-    const sLr = scalar(lr), sBc1 = scalar(bc1), sBc2 = scalar(bc2), sCs = cs === 1 ? null : scalar(cs);
+    // Bias-correction folded into the step size (PyTorch-style efficient Adam):
+    //   (m/bc1)/(sqrt(v/bc2)+eps)  ==  alpha * m/(sqrt(v)+epsHat)
+    // with decoupled weight decay folded into a multiplicative factor. Same math,
+    // ~3 fewer ops/leaf, no extra data movement. Per-step scalars, allocated once.
+    const sqBc2 = Math.sqrt(bc2);
+    const sAlpha = scalar(lr * sqBc2 / bc1), sEpsHat = scalar(EPSA * sqBc2), sDecay = scalar(1 - lr * WD);
+    const sCs = cs === 1 ? null : scalar(cs);
     const nP: MX[] = [], nM: MX[] = [], nV: MX[] = [];
     fp.forEach((pp, i) => {
       const g = sCs ? fg[i].mul(sCs) : fg[i];
       const mi = mS ? mS[i].mul(sB1).add(g.mul(sB1m)) : g.mul(sB1m);       // 0-init: m0=0 -> g*(1-b1)
       const vi = vS ? vS[i].mul(sB2).add(g.mul(g).mul(sB2m)) : g.mul(g).mul(sB2m);
-      let upd = mi.div(sBc1).div(vi.div(sBc2).sqrt().add(sEPSA));
-      if (pp.shape.length >= 2) upd = upd.add(pp.mul(sWD));   // decoupled weight decay (2D only)
-      nP.push(pp.sub(upd.mul(sLr))); nM.push(mi); nV.push(vi);
+      const core = mi.div(vi.sqrt().add(sEpsHat));
+      const pNew = pp.shape.length >= 2 ? pp.mul(sDecay).sub(core.mul(sAlpha)) : pp.sub(core.mul(sAlpha));
+      nP.push(pNew); nM.push(mi); nV.push(vi);
     });
     evalAll(...nP, ...nM, ...nV);
     return { p: treeUnflattenLike(params, nP), m: nM, v: nV, loss: r.loss };

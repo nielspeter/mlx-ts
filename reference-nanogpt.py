@@ -4,6 +4,7 @@
 # reproducible (fp reductions + Adam), so the bar is "identical start, both
 # converge to a comparable val loss". Run the TS spike first.
 import os
+import math
 import numpy as np
 import mlx.core as mx
 
@@ -103,14 +104,17 @@ for it in range(ITERS):
     fp, fg = flatten(params), flatten(grads)
     gnorm = float(mx.sqrt(sum(mx.sum(g * g) for g in fg)))
     cs = CLIP / gnorm if gnorm > CLIP else 1.0
+    # bias-correction folded into the step size (matches spike-nanogpt.ts exactly)
+    sq_bc2 = math.sqrt(bc2)
+    alpha = lr * sq_bc2 / bc1; eps_hat = EPSA * sq_bc2; decay = 1 - lr * WD
     nP, nM, nV = [], [], []
     for i, pp in enumerate(fp):
         g = fg[i] * cs
         mi = (mS[i] * B1 if mS else 0.0) + g * (1 - B1)
         vi = (vS[i] * B2 if vS else 0.0) + (g * g) * (1 - B2)
-        upd = (mi / bc1) / (mx.sqrt(vi / bc2) + EPSA)
-        if pp.ndim >= 2: upd = upd + pp * WD
-        nP.append(pp - upd * lr); nM.append(mi); nV.append(vi)
+        core = mi / (mx.sqrt(vi) + eps_hat)
+        pn = (pp * decay if pp.ndim >= 2 else pp) - core * alpha
+        nP.append(pn); nM.append(mi); nV.append(vi)
     mx.eval(nP, nM, nV)
     params = unflatten(params, nP); mS, vS = nM, nV
     loss = float(loss)

@@ -184,6 +184,22 @@ export function asyncEval(...xs: MX[]) {
   m.mlx_async_eval(vh); m.mlx_vector_array_free(vh);
 }
 export function seed(s: number) { if (m.mlx_random_seed) m.mlx_random_seed(BigInt(s)); }
+
+// Write a {name -> MX} record to a .safetensors file (the save side of loader.ts).
+// Keys become tensor names; pass a flattened param tree (e.g. "blocks.0.wq").
+// Used for training checkpoints (pretrain -> SFT/inference handoff).
+export function saveSafetensors(path: string, record: Record<string, MX>) {
+  const vals = Object.values(record); evalAll(...vals);          // materialize before writing
+  const map = m.mlx_map_string_to_array_new() as number;
+  for (const [k, v] of Object.entries(record)) {
+    const key = new Uint8Array([...new TextEncoder().encode(k), 0]); // keep alive across the call
+    m.mlx_map_string_to_array_insert(map, ptr(key), v.h);
+  }
+  const meta = m.mlx_map_string_to_string_new() as number;        // empty metadata
+  const file = new Uint8Array([...new TextEncoder().encode(path), 0]);
+  m.mlx_save_safetensors(ptr(file), map, meta);
+  m.mlx_map_string_to_array_free?.(map);
+}
 const memOf = (fn: any): number => { const o = new BigUint64Array(1); fn(ptr(o)); return Number(o[0]) / 1e6; };
 export const activeMemoryMB = (): number => memOf(m.mlx_get_active_memory);
 export const peakMemoryMB = (): number => memOf(m.mlx_get_peak_memory);

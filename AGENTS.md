@@ -50,7 +50,8 @@ generalizes this: any opaque `mlx_*` type → `ptr`.
   (deterministic per-scope free), ops, sampling, async eval, memory controls.
 - **`nn.ts`** — `Module` (+ `parameters()`), `Linear`, `QuantizedLinear`, `RMSNorm`,
   `Embedding`, `QuantizedEmbedding`, `MoE`, `LoraDelta`.
-- **`loader.ts`** — safetensors: `singleFileWeights` / `shardedWeights` / `freeMap`.
+- **`loader.ts`** — safetensors load: `singleFileWeights` / `shardedWeights` / `freeMap`;
+  **write** via `mx.saveSafetensors(path, {name: MX})` (training checkpoints).
 - **`tokenizer.ts`** (byte-level BPE inference), **`chat-template.ts`** (`@huggingface/jinja`).
   Tokenizer *training* (`tok-train.py`) runs in native Rust (HF `tokenizers`, as
   nanochat does — not MLX compute); output `tokenizer.json` is consumed token-exact

@@ -26,6 +26,11 @@ fi
 if [ -f input.txt ]; then   # tok_train: train BPE in native Rust -> our TS inference round-trips it
   VOCAB=2048 python3 tok-train.py >/dev/null 2>&1
   bun tok-train-test.ts 2>&1 | grep -q "4/4" && ok "BPE tokenizer training (Rust) -> TS inference (4/4)" || no "tok-train" "round-trip"
+  # base_train: pretrain on BPE tokens + save a checkpoint that reloads (safetensors writer)
+  if [ -f tokenizer-trained.json ]; then
+    ITERS=200 bun base-train.ts >/tmp/vb.txt 2>&1
+    { grep -q "CKPT roundtrip: OK" /tmp/vb.txt && [ -f base-ckpt.safetensors ]; } && ok "base_train + checkpoint save/reload (BPE pretrain)" || no "base-train" "checkpoint"
+  fi
 fi
 python3 reference-chat.py >/dev/null 2>&1
 bun chat-test.ts 2>&1 | grep -q "4/4" && ok "chat template vs Python jinja2 (4/4)" || no "chat-template" "parity"

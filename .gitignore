@@ -19,3 +19,4 @@ whisper-mel-filters-*.f32
 names.txt
 input.txt
 gpt2-tokenizer.json
+base-ckpt*

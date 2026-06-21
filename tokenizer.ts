@@ -66,6 +66,8 @@ export class Tokenizer {
     return new Tokenizer(await Bun.file(path).json(), split);
   }
 
+  vocabSize(): number { return this.idToTok.length; }   // highest id + 1 (embedding rows needed)
+
   private bpe(token: string): string[] {
     const word = Array.from(token);
     if (word.length < 2) return word;

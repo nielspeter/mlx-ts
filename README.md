@@ -289,6 +289,10 @@ temperature, top-p, **top-k**, and **repetition penalty**
   (HF `tokenizers`, as nanochat does — training is a data-prep boundary step, not
   MLX compute); our pure-TS `tokenizer.ts` then reproduces it **token-exact**
   (`tok-train-test.ts`). The `tok_train` stage of a nanochat-style pipeline.
+- **Pretrain + checkpoint** — `base-train.ts` pretrains a GPT from scratch on
+  BPE-tokenized text and **saves a safetensors checkpoint** (`mx.saveSafetensors`,
+  the write side of the loader) that reloads round-trip-clean — the keystone that
+  lets pretrain → SFT/inference chain. The `base_train` stage.
 - **Research / inspection** — pull logits, hidden states; the `MX` op surface is open.
 
 Whisper setup (weights/assets are git-ignored — fetched, like the LLM weights):

@@ -26,7 +26,7 @@ work (raw web text needs far more params/compute to be coherent).
 | 1 | `tok_train` | `tok-train.py` | byte-level BPE in **native Rust** (HF tokenizers) → `tokenizer.json` |
 | 2 | `data_prep` | `data-prep.ts` | **stream-encode** the corpus (pure-TS BPE) → uint16 token shards (`tokens-{train,val}.bin`) |
 | 3 | `base_train` | `base-train.ts` | pretrain a GPT on the **memmapped** token stream, **save `base-ckpt.safetensors`** — real MLX over FFI |
-| 4 | `chat_sft` | `chat-sft.ts` | load the base checkpoint, SFT (completion-only loss), save `chat-ckpt.safetensors`. **Story-aligned** (`STORIES=<corpus>`): instruction-tunes on *"Tell me a story about {topic}." → {a real story}* so the chat matches a TinyStories base's competence |
+| 4 | `chat_sft` | `chat-sft.ts` | load the base checkpoint, **batched** SFT (BS examples/step, padded, masked loss on completion tokens only), save `chat-ckpt.safetensors`. **Story-aligned** (`STORIES=<corpus>`): instruction-tunes on *"Tell me a story about {topic}." → {a real story}* so the chat matches a TinyStories base's competence |
 | 5 | `chat_cli` | `chat-ckpt.ts` | load the chat checkpoint and generate replies (CLI) |
 | 5b | `chat_web` | `chat-web.ts` | serve the checkpoint behind the OpenAI API + `chat.html` UI (`bun chat-web.ts` → http://localhost:8080) |
 
@@ -50,10 +50,25 @@ Q: Who are you?
 A: I am a small language model trained with mlx-ts.
 ```
 
+## Recipe notes (what actually made the chat coherent)
+Scaling the model up (14M → 28M, more data/iters) improved the *base* prose but
+**not** the chatbot — the bottleneck turned out to be the SFT recipe, not size:
+- **Batched SFT** is essential. One example per step makes the loss per-example,
+  so it swings wildly (2.1 ↔ 4.4) and the model rambles/degrades. Batching `BS`
+  padded examples with a masked completion loss averages over many tokens → smooth
+  loss (2.64 → 2.27 monotonic) and coherent, complete stories.
+- **Gentler SFT LR** (`3e-4`, below the pretrain LR) — high LR on top of batch-1
+  variance was what made it ramble.
+- **Story-aligned data** — SFT on the base's own competence ("tell me a story"),
+  not mismatched trivia, or it collapses to memorized answers.
+
+The theme throughout: at this scale the *training recipe* dominates, not parameters.
+
 ## Knobs (env overrides)
 `VOCAB` (tokenizer size) · `N_LAYER`/`N_HEAD`/`N_EMBD`/`BLOCK`/`BATCH` (model) ·
-`BASE_ITERS` (pretrain steps) · `SFT_ITERS` (SFT steps) · `CORPUS` (text file).
-Defaults: depth-6 / 384-d model, 1500 pretrain + 400 SFT iters.
+`BASE_ITERS` (pretrain steps) · `SFT_ITERS`/`SFT_LR`/`DEVBATCH` (SFT) · `CORPUS`,
+`MAX_BYTES` (dataset). Defaults: depth-6 / 384-d / ~14M model, 3000 pretrain +
+1500 batched-SFT iters at LR 3e-4. Scale up: `N_LAYER=8 N_EMBD=512 MAX_BYTES=400000000`.
 
 ## Pipeline coverage vs nanochat `runcpu.sh`
 - ✅ `tok_train`, ✅ `base_train`, ✅ `chat_sft`, ✅ `chat_cli`, ✅ `chat_web`

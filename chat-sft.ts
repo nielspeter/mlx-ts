@@ -3,8 +3,8 @@
 // completion-only loss. Saves a chat checkpoint for chat-ckpt.ts. This is the
 // pretrain -> SFT handoff, all on our own weights.
 //   bun chat-sft.ts        (needs base-ckpt.safetensors + tokenizer-trained.json)
-import { MX, fromI32, scalar, evalAll, clearCache, tidy } from "./mx.ts";
-import { crossEntropy } from "./loss.ts";
+import { MX, fromI32, fromF32, scalar, evalAll, clearCache, tidy } from "./mx.ts";
+import { maskedCrossEntropy } from "./loss.ts";
 import { valueAndGrad } from "./train.ts";
 import { treeFlatten, treeUnflattenLike, type Tree } from "./pytree.ts";
 import { Tokenizer, GPT2_SPLIT } from "./tokenizer.ts";
@@ -27,8 +27,7 @@ function build(prompt: string, completion: string) {
   const pIds = tok.encode(prompt);
   let ids = tok.encode(prompt + " " + completion); ids.push(EOS);
   if (ids.length > T) ids = ids.slice(0, T);                   // base wpe only covers block_size
-  const c = pIds.length - 1, comp = Int32Array.from(ids.slice(c + 1));
-  return { idsMX: fromI32(Int32Array.from(ids), [1, ids.length]), L: ids.length, tgt: fromI32(comp, [ids.length - 1 - c, 1]) };
+  return { ids, cStart: pIds.length - 1 };                     // cStart = first completion target index
 }
 
 // STORIES=<corpus> -> story-aligned SFT: instruction-tune the base on its OWN
@@ -61,12 +60,26 @@ if (STORIES) {
   demo = DATA.slice(0, 3).map((d) => d.q);
 }
 
-const lossFn = (p: Tree, idsMX: MX, tgt: MX, lenMX: MX): MX => {
-  const L = lenMX.shape[0], c = L - 1 - tgt.shape[0];
-  const logits = forward(p, idsMX, cfg).reshape([L, V]).slice([c, 0], [L - 1, V]);
-  return crossEntropy(logits, tgt);
-};
+// BATCHED SFT: BS examples/step, padded to SEQ, masked loss over completion tokens
+// only — averaging over many tokens kills the batch-1 variance that made the
+// scaled-up chat ramble. (Masked loss is NaN-safe now that crossEntropy uses
+// stable log_softmax.)
+const BS = +(process.env.DEVBATCH ?? 8);
+const SEQ = Math.min(T, Math.max(...examples.map((e) => e.ids.length)));
+const lossFn = (p: Tree, idsMX: MX, tgt: MX, mask: MX): MX =>
+  maskedCrossEntropy(forward(p, idsMX, cfg).reshape([BS * SEQ, V]), tgt, mask);
 const vg = valueAndGrad(params, lossFn);
+
+let bseed = 1234; const rnd = () => (bseed = (bseed * 1664525 + 1013904223) >>> 0) / 2 ** 32;
+function makeBatch(): [MX, MX, MX] {                            // padded ids, shifted targets, completion mask
+  const xb = new Int32Array(BS * SEQ), tb = new Int32Array(BS * SEQ), mb = new Float32Array(BS * SEQ);
+  for (let b = 0; b < BS; b++) {
+    const e = examples[Math.floor(rnd() * examples.length)], n = Math.min(e.ids.length, SEQ);
+    for (let i = 0; i < n; i++) xb[b * SEQ + i] = e.ids[i];
+    for (let i = 0; i < n - 1; i++) { tb[b * SEQ + i] = e.ids[i + 1]; if (i >= e.cStart) mb[b * SEQ + i] = 1; }
+  }
+  return [fromI32(xb, [BS, SEQ]), fromI32(tb, [BS * SEQ, 1]), fromF32(mb, [BS * SEQ, 1])];
+}
 
 const sB1 = scalar(B1), sB1m = scalar(1 - B1), sB2 = scalar(B2), sB2m = scalar(1 - B2);
 const sumsq = (g: MX) => g.mul(g).sumAxes(g.shape.map((_, i) => i), false);
@@ -81,10 +94,10 @@ console.log(`before: ${JSON.stringify(reply(demo[0]))}`);
 let loss = 0, step0 = 0;
 for (let it = 0; it < ITERS; it++) {
   const lr = lrAt(it), bc1 = 1 - B1 ** (it + 1), bc2 = 1 - B2 ** (it + 1);
-  const ex = examples[it % examples.length], fp = treeFlatten(params), oldM = mS, oldV = vS;
-  const lenMX = fromI32(new Int32Array(ex.L), [ex.L]);
+  const fp = treeFlatten(params), oldM = mS, oldV = vS;
   const kept = tidy(() => {
-    const r = vg(params, ex.idsMX, ex.tgt, lenMX);
+    const [idsMX, tgtMX, maskMX] = makeBatch();
+    const r = vg(params, idsMX, tgtMX, maskMX);
     const fg = treeFlatten(r.grads);
     let total = sumsq(fg[0]); for (let i = 1; i < fg.length; i++) total = total.add(sumsq(fg[i]));
     const gnorm = total.sqrt().itemF(), cs = gnorm > CLIP ? CLIP / gnorm : 1, sCs = cs === 1 ? null : scalar(cs);

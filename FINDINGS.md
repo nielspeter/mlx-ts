@@ -18,7 +18,9 @@ TypeScript** plus **~1,900 lines of generated FFI bindings**, and it runs real
 **dense** (Qwen3-0.6B) and **MoE** (OLMoE-1B-7B, 64 experts) models — bf16 and
 4-bit, single-file and sharded — at **~200–300 tok/s** with **bounded memory**,
 producing output **token-for-token identical** to MLX's own Python stack
-(`validate-all.sh`: 15/15).
+(`validate-all.sh`: 27/27). It also **trains transformers from scratch** —
+microGPT → nanoGPT (to the ~1.47 Shakespeare baseline) → real GPT-2-124M — the
+optimizer driven by MLX `value_and_grad` over FFI, at ~parity with Python (§7d).
 
 The work is *not* "write a TS SDK." It decomposes exactly like Apple's Python
 SDK, which is what makes it tractable:
@@ -267,9 +269,12 @@ decode is compute-bound).
   rounding accumulates, and near a training instability it amplifies into visibly
   different trajectories; with a stable LR the curves track to float tolerance and
   converge identically (validation criterion: identical start + both converge).
-  What's left is just more breadth: AdamW/schedulers, more losses, multi-example
-  batches, and the backward-memory regime at scale (activations held for backward,
-  so `tidy()` runs *after* the step). Standard minibatch training needs no `vmap`;
+  The former "what's left" breadth — **AdamW, cosine LR + warmup, gradient
+  clipping, dropout, and multi-example minibatches** — is now demonstrated *from
+  scratch* in §7d (microGPT → nanoGPT → a real GPT-2-architecture model trained to
+  nanoGPT's Shakespeare baseline), including the backward-memory regime (activations
+  held for backward, so per-step `tidy()` runs *after* the step). Standard minibatch
+  training needs no `vmap`;
   only per-sample-gradient methods do — and `vmap` itself turned out to be
   **recoverable over FFI** (see below), so even that is no longer a hard gap.
 - **Breadth.** More architectures (dense + MoE families proven; each new one is
@@ -392,12 +397,84 @@ talking pipeline would pull in a non-MLX dependency analogous to ffmpeg. That is
 *product* decision, deliberately out of scope for a feasibility study: the study's
 TTS question — "does the audio-synthesis math run in mlx-c/TS?" — is answered yes.
 
+## 7d. From-scratch training: microGPT → nanoGPT → GPT-2-124M
+
+The training above (§7, LoRA over a frozen base) is *fine-tuning*. This is the
+harder claim: **train a transformer from random init, end to end, in TypeScript
+driving MLX** — the autograd being real `value_and_grad` over FFI, not a
+hand-rolled engine. Three rungs, each validated against an MLX-Python mirror.
+
+**microGPT (~4k params).** Karpathy's minimal GPT (1 block, 4 heads, char-level
+names) — but where his version hand-rolls a `Value` autograd class, here the
+autograd is real MLX. Trains end to end (forward + backprop + Adam + sampling),
+loss 3.19 → 1.72, emits name-like strings. Identical init (shared via a flat f32
+blob) + identical data order → **step-0 loss bit-exact** vs `reference-microgpt.py`
+(3.1896 = 3.1896); both converge (not bit-reproducible past step 0 — the §6
+gotcha — so the bar is "same start, both converge"). It re-confirmed gotcha #5
+live: the 1000-step loop blew MLX's buffer limit until per-step `tidy()` + freeing
+the prior params/moments bounded it.
+
+**nanoGPT (multi-layer, the real recipe).** Scaled to nanoGPT's char-level
+Shakespeare: N pre-LN blocks, mini-batched `[B,T]`, **AdamW + cosine LR + linear
+warmup + global grad-norm clipping + dropout** — the actual production training
+machinery, all just MLX ops from TS. At nanoGPT's exact `shakespeare-char` config
+(6 layers / 6 heads / 384-d / 10.7M params, dropout 0.2) it reaches **best val
+loss 1.4964 — matching nanoGPT's published ~1.47 baseline** — and writes coherent
+Shakespeare (speaker turns, real words, real *Winter's Tale* character names). The
+dropout-free path is **bit-exact end to end** vs `reference-nanogpt.py` (shared
+init + mini-batches): step-0, final-train, and val all match to 4 decimals. Two
+capabilities fell out: **device-side dropout** (`mx.dropout` via
+`mlx_random_bernoulli`, seed-derived so the oracle reproduces the same masks) and
+**best-checkpoint eval** (a 10.7M model memorizes 1 MB of text — textbook
+overfitting — so *best* val is the honest metric, as nanoGPT reports). Honest gap
+to the baseline: we apply residual dropout but not attention-weight dropout, since
+MLX's *fused* SDPA exposes no dropout parameter; best-val lands on it regardless.
+
+**GPT-2-124M (real OpenAI weights).** The capstone: load the actual
+`openai-community/gpt2` weights and generate, **token-exact** vs an MLX-Python
+mirror. Two pieces. (1) A **GPT-2 BPE encoder** — `tokenizer.ts` was already
+byte-level BPE; GPT-2 needed its r50k pretokenization (`GPT2_SPLIT`) and no NFC
+normalization, now **8/8 token-exact** vs HF `tokenizers`. (2) GPT-2's architecture
+exactly (`gpt2.ts`): learned positional embeddings, LayerNorm-with-bias, fused QKV
+(Conv1D weight `[in,out]` → `matmul` directly, no transpose), **`gelu_new`** (tanh
+approx via `mlx_tanh`), tied `lm_head`, KV-cached greedy decode. Generation is
+token-for-token identical to `reference-gpt2.py` on every prompt, at ~210–250
+tok/s, with optional temperature / top-k / top-p / repetition-penalty sampling.
+
+**Scope — what "reproduce GPT-2-124M" means.** Two senses: reproduce its *outputs*
+(done, token-exact) and reproduce its *from-scratch training* on OpenWebText. The
+latter is the *same recipe* the nanoGPT rung runs at 10.7M, only bigger — nothing
+in the TS↔MLX bridge is missing. What stops a full run is **single-Mac wall-clock**
+(~4 days on 8×A100 over a 40 GB corpus) and a data pipeline: a practical limit,
+not a feasibility one.
+
+**Training performance — at parity where it matters.** Both TS and Python run the
+identical MLX Metal kernels, so they share a GPU floor; the only difference is
+TS's host-side orchestration. Per-iteration, training-loop only:
+
+| model | TS | MLX-Python | gap |
+|---|---|---|---|
+| 0.4M (toy) | 7.9 ms | sub-ms | host-dominated |
+| 10.7M (real) | 257 ms | 251 ms | **~2.4%** |
+
+The host tax is a roughly *fixed* ~6 ms/step (FFI dispatch + the `value_and_grad`
+JS-callback + per-leaf optimizer ops). On a toy model the GPU does ~nothing so the
+tax is the whole story; at real scale it's ~2.4% — effectively parity, the same as
+GPT-2-124M *inference* (TS 248 vs Python 234 tok/s). Two optimizations keep it
+small without harming scale: hoisting per-step scalar constants, and folding
+Adam's bias-correction into the step size (PyTorch's efficient form, applied
+identically to the oracle so parity holds). A flat-vector optimizer was
+deliberately *not* done — it helps toy models but adds per-step concat/slice
+bandwidth that pessimizes large (GPU-bound) ones.
+
+Deep-dive notes: `MICROGPT.md`, `NANOGPT.md`, `GPT2.md`.
+
 ## 8. File map
 
 **Runtime & codegen**
-- `codegen.ts` → `generated.ts` — header parser → FFI bindings (448 symbols, 242 wrappers)
+- `codegen.ts` → `generated.ts` — header parser → FFI bindings (472 symbols, 242 wrappers)
 - `mx.ts` — `MX` array class, `FinalizationRegistry` + `tidy()`, ops, sampling,
-  `async_eval`, `stack`, `copy`, memory introspection/limits
+  **`dropout`** (device-side Bernoulli), `async_eval`, `stack`, `copy`, memory introspection/limits
 - `nn.ts` — `Module`, `Linear`, `QuantizedLinear`, `RMSNorm`, `Embedding`,
   `QuantizedEmbedding`, **`MoE`** (router + top-K + quantized expert dispatch)
 - `optim.ts` — `Adam` (pytree-aware); `loss.ts` — `crossEntropy`
@@ -407,7 +484,7 @@ TTS question — "does the audio-synthesis math run in mlx-c/TS?" — is answere
   `streamTokens` / `streamText` / `generate` (auto KV-cache cleanup, no manual `tidy`)
 - `loader.ts` — safetensors loading; `singleFileWeights` / **`shardedWeights`**
   (multi-file, mmap-evictable) + `freeMap`
-- `tokenizer.ts` — pure-TS byte-level BPE
+- `tokenizer.ts` — pure-TS byte-level BPE (Qwen + **GPT-2 `GPT2_SPLIT`**, 8/8 vs HF)
 - `chat-template.ts` — HF chat template via `@huggingface/jinja`
 - `audio.ts` — speech front-end: ffmpeg decode + log-Mel (rfft-as-matmul)
 - `whisper.ts` / `whisper-tokenizer.ts` — Whisper STT (encoder + cross-attn decoder
@@ -422,6 +499,7 @@ TTS question — "does the audio-synthesis math run in mlx-c/TS?" — is answere
   audio transcriptions) + a chat web UI with live mic transcription
 - `lora-train.ts` — **LoRA fine-tune** of real 4-bit Qwen3 (Adam + cross_entropy)
 - `olmoe.ts` — config-driven **OLMoE-1B-7B MoE** (single-file or `MX_SHARDED`)
+- `gpt2.ts` — real OpenAI **GPT-2-124M** (BPE + `gelu_new` + tied head), token-exact; sampling flags
 - `block*.ts`, `model-*.ts` — the staged PoCs (block, decode, safetensors, quant)
 - `inspect-real.ts` — enumerate a real model file's tensors
 - `split-olmoe.py` — split a single file into shards (to exercise the sharded loader)
@@ -430,13 +508,15 @@ TTS question — "does the audio-synthesis math run in mlx-c/TS?" — is answere
 `spike-bench.py` (Python tok/s bar), `spike-moe.ts` (gather_qmm op),
 `spike-moe-layer.ts` (full MoE layer), `spike-train.ts` (training: value_and_grad
 + SGD), `spike-istft.ts` (iSTFT vocoder synthesis — TTS de-risk),
-`spike-vmap.ts` (`vmap` recovered from the detail trace/replace primitives).
+`spike-vmap.ts` (`vmap` recovered from the detail trace/replace primitives),
+`spike-microgpt.ts` (microGPT from scratch), `spike-nanogpt.ts` (multi-layer GPT
+from scratch — trains to nanoGPT's Shakespeare baseline). See §7d.
 
 **References & validation**
 - `reference*.py` — MLX Python mirrors for every milestone
 - `tok-reference.py` / `tok-test.ts` — tokenizer ground truth
 - `validate-prod.ts` — sampling / batching / bounded-memory checks
-- **`validate-all.sh`** — the full suite: every TS path vs its reference (15/15)
+- **`validate-all.sh`** — the full suite: every TS path vs its reference (27/27)
 
 ---
 

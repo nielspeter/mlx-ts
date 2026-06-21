@@ -21,7 +21,8 @@ limited by the tiny base and small corpus.
 | 1 | `tok_train` | `tok-train.py` | byte-level BPE in **native Rust** (HF tokenizers) → `tokenizer.json` |
 | 2 | `base_train` | `base-train.ts` | pretrain a GPT on BPE tokens, **save `base-ckpt.safetensors`** — real MLX over FFI |
 | 3 | `chat_sft` | `chat-sft.ts` | load the base checkpoint, SFT (completion-only loss), save `chat-ckpt.safetensors` |
-| 4 | `chat` | `chat-ckpt.ts` | load the chat checkpoint and generate replies (CLI) |
+| 4 | `chat_cli` | `chat-ckpt.ts` | load the chat checkpoint and generate replies (CLI) |
+| 4b | `chat_web` | `chat-web.ts` | serve the checkpoint behind the OpenAI API + `chat.html` UI (`bun chat-web.ts` → http://localhost:8080) |
 
 Everything except the tokenizer trainer is TypeScript driving MLX. The pieces
 (`nanogpt-model.ts` for the shared GPT + checkpoint load/save) are the same ones
@@ -46,9 +47,8 @@ A: I am a small language model trained with mlx-ts.
 Defaults: depth-6 / 384-d model, 1500 pretrain + 400 SFT iters.
 
 ## Pipeline coverage vs nanochat `runcpu.sh`
-- ✅ `tok_train`, ✅ `base_train`, ✅ `chat_sft`, ✅ `chat_cli`
-- The web UI (`chat_web`) equivalent is `server.ts` + `chat.html` (currently wired
-  to Qwen3; pointing it at a `chat-ckpt` is small follow-on work).
+- ✅ `tok_train`, ✅ `base_train`, ✅ `chat_sft`, ✅ `chat_cli`, ✅ `chat_web`
+  (`chat-web.ts` serves the checkpoint behind the same OpenAI API + `chat.html` UI)
 - Not built (not bridge gaps): `base_eval`'s CORE-score harness, the Muon
   optimizer, multi-GPU scale. RL (GRPO) exists in `rl.ts` (it's in nanochat's
   `speedrun.sh`, not `runcpu.sh`).

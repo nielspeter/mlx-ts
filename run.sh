@@ -28,9 +28,10 @@ N_LAYER=${N_LAYER:-6} N_HEAD=${N_HEAD:-6} N_EMBD=${N_EMBD:-384} BLOCK=${BLOCK:-1
 echo "=== [3/4] chat_sft ==="
 ITERS=${SFT_ITERS:-400} bun chat-sft.ts
 
-# 4. chat — talk to it
+# 4. chat — talk to it (CLI), or launch the web UI
 echo "=== [4/4] chat ==="
 bun chat-ckpt.ts "What is the capital of France?"
 bun chat-ckpt.ts "Who are you?"
 echo
 echo "Done. Chat more with:  bun chat-ckpt.ts \"<your question>\""
+echo "Or the web UI (ChatGPT-style):  bun chat-web.ts   then open http://localhost:8080"

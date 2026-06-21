@@ -34,6 +34,13 @@ if [ -f input.txt ]; then   # tok_train: train BPE in native Rust -> our TS infe
     if [ -f base-ckpt.safetensors ]; then
       ITERS=300 bun chat-sft.ts >/tmp/vc.txt 2>&1
       { [ -f chat-ckpt.safetensors ] && bun chat-ckpt.ts "What is the capital of France?" 2>&1 | grep -qi "paris"; } && ok "chat_sft from checkpoint -> chat CLI (pretrain->SFT->chat)" || no "chat-sft" "handoff"
+      if [ -f chat-ckpt.safetensors ]; then   # chat_web: serve the checkpoint over the OpenAI API
+        PORT=8123 bun chat-web.ts >/tmp/vw.log 2>&1 & WPID=$!
+        for i in $(seq 1 60); do curl -s localhost:8123/health >/dev/null 2>&1 && break; sleep 0.5; done
+        ans=$(curl -s localhost:8123/v1/chat/completions -H 'content-type: application/json' -d '{"messages":[{"role":"user","content":"What is the capital of France?"}]}' 2>/dev/null)
+        kill $WPID 2>/dev/null
+        echo "$ans" | grep -qi paris && ok "chat_web serves the SFT'd checkpoint (OpenAI API)" || no "chat-web" "endpoint"
+      fi
     fi
   fi
 fi

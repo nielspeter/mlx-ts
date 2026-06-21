@@ -14,20 +14,29 @@ model.* This is an educational demo of the whole pipeline running locally. The
 chat model reliably answers the questions it was SFT'd on; held-out quality is
 limited by the tiny base and small corpus.
 
+Trains on **TinyStories** by default — a corpus designed so small models learn
+genuinely coherent (simple) English, which is what makes a Mac-scale run actually
+work (raw web text needs far more params/compute to be coherent).
+
 ## Stages
 
 | # | stage | script | engine |
 |---|---|---|---|
+| 0 | dataset | `run.sh` (curl) | bounded prefix of TinyStories (HTTP range request) |
 | 1 | `tok_train` | `tok-train.py` | byte-level BPE in **native Rust** (HF tokenizers) → `tokenizer.json` |
-| 2 | `base_train` | `base-train.ts` | pretrain a GPT on BPE tokens, **save `base-ckpt.safetensors`** — real MLX over FFI |
-| 3 | `chat_sft` | `chat-sft.ts` | load the base checkpoint, SFT (completion-only loss), save `chat-ckpt.safetensors` |
-| 4 | `chat_cli` | `chat-ckpt.ts` | load the chat checkpoint and generate replies (CLI) |
-| 4b | `chat_web` | `chat-web.ts` | serve the checkpoint behind the OpenAI API + `chat.html` UI (`bun chat-web.ts` → http://localhost:8080) |
+| 2 | `data_prep` | `data-prep.ts` | **stream-encode** the corpus (pure-TS BPE) → uint16 token shards (`tokens-{train,val}.bin`) |
+| 3 | `base_train` | `base-train.ts` | pretrain a GPT on the **memmapped** token stream, **save `base-ckpt.safetensors`** — real MLX over FFI |
+| 4 | `chat_sft` | `chat-sft.ts` | load the base checkpoint, SFT (completion-only loss), save `chat-ckpt.safetensors` |
+| 5 | `chat_cli` | `chat-ckpt.ts` | load the chat checkpoint and generate replies (CLI) |
+| 5b | `chat_web` | `chat-web.ts` | serve the checkpoint behind the OpenAI API + `chat.html` UI (`bun chat-web.ts` → http://localhost:8080) |
 
-Everything except the tokenizer trainer is TypeScript driving MLX. The pieces
-(`nanogpt-model.ts` for the shared GPT + checkpoint load/save) are the same ones
-validated throughout the repo; the cross-stage handoff is plain safetensors
-checkpoints (the writer is `mx.saveSafetensors`, round-trip verified).
+Everything except the tokenizer trainer is TypeScript driving MLX. The data
+pipeline streams: `data-prep.ts` reads the corpus in chunks, encodes whole lines
+with the validated TS tokenizer, and appends uint16 tokens to disk; `base-train.ts`
+**`Bun.mmap`s** those shards so training scales past RAM (the OS pages them in).
+The shared GPT + checkpoint load/save live in `nanogpt-model.ts`; the cross-stage
+handoff is plain safetensors checkpoints (writer = `mx.saveSafetensors`, round-trip
+verified).
 
 ## What it looks like
 ```

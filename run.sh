@@ -1,37 +1,41 @@
 #!/usr/bin/env bash
-# nanochat-style pipeline on Apple Silicon, in TypeScript over MLX — the
-# TS analogue of nanochat/runs/runcpu.sh: tokenizer -> pretrain -> SFT -> chat.
+# nanochat-style pipeline on Apple Silicon, in TypeScript over MLX — the TS
+# analogue of nanochat/runs/runcpu.sh: dataset -> tokenizer -> pretrain -> SFT ->
+# chat. Trains a small GPT from scratch on TinyStories (a corpus designed so that
+# small models learn genuinely coherent English) so the result actually works.
 #
-# NOTE (same caveat as nanochat's runcpu.sh): a MacBook won't train a strong
-# model. This is an educational, end-to-end demo of the whole pipeline running
-# on one machine, all TS-over-MLX (tokenizer training is native Rust). The chat
-# model will reliably answer the questions it was SFT'd on; held-out quality is
-# limited by the tiny base. Override any stage via env vars (see defaults below).
+# Only the BPE tokenizer trainer is native (Rust, like nanochat); everything else
+# is TypeScript driving MLX. The data pipeline streams: stream-encode the corpus
+# to uint16 token shards, then base_train memmaps them (scales past RAM).
 #
-#   bash run.sh
+#   bash run.sh                  # ~15-20 min on an M-series Mac (defaults below)
+#   MAX_BYTES=20000000 BASE_ITERS=800 bash run.sh   # quicker, rougher
 set -e
 cd "$(dirname "$0")"
 
-# 0. corpus — tiny-shakespeare by default; point CORPUS at any UTF-8 text file
-[ -f input.txt ] || curl -sL https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt -o input.txt
+CORPUS=${CORPUS:-tinystories.txt}
+MAX_BYTES=${MAX_BYTES:-200000000}    # bounded prefix of the dataset (~200 MB)
+URL=${CORPUS_URL:-https://huggingface.co/datasets/roneneldan/TinyStories/resolve/main/TinyStoriesV2-GPT4-train.txt}
 
-# 1. tok_train — train a byte-level BPE in native Rust (HF tokenizers, like nanochat)
-echo "=== [1/4] tok_train ==="
-VOCAB=${VOCAB:-2048} python3 tok-train.py
+echo "=== [0/5] dataset ==="
+[ -f "$CORPUS" ] || curl -L -r 0-$((MAX_BYTES - 1)) "$URL" -o "$CORPUS"
+echo "corpus: $CORPUS ($(wc -c < "$CORPUS") bytes)"
 
-# 2. base_train — pretrain a GPT from scratch on BPE tokens; saves base-ckpt.safetensors
-echo "=== [2/4] base_train ==="
-N_LAYER=${N_LAYER:-6} N_HEAD=${N_HEAD:-6} N_EMBD=${N_EMBD:-384} BLOCK=${BLOCK:-128} \
-  BATCH=${BATCH:-16} ITERS=${BASE_ITERS:-1500} bun base-train.ts
+echo "=== [1/5] tok_train (native Rust BPE) ==="
+CORPUS=$CORPUS VOCAB=${VOCAB:-8192} python3 tok-train.py
 
-# 3. chat_sft — load the base checkpoint and SFT it into a chat model
-echo "=== [3/4] chat_sft ==="
+echo "=== [2/5] data_prep (stream-encode -> memmappable uint16 token shards) ==="
+CORPUS=$CORPUS TOKENS=${TOKENS:-tokens} bun data-prep.ts
+
+echo "=== [3/5] base_train (pretrain on the token stream + save checkpoint) ==="
+TOKENS=${TOKENS:-tokens} N_LAYER=${N_LAYER:-6} N_HEAD=${N_HEAD:-6} N_EMBD=${N_EMBD:-384} \
+  BLOCK=${BLOCK:-256} BATCH=${BATCH:-32} ITERS=${BASE_ITERS:-3000} bun base-train.ts
+
+echo "=== [4/5] chat_sft (load base checkpoint, SFT into a chat model) ==="
 ITERS=${SFT_ITERS:-400} bun chat-sft.ts
 
-# 4. chat — talk to it (CLI), or launch the web UI
-echo "=== [4/4] chat ==="
-bun chat-ckpt.ts "What is the capital of France?"
+echo "=== [5/5] chat ==="
+bun chat-ckpt.ts "Tell me a story about a cat."
 bun chat-ckpt.ts "Who are you?"
 echo
-echo "Done. Chat more with:  bun chat-ckpt.ts \"<your question>\""
-echo "Or the web UI (ChatGPT-style):  bun chat-web.ts   then open http://localhost:8080"
+echo "Done. CLI:  bun chat-ckpt.ts \"<question>\"    Web UI:  bun chat-web.ts  -> http://localhost:8080"

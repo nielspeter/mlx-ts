@@ -26,6 +26,11 @@ fi
 if [ -f input.txt ]; then   # tok_train: train BPE in native Rust -> our TS inference round-trips it
   VOCAB=2048 python3 tok-train.py >/dev/null 2>&1
   bun tok-train-test.ts 2>&1 | grep -q "4/4" && ok "BPE tokenizer training (Rust) -> TS inference (4/4)" || no "tok-train" "round-trip"
+  if [ -f tokenizer-trained.json ]; then   # data pipeline: stream-encode -> memmap token shards -> base_train
+    CORPUS=input.txt TOKENS=/tmp/vtok bun data-prep.ts >/dev/null 2>&1
+    TOKENS=/tmp/vtok CKPT=/tmp/vstream.safetensors ITERS=80 N_EMBD=128 bun base-train.ts >/tmp/vstream.txt 2>&1
+    { grep -q "^mmap " /tmp/vstream.txt && grep -q "CKPT roundtrip: OK" /tmp/vstream.txt; } && ok "streaming dataloader (data-prep -> mmap shards -> base_train)" || no "data-prep/mmap" "streaming"
+  fi
   # base_train: pretrain on BPE tokens + save a checkpoint that reloads (safetensors writer)
   if [ -f tokenizer-trained.json ]; then
     ITERS=200 bun base-train.ts >/tmp/vb.txt 2>&1

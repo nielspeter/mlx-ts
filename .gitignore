@@ -18,6 +18,8 @@ whisper-mel-filters-*.f32
 *.tiktoken
 names.txt
 input.txt
+tinystories.txt
+tokens-*.bin
 gpt2-tokenizer.json
 base-ckpt.safetensors
 base-ckpt-config.json

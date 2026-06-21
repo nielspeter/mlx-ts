@@ -17,15 +17,24 @@ const LR0 = 3e-3, MIN_LR = 3e-4, WD = 0.1, CLIP = 1.0, B1 = 0.9, B2 = 0.95, EPSA
 const EPS = 1e-5, ASCALE = 1 / Math.sqrt(DH), SEED = 1337;
 const CKPT = process.env.CKPT ?? "base-ckpt.safetensors";
 
-// --- data: encode the corpus with the trained BPE tokenizer (TS inference) ---
+// --- data: either a memmapped token stream (TOKENS, from data-prep.ts — scales
+// to corpora larger than RAM) or encode a small corpus in-memory (CORPUS). ---
 const tok = await Tokenizer.fromFile("tokenizer-trained.json", GPT2_SPLIT);
 const V = tok.vocabSize();
-const text = await Bun.file(process.env.CORPUS ?? "input.txt").text();
-const t0 = performance.now();
-const data = Int32Array.from(tok.encode(text));
-console.log(`encoded ${text.length} chars -> ${data.length} BPE tokens (vocab ${V}) in ${((performance.now() - t0) / 1000).toFixed(1)}s`);
-const nTrain = Math.floor(0.9 * data.length);
-const train = data.subarray(0, nTrain), val = data.subarray(nTrain);
+let train: Int32Array | Uint16Array, val: Int32Array | Uint16Array;
+if (process.env.TOKENS) {
+  const pre = process.env.TOKENS;                          // OS pages it in; no full load into RAM
+  const mm = (p: string) => { const u = Bun.mmap(p); return new Uint16Array(u.buffer, u.byteOffset, u.byteLength >>> 1); };
+  train = mm(`${pre}-train.bin`); val = mm(`${pre}-val.bin`);
+  console.log(`mmap ${pre}-{train,val}.bin -> ${train.length} train + ${val.length} val tokens (vocab ${V})`);
+} else {
+  const text = await Bun.file(process.env.CORPUS ?? "input.txt").text();
+  const t0 = performance.now();
+  const data = Int32Array.from(tok.encode(text));
+  console.log(`encoded ${text.length} chars -> ${data.length} BPE tokens (vocab ${V}) in ${((performance.now() - t0) / 1000).toFixed(1)}s`);
+  const nTrain = Math.floor(0.9 * data.length);
+  train = data.subarray(0, nTrain); val = data.subarray(nTrain);
+}
 
 // --- deterministic init (seeded) ---
 function rng(s0: number) { let s = s0 >>> 0; return () => (s = (s * 1664525 + 1013904223) >>> 0) / 2 ** 32; }
@@ -43,7 +52,7 @@ const block = () => ({
 });
 let params: Tree = { wte: mk([V, D], 0.02), wpe: mk([T, D], 0.02), blocks: Array.from({ length: NL }, block), lnfw: fill([D], 1), lnfb: fill([D], 0) };
 
-function getBatch(src: Int32Array): [MX, MX] {
+function getBatch(src: Int32Array | Uint16Array): [MX, MX] {
   const xb = new Int32Array(B * T), yb = new Int32Array(B * T);
   for (let b = 0; b < B; b++) { const ix = Math.floor(rand() * (src.length - T - 1)); for (let t = 0; t < T; t++) { xb[b * T + t] = src[ix + t]; yb[b * T + t] = src[ix + t + 1]; } }
   return [fromI32(xb, [B, T]), fromI32(yb, [B, T])];

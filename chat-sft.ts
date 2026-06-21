@@ -22,20 +22,44 @@ const V = cfg.vocab, T = cfg.block_size;
 
 // --- chat SFT data (instruction -> response); completion-only loss ---
 const PROMPT = (q: string) => `User: ${q}\nAssistant:`;
-const DATA = [
-  { q: "What is the capital of France?", a: "The capital of France is Paris." },
-  { q: "Who are you?", a: "I am a small language model trained with mlx-ts." },
-  { q: "What color is the sky?", a: "The sky is blue." },
-  { q: "Say hello.", a: "Hello! How can I help you today?" },
-  { q: "What is two plus two?", a: "Two plus two is four." },
-];
-const examples = DATA.map(({ q, a }) => {
-  const pIds = tok.encode(PROMPT(q));
-  let ids = tok.encode(PROMPT(q) + " " + a); ids.push(EOS);
+// build one example: prompt (incl. "Assistant:") + completion, loss on completion only
+function build(prompt: string, completion: string) {
+  const pIds = tok.encode(prompt);
+  let ids = tok.encode(prompt + " " + completion); ids.push(EOS);
   if (ids.length > T) ids = ids.slice(0, T);                   // base wpe only covers block_size
   const c = pIds.length - 1, comp = Int32Array.from(ids.slice(c + 1));
   return { idsMX: fromI32(Int32Array.from(ids), [1, ids.length]), L: ids.length, tgt: fromI32(comp, [ids.length - 1 - c, 1]) };
-});
+}
+
+// STORIES=<corpus> -> story-aligned SFT: instruction-tune the base on its OWN
+// competence ("Tell me a story about {topic}." -> a real story from the corpus),
+// so a TinyStories base produces coherent stories on request. Otherwise a small
+// QA set (the default; what the offline validate-all check exercises).
+const STORIES = process.env.STORIES;
+let examples: ReturnType<typeof build>[], demo: string[];
+if (STORIES) {
+  const STOP = new Set("the and was that with they them then there here have this what your just very into over about after said were they his her him she you are for not but his big had has one".split(" "));
+  const topic = (s: string) => {
+    const f = new Map<string, number>();
+    for (const w of s.toLowerCase().match(/[a-z]{4,}/g) ?? []) if (!STOP.has(w)) f.set(w, (f.get(w) ?? 0) + 1);
+    return [...f].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "something";
+  };
+  const raw = await Bun.file(STORIES).slice(0, +(process.env.SFT_BYTES ?? 8_000_000)).text();
+  const stories = raw.split("<|endoftext|>").map((s) => s.trim()).filter((s) => s.length > 120).slice(0, +(process.env.SFT_N ?? 600));
+  examples = stories.map((s) => build(`User: Tell me a story about ${topic(s)}.\nAssistant:`, s));
+  demo = ["Tell me a story about a cat.", "Tell me a story about a robot.", "Tell me a story about the sea."];
+  console.log(`story-aligned SFT: ${examples.length} examples from ${STORIES}`);
+} else {
+  const DATA = [
+    { q: "What is the capital of France?", a: "The capital of France is Paris." },
+    { q: "Who are you?", a: "I am a small language model trained with mlx-ts." },
+    { q: "What color is the sky?", a: "The sky is blue." },
+    { q: "Say hello.", a: "Hello! How can I help you today?" },
+    { q: "What is two plus two?", a: "Two plus two is four." },
+  ];
+  examples = DATA.map(({ q, a }) => build(PROMPT(q), a));
+  demo = DATA.slice(0, 3).map((d) => d.q);
+}
 
 const lossFn = (p: Tree, idsMX: MX, tgt: MX, lenMX: MX): MX => {
   const L = lenMX.shape[0], c = L - 1 - tgt.shape[0];
@@ -48,10 +72,11 @@ const sB1 = scalar(B1), sB1m = scalar(1 - B1), sB2 = scalar(B2), sB2m = scalar(1
 const sumsq = (g: MX) => g.mul(g).sumAxes(g.shape.map((_, i) => i), false);
 let mS: MX[] | null = null, vS: MX[] | null = null;
 const lrAt = (it: number) => it < WARMUP ? LR0 * (it + 1) / WARMUP : LR0;
-const reply = (q: string) => tok.decode(generate(params, tok.encode(PROMPT(q)), cfg, EOS, { maxNew: 32, temp: 0 })).trim();
+const RTEMP = STORIES ? 0.7 : 0, RMAX = STORIES ? 120 : 32;   // stories: sample; QA: greedy
+const reply = (q: string) => tok.decode(generate(params, tok.encode(PROMPT(q)), cfg, EOS, { maxNew: RMAX, temp: RTEMP })).trim();
 
 console.log(`=== chat_sft: ${(treeFlatten(params).reduce((a, p) => a + p.size, 0) / 1e6).toFixed(2)}M params, base=${BASE} ===`);
-console.log(`before: Q:${DATA[0].q} -> ${JSON.stringify(reply(DATA[0].q))}`);
+console.log(`before: ${JSON.stringify(reply(demo[0]))}`);
 
 let loss = 0, step0 = 0;
 for (let it = 0; it < ITERS; it++) {
@@ -84,4 +109,4 @@ console.log(`STEP0 loss=${step0.toFixed(4)}  FINAL loss=${loss.toFixed(4)}`);
 await saveCkpt(OUT, params, cfg);
 console.log(`saved chat checkpoint -> ${OUT}`);
 console.log("\n--- after chat_sft ---");
-for (const { q } of DATA.slice(0, 3)) console.log(`Q: ${q}\nA: ${reply(q)}\n`);
+for (const q of demo) console.log(`Q: ${q}\nA: ${reply(q)}\n`);

@@ -31,11 +31,11 @@ echo "=== [3/5] base_train (pretrain on the token stream + save checkpoint) ==="
 TOKENS=${TOKENS:-tokens} N_LAYER=${N_LAYER:-6} N_HEAD=${N_HEAD:-6} N_EMBD=${N_EMBD:-384} \
   BLOCK=${BLOCK:-256} BATCH=${BATCH:-32} ITERS=${BASE_ITERS:-3000} bun base-train.ts
 
-echo "=== [4/5] chat_sft (load base checkpoint, SFT into a chat model) ==="
-ITERS=${SFT_ITERS:-400} bun chat-sft.ts
+echo "=== [4/5] chat_sft (story-aligned: instruction-tune on the corpus) ==="
+STORIES=$CORPUS ITERS=${SFT_ITERS:-1000} bun chat-sft.ts
 
 echo "=== [5/5] chat ==="
-bun chat-ckpt.ts "Tell me a story about a cat."
-bun chat-ckpt.ts "Who are you?"
+TEMP=0.7 bun chat-ckpt.ts "Tell me a story about a cat."
+TEMP=0.7 bun chat-ckpt.ts "Tell me a story about a robot."
 echo
-echo "Done. CLI:  bun chat-ckpt.ts \"<question>\"    Web UI:  bun chat-web.ts  -> http://localhost:8080"
+echo "Done. CLI:  TEMP=0.7 bun chat-ckpt.ts \"<question>\"    Web UI:  bun chat-web.ts  -> http://localhost:8080"

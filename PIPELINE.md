@@ -26,7 +26,7 @@ work (raw web text needs far more params/compute to be coherent).
 | 1 | `tok_train` | `tok-train.py` | byte-level BPE in **native Rust** (HF tokenizers) → `tokenizer.json` |
 | 2 | `data_prep` | `data-prep.ts` | **stream-encode** the corpus (pure-TS BPE) → uint16 token shards (`tokens-{train,val}.bin`) |
 | 3 | `base_train` | `base-train.ts` | pretrain a GPT on the **memmapped** token stream, **save `base-ckpt.safetensors`** — real MLX over FFI |
-| 4 | `chat_sft` | `chat-sft.ts` | load the base checkpoint, SFT (completion-only loss), save `chat-ckpt.safetensors` |
+| 4 | `chat_sft` | `chat-sft.ts` | load the base checkpoint, SFT (completion-only loss), save `chat-ckpt.safetensors`. **Story-aligned** (`STORIES=<corpus>`): instruction-tunes on *"Tell me a story about {topic}." → {a real story}* so the chat matches a TinyStories base's competence |
 | 5 | `chat_cli` | `chat-ckpt.ts` | load the chat checkpoint and generate replies (CLI) |
 | 5b | `chat_web` | `chat-web.ts` | serve the checkpoint behind the OpenAI API + `chat.html` UI (`bun chat-web.ts` → http://localhost:8080) |
 

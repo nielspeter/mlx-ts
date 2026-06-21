@@ -59,6 +59,7 @@ export class MX {
   sub(o: MX) { return this.r(m.mlx_subtract, this.h, o.h, stream); }
   sigmoid() { return this.r(m.mlx_sigmoid, this.h, stream); }
   silu() { return this.mul(this.sigmoid()); }
+  tanh() { return this.r(m.mlx_tanh, this.h, stream); }
   sqrt() { return this.r(m.mlx_sqrt, this.h, stream); }
   meanAll() { const n = this.size; return this.sumAxes(this.shape.map((_, i) => i), false).div(scalar(n)); }
 
@@ -69,6 +70,11 @@ export class MX {
   // shape
   reshape(sh: number[]) { return this.r(m.mlx_reshape, this.h, ptr(new Int32Array(sh)), BigInt(sh.length), stream); }
   transpose(ax: number[]) { return this.r(m.mlx_transpose_axes, this.h, ptr(new Int32Array(ax)), BigInt(ax.length), stream); }
+  // slice [start, stop) along leading axes (stride 1) — e.g. split a fused QKV weight
+  slice(start: number[], stop: number[]) {
+    const st = new Int32Array(start.length).fill(1);
+    return this.r(m.mlx_slice, this.h, ptr(new Int32Array(start)), BigInt(start.length), ptr(new Int32Array(stop)), BigInt(stop.length), ptr(st), BigInt(st.length), stream);
+  }
 
   // elementwise (activations)
   erf() { return this.r(m.mlx_erf, this.h, stream); }
@@ -109,6 +115,7 @@ export class MX {
   // reductions / sampling primitives
   argmax(axis: number) { return this.r(m.mlx_argmax_axis, this.h, axis, false, stream); }
   softmax(axis: number) { return this.r(m.mlx_softmax_axis, this.h, axis, true, stream); }
+  logsumexp(axis: number, keepdims: boolean) { return this.r(m.mlx_logsumexp_axis, this.h, axis, keepdims, stream); }
   argsort(axis: number) { return this.r(m.mlx_argsort_axis, this.h, axis, stream); }
   cumsum(axis: number) { return this.r(m.mlx_cumsum, this.h, axis, false, true, stream); }
   log() { return this.r(m.mlx_log, this.h, stream); }

@@ -78,6 +78,13 @@ python3 reference-qwen-q4.py "The capital of France is" >/tmp/v_p.txt 2>&1; bun 
 python3 reference-olmoe.py "The capital of France is" >/tmp/v_p.txt 2>&1; bun olmoe.ts "The capital of France is" >/tmp/v_t.txt 2>&1;        cmp_pair "real OLMoE-1B-7B 4-bit (MoE)" /tmp/v_t.txt /tmp/v_p.txt genids
 if [ -f gpt2-model.safetensors ]; then  # own temp files: the sharded-OLMoE check below reuses /tmp/v_p.txt
   python3 reference-gpt2.py "The capital of France is" >/tmp/vg_p.txt 2>&1; bun gpt2.ts "The capital of France is" >/tmp/vg_t.txt 2>&1; cmp_pair "real GPT-2-124M (BPE + tied head)" /tmp/vg_t.txt /tmp/vg_p.txt genids
+  # SFT: full fine-tune of GPT-2-124M, completion-masked loss -> step0 matches, both converge
+  ITERS=120 bun sft.ts >/tmp/vs_t.txt 2>&1; ITERS=120 python3 reference-sft.py >/tmp/vs_p.txt 2>&1
+  s0=$(grep STEP0 /tmp/vs_t.txt | grep -oE '[0-9.]+$'); q0=$(grep STEP0 /tmp/vs_p.txt | grep -oE '[0-9.]+$')
+  sf=$(grep FINAL /tmp/vs_t.txt | grep -oE '[0-9.]+$'); qf=$(grep FINAL /tmp/vs_p.txt | grep -oE '[0-9.]+$')
+  if [ -n "$s0" ] && [ "$s0" = "$q0" ] && awk "BEGIN{exit !($sf<0.1 && $qf<0.1)}"; then
+    ok "SFT GPT-2-124M (full FT, completion loss) — step0 ${s0}=PY, converges (-> ${sf})"
+  else no "spike-sft" "TS step0=$s0/final=$sf PY step0=$q0/final=$qf"; fi
 fi
 # Whisper needs mlx_whisper for the oracle + the converted weights; run it only
 # when both are present (skipped gracefully otherwise — not a hard failure).

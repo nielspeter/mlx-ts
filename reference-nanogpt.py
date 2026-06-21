@@ -83,8 +83,8 @@ def gelu(x):
 
 def loss_fn(w, idx, tgt, training=False):
     logits = forward(w, idx, training).reshape(B * T, V)
-    p = mx.softmax(logits, axis=-1)
-    return -mx.take_along_axis(mx.log(p), tgt.reshape(B * T, 1), axis=-1).mean()
+    logp = logits - mx.logsumexp(logits, axis=-1, keepdims=True)   # stable log_softmax
+    return -mx.take_along_axis(logp, tgt.reshape(B * T, 1), axis=-1).mean()
 train_loss = lambda w, idx, tgt: loss_fn(w, idx, tgt, True)
 
 def lr_at(it):

@@ -74,7 +74,11 @@ generalizes this: any opaque `mlx_*` type → `ptr`.
 - **Models**: `qwen.ts` (bf16), `qwen-nn.ts` (4-bit), `olmoe.ts` (MoE),
   `gpt2.ts` (real OpenAI GPT-2-124M: learned pos-emb, LayerNorm+bias, fused QKV,
   `gelu_new`, tied head — token-exact vs `reference-gpt2.py`; uses `tokenizer.ts`'
-  `GPT2_SPLIT` BPE, 8/8 vs HF), `chat.ts`, `lora-train.ts`. `spike-*.ts` = de-risking experiments —
+  `GPT2_SPLIT` BPE, 8/8 vs HF), `sft.ts` (full SFT of GPT-2-124M into a chatbot:
+  chat format + completion-only loss, vs `reference-sft.py`; see SFT.md),
+  `chat.ts`, `lora-train.ts`. Note: `crossEntropy` (loss.ts) uses stable
+  `log_softmax` (`x − logsumexp`) — naive `softmax().log()` NaNs in backward at
+  saturation (hit by SFT memorizing examples). `spike-*.ts` = de-risking experiments —
   e.g. `spike-microgpt.ts` trains Karpathy's ~4k-param microGPT from scratch
   (real MLX `value_and_grad` over FFI, vs `reference-microgpt.py`: step-0 loss
   exact, both converge). Per-step `tidy()` + freeing prior params/moments keeps

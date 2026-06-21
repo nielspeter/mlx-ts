@@ -277,6 +277,10 @@ temperature, top-p, **top-k**, and **repetition penalty**
   generates with a **pure-TS GPT-2 BPE encoder** (`tokenizer.ts` + `GPT2_SPLIT`,
   8/8 token-exact vs HF) — `gelu_new`, LayerNorm-with-bias, tied head, KV cache,
   **token-exact vs `reference-gpt2.py`** at ~210 tok/s. See `GPT2.md`.
+- **SFT a chatbot** — `sft.ts` **full-fine-tunes** real GPT-2-124M into an
+  instruction follower (chat format + completion-only loss), the nanochat chat
+  stage. Step-0 loss matches `reference-sft.py`; after SFT it answers in-format,
+  including a held-out question (Italy → Rome). See `SFT.md`.
 - **Research / inspection** — pull logits, hidden states; the `MX` op surface is open.
 
 Whisper setup (weights/assets are git-ignored — fetched, like the LLM weights):

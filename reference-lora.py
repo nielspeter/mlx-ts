@@ -60,7 +60,7 @@ def forward(ps, idx):
 def loss_fn(ps, idx):
     logits = forward(ps, idx)[: L - 1]                       # [L-1, V]
     targets = idx[1:L].reshape(L - 1, 1)
-    lp = mx.log(mx.softmax(logits, axis=-1))
+    lp = logits - mx.logsumexp(logits, axis=-1, keepdims=True)   # stable log_softmax
     return -mx.take_along_axis(lp, targets, axis=1).mean()
 
 vag = mx.value_and_grad(loss_fn, argnums=0)

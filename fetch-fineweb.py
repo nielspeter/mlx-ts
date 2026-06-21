@@ -24,4 +24,5 @@ with open(OUT, "w") as f:
         written += len(t) + 14
         if written >= MAX_BYTES:
             break
-print(f"wrote {written} bytes ({MAX_BYTES} target) -> {OUT}")
+print(f"wrote {written} bytes ({MAX_BYTES} target) -> {OUT}", flush=True)
+os._exit(0)   # datasets/Xet streaming leaves background threads alive; force a clean exit

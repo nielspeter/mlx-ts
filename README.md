@@ -293,6 +293,11 @@ temperature, top-p, **top-k**, and **repetition penalty**
   BPE-tokenized text and **saves a safetensors checkpoint** (`mx.saveSafetensors`,
   the write side of the loader) that reloads round-trip-clean — the keystone that
   lets pretrain → SFT/inference chain. The `base_train` stage.
+- **The whole pipeline (`run.sh`)** — the TS-over-MLX analogue of nanochat's
+  `runcpu.sh`: **tokenizer → pretrain → SFT → chat**, end to end on one Mac.
+  `chat-sft.ts` loads the base checkpoint and SFTs it; `chat-ckpt.ts` chats with
+  the result. After it, `bun chat-ckpt.ts "What is the capital of France?"` →
+  *"The capital of France is Paris."* See `PIPELINE.md`.
 - **Research / inspection** — pull logits, hidden states; the `MX` op surface is open.
 
 Whisper setup (weights/assets are git-ignored — fetched, like the LLM weights):

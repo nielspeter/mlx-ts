@@ -19,4 +19,7 @@ whisper-mel-filters-*.f32
 names.txt
 input.txt
 gpt2-tokenizer.json
-base-ckpt*
+base-ckpt.safetensors
+base-ckpt-config.json
+chat-ckpt.safetensors
+chat-ckpt-config.json

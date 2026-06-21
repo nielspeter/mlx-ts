@@ -56,6 +56,10 @@ generalizes this: any opaque `mlx_*` type → `ptr`.
   Tokenizer *training* (`tok-train.py`) runs in native Rust (HF `tokenizers`, as
   nanochat does — not MLX compute); output `tokenizer.json` is consumed token-exact
   by `tokenizer.ts` (`tok-train-test.ts`, 4/4).
+- **Full nanochat-style pipeline** (`run.sh`, see PIPELINE.md): `tok-train.py` →
+  `base-train.ts` (pretrain+ckpt) → `chat-sft.ts` (SFT from ckpt) → `chat-ckpt.ts`
+  (chat CLI). Shared GPT + ckpt load/save in `nanogpt-model.ts`. Cross-stage
+  handoff is safetensors checkpoints.
 - **Training**: `optim.ts` (Adam), `loss.ts` (cross_entropy), `pytree.ts`,
   `train.ts` (tree-based `valueAndGrad`).
 - **`lm.ts`** — public generation surface: `Decoder` interface +

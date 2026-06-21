@@ -30,6 +30,11 @@ if [ -f input.txt ]; then   # tok_train: train BPE in native Rust -> our TS infe
   if [ -f tokenizer-trained.json ]; then
     ITERS=200 bun base-train.ts >/tmp/vb.txt 2>&1
     { grep -q "CKPT roundtrip: OK" /tmp/vb.txt && [ -f base-ckpt.safetensors ]; } && ok "base_train + checkpoint save/reload (BPE pretrain)" || no "base-train" "checkpoint"
+    # chat_sft handoff: load the base checkpoint, SFT, then a separate CLI answers a trained Q
+    if [ -f base-ckpt.safetensors ]; then
+      ITERS=300 bun chat-sft.ts >/tmp/vc.txt 2>&1
+      { [ -f chat-ckpt.safetensors ] && bun chat-ckpt.ts "What is the capital of France?" 2>&1 | grep -qi "paris"; } && ok "chat_sft from checkpoint -> chat CLI (pretrain->SFT->chat)" || no "chat-sft" "handoff"
+    fi
   fi
 fi
 python3 reference-chat.py >/dev/null 2>&1

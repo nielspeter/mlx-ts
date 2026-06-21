@@ -6,9 +6,10 @@
 import { dlopen, JSCallback, ptr } from "bun:ffi";
 import { MX, fromF32 } from "./mx.ts";
 import { m } from "./generated.ts";
+import { LIBMLXC } from "./native-lib.ts";
 
 // detail funcs are internal -> not in the generated table; dlopen by hand.
-const lib = dlopen("/opt/homebrew/lib/libmlxc.dylib", {
+const lib = dlopen(LIBMLXC, {
   mlx_closure_new_func: { args: ["ptr"], returns: "ptr" },
   mlx_detail_vmap_trace: { args: ["ptr", "ptr", "ptr", "ptr", "ptr", "u64"], returns: "i32" },
   mlx_detail_vmap_replace: { args: ["ptr", "ptr", "ptr", "ptr", "ptr", "u64", "ptr", "u64"], returns: "i32" },

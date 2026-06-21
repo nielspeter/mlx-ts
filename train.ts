@@ -9,7 +9,8 @@ import { m } from "./generated.ts";
 import { treeFlatten, treeUnflattenLike, type Tree } from "./pytree.ts";
 
 // mlx_closure_new_func takes a C function pointer -> not in the generated table.
-const clib = dlopen("/opt/homebrew/lib/libmlxc.dylib", {
+import { LIBMLXC } from "./native-lib.ts";
+const clib = dlopen(LIBMLXC, {
   mlx_closure_new_func: { args: ["ptr"], returns: "ptr" },
 }).symbols;
 

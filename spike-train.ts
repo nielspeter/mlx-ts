@@ -7,9 +7,10 @@
 import { dlopen, JSCallback, ptr } from "bun:ffi";
 import { MX, fromF32, scalar } from "./mx.ts";
 import { m } from "./generated.ts";
+import { LIBMLXC } from "./native-lib.ts";
 
 // mlx_closure_new_func takes a C function pointer -> not in the generated table; dlopen it.
-const clib = dlopen("/opt/homebrew/lib/libmlxc.dylib", {
+const clib = dlopen(LIBMLXC, {
   mlx_closure_new_func: { args: ["ptr"], returns: "ptr" },
 }).symbols;
 

@@ -11,7 +11,19 @@ const here = dirname(fileURLToPath(import.meta.url));
 const candidates = [
   process.env.MLXTS_LIB,
   join(here, "prebuilds", "darwin-arm64", "libmlxc.dylib"),   // bundled (repo / npm package)
-  "/opt/homebrew/lib/libmlxc.dylib",                          // Homebrew dev fallback
+  "/opt/homebrew/opt/mlx-c/lib/libmlxc.dylib",                // Homebrew dev fallback (Apple silicon)
+  "/opt/homebrew/lib/libmlxc.dylib",
+  "/usr/local/opt/mlx-c/lib/libmlxc.dylib",                   // Homebrew dev fallback (Intel)
+  "/usr/local/lib/libmlxc.dylib",
 ].filter(Boolean) as string[];
 
-export const LIBMLXC = candidates.find((p) => existsSync(p)) ?? candidates[candidates.length - 1];
+const found = candidates.find((p) => existsSync(p));
+if (!found) {
+  console.error(
+    "libmlxc.dylib not found. Install with `brew install mlx-c`, ship a copy in\n" +
+    "prebuilds/darwin-arm64/, or point MLXTS_LIB at one. Tried:\n" +
+    candidates.map((c) => `  ${c}`).join("\n"),
+  );
+}
+
+export const LIBMLXC = found ?? candidates[candidates.length - 1];

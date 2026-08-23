@@ -5,10 +5,36 @@
 // We parse each decl, map C types -> FFI types for the dlopen table, and for the
 // standard single-output ops also emit an ergonomic wrapper.
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 
-const INC = "/opt/homebrew/Cellar/mlx-c/0.6.0_2/include/mlx/c";
-const LIB = "/opt/homebrew/lib/libmlxc.dylib";
+// mlx-c headers. `MLXTS_INCLUDE` overrides; otherwise prefer Homebrew's
+// version-independent symlinks (so a `brew upgrade mlx-c` doesn't break this),
+// then fall back to the newest versioned Cellar install.
+function resolveInclude(): string {
+  const cellar = (root: string) =>
+    existsSync(root) ? readdirSync(root).sort().reverse().map((v) => `${root}/${v}/include/mlx/c`) : [];
+  const candidates = [
+    process.env.MLXTS_INCLUDE,
+    "/opt/homebrew/opt/mlx-c/include/mlx/c",  // Homebrew, Apple silicon
+    "/opt/homebrew/include/mlx/c",
+    "/usr/local/opt/mlx-c/include/mlx/c",     // Homebrew, Intel
+    "/usr/local/include/mlx/c",
+    ...cellar("/opt/homebrew/Cellar/mlx-c"),
+    ...cellar("/usr/local/Cellar/mlx-c"),
+  ].filter(Boolean) as string[];
+  const hit = candidates.find((p) => existsSync(`${p}/ops.h`));
+  if (!hit) {
+    console.error(
+      "mlx-c headers not found (looking for ops.h).\n" +
+      "Install with `brew install mlx-c`, or set MLXTS_INCLUDE to the dir containing ops.h.\nTried:\n" +
+      candidates.map((c) => `  ${c}`).join("\n"),
+    );
+    process.exit(1);
+  }
+  return hit;
+}
+
+const INC = resolveInclude();
 // Runtime headers (for the symbol table) + the op headers we actually wrap.
 const RUNTIME_HEADERS = ["array.h", "string.h", "stream.h", "vector.h", "map.h", "io.h", "memory.h", "random.h", "transforms.h", "closure.h"];
 const OP_HEADERS = ["ops.h", "fast.h"];

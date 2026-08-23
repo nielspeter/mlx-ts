@@ -7,8 +7,7 @@
 // handle has ctx==NULL, which Bun returns as `null` -> normalize to 0.
 
 import { dlopen, ptr } from "bun:ffi";
-
-const LIB = "/opt/homebrew/lib/libmlxc.dylib";
+import { LIBMLXC as LIB } from "./native-lib.ts";
 
 export const m = dlopen(LIB, {
   mlx_default_gpu_stream_new: { args: [], returns: "ptr" },

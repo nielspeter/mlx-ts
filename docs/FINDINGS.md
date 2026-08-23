@@ -537,7 +537,8 @@ explicit fields). Both are what `isolatedModules` wants anyway.
 **Unresolved:** the relocatable `prebuilds/` bundle is a *different MLX build*
 from Homebrew's mlx-c and does not agree with it numerically — real Qwen3 (bf16
 and 4-bit) and LoRA diverge from MLX-Python when the bundle is loaded, and agree
-when Homebrew's is. The packaging spike is therefore not yet validated.
+when Homebrew's is. The packaging spike is therefore not yet validated — though §7f identifies the
+cause (a different `libmlx` build) and a route that avoids building one at all.
 
 The sharper version of that finding is how it was nearly missed. The resolver
 *preferred* the bundle over Homebrew, on the reasoning that a bundled copy makes
@@ -548,6 +549,60 @@ default. The order is now inverted: the validated build wins when present, the
 bundle is the fallback for machines without Homebrew, and using it prints a
 warning. `../scripts/validate-all.sh` also prints which dylib it resolved, so a parity
 failure can never again be mistaken for a code regression.
+
+## 7f. How Apple ships the native dependency (and what that means for `prebuilds/`)
+
+`mlx-lm` never touches a binary itself. The dependency chain is:
+
+```
+mlx-lm                     pure Python
+  └─ mlx                   0.7 MB wheel, one per CPython ABI (cp310…cp314)
+      └─ mlx-metal         42–62 MB, py3-none-macosx_{14,15,26}_0_arm64
+      └─ mlx-cuda-12 / mlx-cpu   (Linux, behind extras)
+```
+
+The heavy payload is a **separate package pulled in by an environment marker**
+(`mlx-metal==0.32.1 ; platform_system == "Darwin"`), and it is `py3-none-*`:
+Python-version independent, OS/arch specific. Unzipping the macOS 15 wheel:
+
+| inside `mlx-metal` | size |
+|---|---|
+| `mlx/lib/mlx.metallib` | 135.5 MB |
+| `mlx/lib/libmlx.dylib` | 21.8 MB |
+| `mlx/lib/libjaccl.dylib` | 1.6 MB |
+
+That is exactly the npm `optionalDependencies` pattern (esbuild, swc, rollup) in
+Python's idiom — a small front package plus a platform-gated backend — so the
+shape transfers directly:
+
+```
+@nielspeter/mlx-ts                    the JS/TS (96 KB)
+  └─ optionalDependencies
+       @nielspeter/mlx-ts-darwin-arm64   libmlxc + libmlx + metallib
+```
+
+**It also explains §7e's unresolved divergence.** Comparing Apple's binaries with
+the ones in `prebuilds/`:
+
+| artifact | Apple `mlx-metal` | our `prebuilds/` |
+|---|---|---|
+| `libmlx.dylib` | 21.8 MB | 15.5 MB |
+| `libjaccl.dylib` | 1.6 MB | 0.6 MB |
+| `mlx.metallib` | 135.5 MB | 157.7 MB |
+
+Different builds, plainly. That is why the bundle disagrees with MLX-Python on
+real Qwen3: the Python reference runs on Homebrew's `libmlx`, and `prebuilds/`
+is something else compiled with different options.
+
+The fix follows from the structure rather than from debugging: **do not build
+`libmlx` at all.** Take `libmlx.dylib`, `libjaccl.dylib` and `mlx.metallib` from
+Apple's own `mlx-metal` wheel — the exact binaries the parity oracle runs
+against — and compile only `libmlxc.dylib` (0.7 MB, a thin C shim) against them.
+Then the bundled path is the *same* build the suite validates, not a lookalike.
+
+One wrinkle to plan for: Apple ships three macOS variants (14, 15, 26), so the
+Metal target is not one artifact. A single blob, which is what `prebuilds/`
+currently is, was never going to be portable.
 
 ## 8. File map
 **Runtime & codegen**

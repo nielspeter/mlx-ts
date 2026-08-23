@@ -165,6 +165,15 @@ if [ -f data/input.txt ]; then
 fi
 
 echo "=== real models (TS vs MLX Python) ==="
+# The strongest check available: Apple's OWN mlx-lm, not a reimplementation.
+# Every other oracle here builds the forward pass by hand, so a shared
+# misreading of the architecture would agree with us and both be wrong. Skipped
+# when mlx-lm is not installed (pip install mlx-lm).
+if python3 -c "import mlx_lm" >/dev/null 2>&1; then
+  python3 reference/reference-mlxlm-qwen.py "The capital of France is" >/tmp/v_p.txt 2>&1
+  bun src/models/qwen.ts "The capital of France is" >/tmp/v_t.txt 2>&1
+  cmp_pair "real Qwen3-0.6B vs Apple's mlx-lm" /tmp/v_t.txt /tmp/v_p.txt genids
+fi
 python3 reference/reference-qwen.py "The capital of France is" >/tmp/v_p.txt 2>&1; bun src/models/qwen.ts "The capital of France is" >/tmp/v_t.txt 2>&1;          cmp_pair "real Qwen3-0.6B bf16" /tmp/v_t.txt /tmp/v_p.txt genids
 python3 reference/reference-qwen-q4.py "The capital of France is" >/tmp/v_p.txt 2>&1; bun src/models/qwen-nn.ts "The capital of France is" >/tmp/v_t.txt 2>&1;     cmp_pair "real Qwen3-0.6B 4-bit (nn)" /tmp/v_t.txt /tmp/v_p.txt genids
 python3 reference/reference-olmoe.py "The capital of France is" >/tmp/v_p.txt 2>&1; bun src/models/olmoe.ts "The capital of France is" >/tmp/v_t.txt 2>&1;        cmp_pair "real OLMoE-1B-7B 4-bit (MoE)" /tmp/v_t.txt /tmp/v_p.txt genids

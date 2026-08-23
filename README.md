@@ -499,11 +499,14 @@ bun src/models/gpt2.ts "The capital of France is"   # greedy; TEMP/TOP_K/TOP_P/R
 - **Better embeddings** — a *dedicated* embedding model (BERT encoder + WordPiece,
   or Qwen3-Embedding with last-token pooling) for stronger retrieval than the
   current mean-pooled base-LLM vectors.
-- **Shipping a prebuilt `libmlxc`** — the package currently requires
-  `brew install mlx-c` and ships no binaries. Bundling one would drop that
-  prerequisite, but `prebuilds/` is a *different* MLX build that does not agree
-  with MLX-Python numerically, so it is not shippable until that is diagnosed.
-  (Packaging itself is done: `@nielspeter/mlx-ts`, dylib resolved at runtime.)
+- **Shipping the native dependency** — the package requires `brew install mlx-c`
+  and ships no binaries. `prebuilds/` was meant to drop that, but it is a
+  *different* MLX build and disagrees with MLX-Python numerically. The cause is
+  now understood and the route is Apple's own: `mlx` pulls a platform-gated
+  `mlx-metal` wheel carrying `libmlx` + `mlx.metallib`, which is the npm
+  `optionalDependencies` pattern. Reuse **Apple's** binaries rather than building
+  our own, and compile only the 0.7 MB `libmlxc` against them — see
+  `docs/FINDINGS.md` §7f. (Packaging itself is done: `@nielspeter/mlx-ts`.)
 
 ### ❌ Not yet (substantial new code or a real gap)
 - **Text-to-speech** — **de-risked, not built**: the novel vocoder step (iSTFT,

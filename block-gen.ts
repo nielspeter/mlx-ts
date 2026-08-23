@@ -5,7 +5,7 @@
 import {
   array, item, matmul, add, multiply, sigmoid, fastRmsNorm, reshape,
   transposeAxes, fastRope, fastScaledDotProductAttention, sum, type Arr,
-} from "./generated.ts";
+} from "./src/ffi/generated.ts";
 
 const B = 1, L = 3, D = 64, nH = 4, nKV = 2, Dh = 16, I = 128;
 const EPS = 1e-6, THETA = 1_000_000, SCALE = Dh ** -0.5;

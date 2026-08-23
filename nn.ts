@@ -30,29 +30,34 @@ function collectParams(v: any): Tree | undefined {
 
 // A rank-r LoRA adapter delta: x -> (x @ A) @ B * scale. A, B are the params.
 export class LoraDelta extends Module {
-  constructor(public A: MX, public B: MX, public scale: number) { super(); }
+  A: MX; B: MX; scale: number;
+  constructor(A: MX, B: MX, scale: number) { super(); this.A = A; this.B = B; this.scale = scale; }
   forward(x: MX): MX { return x.matmul(this.A).matmul(this.B).mul(scalar(this.scale)); }
 }
 
 export class RMSNorm extends Module {
-  constructor(public weight: MX, public eps: number) { super(); }
+  weight: MX; eps: number;
+  constructor(weight: MX, eps: number) { super(); this.weight = weight; this.eps = eps; }
   forward(x: MX) { return x.rmsNorm(this.weight, this.eps); }
 }
 
 // Linear with weight pre-transposed to [in, out] so forward is plain matmul.
 export class Linear extends Module {
-  constructor(public wt: MX, public bias?: MX) { super(); }
+  wt: MX; bias?: MX;
+  constructor(wt: MX, bias?: MX) { super(); this.wt = wt; this.bias = bias; }
   forward(x: MX) { const y = x.matmul(this.wt); return this.bias ? y.add(this.bias) : y; }
 }
 
 // 4-bit (or n-bit) quantized linear: y = x @ dequant(W).T via quantized_matmul.
 export class QuantizedLinear extends Module {
-  constructor(public wq: MX, public scales: MX, public biases: MX, public gs: number, public bits: number) { super(); }
+  wq: MX; scales: MX; biases: MX; gs: number; bits: number;
+  constructor(wq: MX, scales: MX, biases: MX, gs: number, bits: number) { super(); this.wq = wq; this.scales = scales; this.biases = biases; this.gs = gs; this.bits = bits; }
   forward(x: MX) { return x.qmm(this.wq, this.scales, this.biases, this.gs, this.bits); }
 }
 
 export class Embedding extends Module {
-  constructor(public weight: MX) { super(); }      // [vocab, D]
+  weight: MX;
+  constructor(weight: MX) { super(); this.weight = weight; }      // [vocab, D]
   forward(ids: MX) { return this.weight.takeAxis(ids, 0); }
   asLinear(x: MX) { return x.matmul(this.weight.transpose([1, 0])); } // tied lm_head
 }
@@ -67,8 +72,8 @@ export class MoE extends Module {
   // router: a Module mapping [T,D] -> [T,E] (Linear or QuantizedLinear).
   // normTopK: renormalize the top-K routing weights to sum to 1 (Qwen3-MoE);
   // off for models with norm_topk_prob=false (OLMoE).
-  constructor(public router: Module, public gate: Experts, public up: Experts, public down: Experts,
-              public K: number, public gs: number, public bits: number, public normTopK = true) { super(); }
+  router: Module; gate: Experts; up: Experts; down: Experts; K: number; gs: number; bits: number; normTopK: boolean;
+  constructor(router: Module, gate: Experts, up: Experts, down: Experts, K: number, gs: number, bits: number, normTopK = true) { super(); this.router = router; this.gate = gate; this.up = up; this.down = down; this.K = K; this.gs = gs; this.bits = bits; this.normTopK = normTopK; }
   forward(x: MX): MX {
     const [T, D] = x.shape;                              // x: [T, D]
     const gates = this.router.forward(x).softmax(1);     // [T, E]
@@ -88,7 +93,8 @@ export class MoE extends Module {
 // Quantized embedding: gather the quantized rows and dequantize; tied lm_head
 // reuses the packed weight via quantized_matmul.
 export class QuantizedEmbedding extends Module {
-  constructor(public wq: MX, public scales: MX, public biases: MX, public gs: number, public bits: number) { super(); }
+  wq: MX; scales: MX; biases: MX; gs: number; bits: number;
+  constructor(wq: MX, scales: MX, biases: MX, gs: number, bits: number) { super(); this.wq = wq; this.scales = scales; this.biases = biases; this.gs = gs; this.bits = bits; }
   forward(ids: MX) {
     const wr = this.wq.takeAxis(ids, 0), sr = this.scales.takeAxis(ids, 0), br = this.biases.takeAxis(ids, 0);
     return MX.dequantize(wr, sr, br, this.gs, this.bits);

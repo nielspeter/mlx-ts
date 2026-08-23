@@ -18,7 +18,7 @@
 // sum exactly 20, so a mismatch is visible without a tolerance argument.
 //   bun spike-ffi-bun.ts
 import { dlopen, ptr, toArrayBuffer } from "bun:ffi";
-import { LIBMLXC } from "./native-lib.ts";
+import { LIBMLXC } from "./src/ffi/native-lib.ts";
 
 const FLOAT32 = 10;
 const { symbols: m } = dlopen(LIBMLXC, {

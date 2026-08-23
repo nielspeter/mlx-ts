@@ -4,9 +4,9 @@
 // group_size/bits) wire correctly over Bun FFI. Python ref sum = 0.409543.
 //   python3 (saves moe-test.safetensors) ; bun spike-moe.ts
 
-import { ptr } from "bun:ffi";
+import { ptr } from "./src/ffi/index.ts";
 import { MX } from "./mx.ts";
-import { m, stream, gatherQmm } from "./generated.ts";
+import { m, stream, gatherQmm } from "./src/ffi/generated.ts";
 import { loadSafetensors, get } from "./loader.ts";
 
 const T = 6, IN = 64, GS = 64, BITS = 4;

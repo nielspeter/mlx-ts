@@ -6,10 +6,10 @@
 // bare pointer, so we model every handle as `ptr` (a JS number). An *empty*
 // handle has ctx==NULL, which Bun returns as `null` -> normalize to 0.
 
-import { dlopen, ptr } from "bun:ffi";
-import { LIBMLXC as LIB } from "./native-lib.ts";
+import { open, ptr } from "./src/ffi/index.ts";
+import { LIBMLXC as LIB } from "./src/ffi/native-lib.ts";
 
-export const m = dlopen(LIB, {
+export const m = open(LIB, {
   mlx_default_gpu_stream_new: { args: [], returns: "ptr" },
   // constructors / lifetime
   mlx_array_new:      { args: [], returns: "ptr" },
@@ -36,7 +36,7 @@ export const m = dlopen(LIB, {
   mlx_fast_rope: { args: ["ptr", "ptr", "i32", "bool", "u64", "f32", "i32", "ptr", "ptr"], returns: "i32" },
   // sdpa: res, q, k, v, scale(f32), mask_mode(char*), mask(ptr|null), sinks(ptr|null), stream
   mlx_fast_scaled_dot_product_attention: { args: ["ptr", "ptr", "ptr", "ptr", "f32", "ptr", "ptr", "ptr", "ptr"], returns: "i32" },
-}).symbols;
+});
 
 export const MLX_FLOAT32 = 10;
 export const stream = m.mlx_default_gpu_stream_new() as number;

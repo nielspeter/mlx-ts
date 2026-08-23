@@ -9,7 +9,7 @@ import {
   matmul, add, multiply, reshape, transposeAxes, fastLayerNorm,
   fastScaledDotProductAttention, takeAxis, argmaxAxis, concatenateAxis,
   tanh, square, slice, type Arr,
-} from "./generated.ts";
+} from "./src/ffi/generated.ts";
 import { loadSafetensors, get } from "./loader.ts";
 import { Tokenizer, GPT2_SPLIT } from "./tokenizer.ts";
 import { MX, sample as mxSample, applyRepetitionPenalty, seed as mxSeed } from "./mx.ts";

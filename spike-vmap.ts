@@ -3,17 +3,17 @@
 // batched inputs). The per-op batching rules live in the C++ core and run inside
 // vmap_replace; we only orchestrate. Closure plumbing mirrors train.ts.
 //   bun spike-vmap.ts
-import { dlopen, JSCallback, ptr } from "bun:ffi";
+import { open, callback, ptr } from "./src/ffi/index.ts";
 import { MX, fromF32 } from "./mx.ts";
-import { m } from "./generated.ts";
-import { LIBMLXC } from "./native-lib.ts";
+import { m } from "./src/ffi/generated.ts";
+import { LIBMLXC } from "./src/ffi/native-lib.ts";
 
 // detail funcs are internal -> not in the generated table; dlopen by hand.
-const lib = dlopen(LIBMLXC, {
+const lib = open(LIBMLXC, {
   mlx_closure_new_func: { args: ["ptr"], returns: "ptr" },
   mlx_detail_vmap_trace: { args: ["ptr", "ptr", "ptr", "ptr", "ptr", "u64"], returns: "i32" },
   mlx_detail_vmap_replace: { args: ["ptr", "ptr", "ptr", "ptr", "ptr", "u64", "ptr", "u64"], returns: "i32" },
-}).symbols;
+});
 
 const arrSlot = () => { const s = new BigUint64Array(1); s[0] = BigInt((m.mlx_array_new() as number) ?? 0); return s; };
 const vecSlot = () => { const s = new BigUint64Array(1); s[0] = BigInt((m.mlx_vector_array_new() as number) ?? 0); return s; };
@@ -25,15 +25,15 @@ const keepAlive: unknown[] = [];
 // vmap(fn, inAxes, outAxes): fn maps single examples -> outputs; returns a
 // function over the real batched inputs.
 function vmap(fn: (...xs: MX[]) => MX | MX[], inAxes: number[], outAxes: number[]) {
-  const cb = new JSCallback((resPtr: number, inVec: number) => {
+  const cb = callback({ args: ["ptr", "ptr"], returns: "i32" }, (resPtr: number, inVec: number) => {
     const inputs = Array.from({ length: vsize(inVec) }, (_, i) => new MX(vget(inVec, i)));
     const out = fn(...inputs);
     const outs = Array.isArray(out) ? out : [out];
     m.mlx_vector_array_set(resPtr, vecOf(outs.map((o) => o.h)));
     return 0;
-  }, { args: ["ptr", "ptr"], returns: "i32" });
+  });
   keepAlive.push(cb);
-  const closure = lib.mlx_closure_new_func(cb.ptr) as number;
+  const closure = lib.mlx_closure_new_func(cb.addr) as number;
   const inAx = new Int32Array(inAxes), outAx = new Int32Array(outAxes);
 
   return (...inputs: MX[]): MX[] => {
@@ -73,13 +73,13 @@ const ok2 = approx([...v2.copy().toF32()], [...manual2.copy().toF32()]);
 // --- test 3: per-sample gradients = vmap(grad(loss)) — the use case vmap unlocks ---
 // single-example grad helper via mlx value_and_grad (same machinery as train.ts)
 function gradArr(f: (x: MX) => MX): (x: MX) => MX {
-  const cb = new JSCallback((outPtr: number, inH: number) => {
+  const cb = callback({ args: ["ptr", "ptr"], returns: "i32" }, (outPtr: number, inH: number) => {
     const x = new MX(vget(inH, 0));
     m.mlx_vector_array_set_value(outPtr, f(x).h);
     return 0;
-  }, { args: ["ptr", "ptr"], returns: "i32" });
+  });
   keepAlive.push(cb);
-  const closure = lib.mlx_closure_new_func(cb.ptr) as number;
+  const closure = lib.mlx_closure_new_func(cb.addr) as number;
   const vag = vecSlot(); vag[0] = BigInt((m.mlx_closure_value_and_grad_new() as number) ?? 0);
   m.mlx_value_and_grad(ptr(vag), closure, ptr(new Int32Array([0])), 1n);
   return (x: MX) => {

@@ -3,16 +3,16 @@
 // mlx-c autograd closure needs and unflattens the gradients back into the same
 // tree shape — so callers never thread parameters by hand.
 
-import { dlopen, JSCallback, ptr } from "bun:ffi";
+import { open, callback, ptr } from "./src/ffi/index.ts";
 import { MX } from "./mx.ts";
-import { m } from "./generated.ts";
+import { m } from "./src/ffi/generated.ts";
 import { treeFlatten, treeUnflattenLike, type Tree } from "./pytree.ts";
 
 // mlx_closure_new_func takes a C function pointer -> not in the generated table.
-import { LIBMLXC } from "./native-lib.ts";
-const clib = dlopen(LIBMLXC, {
+import { LIBMLXC } from "./src/ffi/native-lib.ts";
+const clib = open(LIBMLXC, {
   mlx_closure_new_func: { args: ["ptr"], returns: "ptr" },
-}).symbols;
+});
 
 const nb = () => { const s = new BigUint64Array(1); s[0] = BigInt((m.mlx_array_new() as number) ?? 0); return s; };
 const vget = (vec: number, i: number) => { const s = nb(); m.mlx_vector_array_get(ptr(s), vec, BigInt(i)); return Number(s[0]); };
@@ -25,17 +25,17 @@ const keepAlive: unknown[] = [];
 export function valueAndGrad(template: Tree, loss: (params: Tree, ...extra: MX[]) => MX) {
   const nP = treeFlatten(template).length;
 
-  const cb = new JSCallback((outPtr: number, inH: number) => {
+  const cb = callback({ args: ["ptr", "ptr"], returns: "i32" }, (outPtr: number, inH: number) => {
     const total = vsize(inH);
     const paramLeaves = Array.from({ length: nP }, (_, i) => new MX(vget(inH, i)));
     const extras = Array.from({ length: total - nP }, (_, j) => new MX(vget(inH, nP + j)));
     const out = loss(treeUnflattenLike(template, paramLeaves), ...extras);
     m.mlx_vector_array_set_value(outPtr, out.h);
     return 0;
-  }, { args: ["ptr", "ptr"], returns: "i32" });
+  });
   keepAlive.push(cb);
 
-  const closure = clib.mlx_closure_new_func(cb.ptr) as number;
+  const closure = clib.mlx_closure_new_func(cb.addr) as number;
   const vagS = new BigUint64Array(1); vagS[0] = BigInt((m.mlx_closure_value_and_grad_new() as number) ?? 0);
   m.mlx_value_and_grad(ptr(vagS), closure, ptr(new Int32Array(Array.from({ length: nP }, (_, i) => i))), BigInt(nP));
   const vag = Number(vagS[0]);

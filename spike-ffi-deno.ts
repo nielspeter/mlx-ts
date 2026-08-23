@@ -2,7 +2,7 @@
 // fingerprint exactly ([2.25, 4, 7.5, 6.25], sum 20) and answer the same three
 // questions: ABI, handle representation, zero-copy readback.
 //   deno run --allow-ffi --allow-read --allow-env spike-ffi-deno.ts
-import { LIBMLXC } from "./native-lib.ts";
+import { LIBMLXC } from "./src/ffi/native-lib.ts";
 
 const FLOAT32 = 10;
 const lib = Deno.dlopen(LIBMLXC, {

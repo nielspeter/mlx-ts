@@ -5,8 +5,8 @@
 
 import { MX } from "./mx.ts";
 import { MoE, Linear } from "./nn.ts";
-import { m, stream } from "./generated.ts";
-import { ptr } from "bun:ffi";
+import { m, stream } from "./src/ffi/generated.ts";
+import { ptr } from "./src/ffi/index.ts";
 import { loadSafetensors, get } from "./loader.ts";
 
 const E = 8, K = 2, D = 64, I = 128, T = 5, GS = 64, BITS = 4;

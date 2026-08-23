@@ -1,10 +1,10 @@
 // Safetensors loading over mlx-c: open a file into a string->array map and pull
 // tensors out by name. Built on the generated `m` symbol table.
 
-import { ptr, CString, toArrayBuffer } from "bun:ffi";
+import { ptr, cstring, view as toArrayBuffer } from "./src/ffi/index.ts";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { m, type Arr } from "./generated.ts";
+import { m, type Arr } from "./src/ffi/generated.ts";
 import { MX, clearCache } from "./mx.ts";
 
 // The safetensors Load primitive only implements eval_gpu == no -> load on CPU.
@@ -43,7 +43,7 @@ export function entries(w: Weights): { name: string; shape: number[] }[] {
   const valOut = new BigUint64Array(1); valOut[0] = asBig(m.mlx_array_new());
   const out: { name: string; shape: number[] }[] = [];
   while (m.mlx_map_string_to_array_iterator_next(ptr(keyOut), ptr(valOut), it) === 0) {
-    const name = new CString(Number(keyOut[0])).toString();
+    const name = cstring(Number(keyOut[0]));
     out.push({ name, shape: shapeOf(Number(valOut[0])) });
   }
   return out;

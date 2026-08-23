@@ -9,7 +9,8 @@ export class Adam {
   private m: (MX | null)[] = [];
   private v: (MX | null)[] = [];
   private t = 0;
-  constructor(public lr: number, public b1 = 0.9, public b2 = 0.999, public eps = 1e-8) {}
+  lr: number; b1: number; b2: number; eps: number;
+  constructor(lr: number, b1 = 0.9, b2 = 0.999, eps = 1e-8) { this.lr = lr; this.b1 = b1; this.b2 = b2; this.eps = eps; }
 
   update(params: Tree, grads: Tree): Tree {
     this.t++;

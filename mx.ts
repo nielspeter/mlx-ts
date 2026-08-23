@@ -7,8 +7,8 @@
 //   shape/data buffers leak (MLX copies shapes synchronously; data buffers are
 //   pinned to the owning MX instance).
 
-import { ptr, toArrayBuffer } from "bun:ffi";
-import { m, stream } from "./generated.ts";
+import { ptr, view as toArrayBuffer } from "./src/ffi/index.ts";
+import { m, stream } from "./src/ffi/generated.ts";
 
 const FLOAT32 = 10, INT32 = 7, UINT32 = 3;
 const reg = new FinalizationRegistry<number>((h) => { if (h) m.mlx_array_free(h); });

@@ -9,7 +9,7 @@ import {
   add, multiply, sigmoid, fastRmsNorm, reshape, transposeAxes,
   fastRope, fastScaledDotProductAttention, takeAxis, argmaxAxis, concatenateAxis,
   quantizedMatmul, type Arr,
-} from "./generated.ts";
+} from "./src/ffi/generated.ts";
 import { loadSafetensors, get, entries } from "./loader.ts";
 
 const VOCAB = 32, D = 64, nH = 4, nKV = 2, Dh = 16, I = 128, LAYERS = 2;

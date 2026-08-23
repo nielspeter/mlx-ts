@@ -4,15 +4,15 @@
 // fit to a known target; loss must fall and final W must match MLX Python.
 //   bun spike-train.ts   (then: python3 reference-train.py)
 
-import { dlopen, JSCallback, ptr } from "bun:ffi";
+import { open, callback, ptr } from "./src/ffi/index.ts";
 import { MX, fromF32, scalar } from "./mx.ts";
-import { m } from "./generated.ts";
-import { LIBMLXC } from "./native-lib.ts";
+import { m } from "./src/ffi/generated.ts";
+import { LIBMLXC } from "./src/ffi/native-lib.ts";
 
 // mlx_closure_new_func takes a C function pointer -> not in the generated table; dlopen it.
-const clib = dlopen(LIBMLXC, {
+const clib = open(LIBMLXC, {
   mlx_closure_new_func: { args: ["ptr"], returns: "ptr" },
-}).symbols;
+});
 
 const N = 16, D = 4, LR = 0.1, STEPS = 50;
 const det = (n: number, seed: number) =>
@@ -30,17 +30,17 @@ const getArr = (vec: number, i: number) => { const s = nb(); m.mlx_vector_array_
 const vecOf = (hs: number[]) => m.mlx_vector_array_new_data(ptr(new BigUint64Array(hs.map((h) => BigInt(h)))), BigInt(hs.length)) as number;
 
 // loss(params, data) as a JS closure: inputs = [W, b, X, Y]; returns [mse]
-const lossCb = new JSCallback((outPtr: number, inH: number) => {
+const lossCb = callback({ args: ["ptr", "ptr"], returns: "i32" }, (outPtr: number, inH: number) => {
   const get = (i: number) => new MX(getArr(inH, i));
   const W = get(0), b = get(1), Xi = get(2), Yi = get(3);
   const diff = Xi.matmul(W).add(b).sub(Yi);          // pred - Y
   const loss = diff.mul(diff).sumAxes([0, 1], false).div(scalar(N)); // mean squared error
   m.mlx_vector_array_set_value(outPtr, loss.h);
   return 0;
-}, { args: ["ptr", "ptr"], returns: "i32" });
+});
 
 // value_and_grad of the loss w.r.t. inputs 0,1 (W, b); X, Y are constants
-const closure = clib.mlx_closure_new_func(lossCb.ptr) as number;
+const closure = clib.mlx_closure_new_func(lossCb.addr) as number;
 const vagS = new BigUint64Array(1); vagS[0] = BigInt((m.mlx_closure_value_and_grad_new() as number) ?? 0);
 m.mlx_value_and_grad(ptr(vagS), closure, ptr(new Int32Array([0, 1])), 2n);
 const vag = Number(vagS[0]);

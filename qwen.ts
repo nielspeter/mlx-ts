@@ -9,7 +9,7 @@ import {
   matmul, add, multiply, sigmoid, fastRmsNorm, reshape, transposeAxes,
   fastRope, fastScaledDotProductAttention, takeAxis, argmaxAxis, concatenateAxis,
   type Arr,
-} from "./generated.ts";
+} from "./src/ffi/generated.ts";
 import { loadSafetensors, get } from "./loader.ts";
 import { Tokenizer } from "./tokenizer.ts";
 

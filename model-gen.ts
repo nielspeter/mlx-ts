@@ -13,7 +13,7 @@ import {
   matmul, add, multiply, sigmoid, fastRmsNorm, reshape, transposeAxes,
   fastRope, fastScaledDotProductAttention, takeAxis, argmaxAxis, concatenateAxis,
   type Arr,
-} from "./generated.ts";
+} from "./src/ffi/generated.ts";
 
 // ---- config ----
 const VOCAB = 32, D = 64, nH = 4, nKV = 2, Dh = 16, I = 128, LAYERS = 2;

@@ -8,9 +8,10 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const here = dirname(fileURLToPath(import.meta.url));
+const root = join(here, "..", "..");   // src/ffi -> repo root
 const candidates = [
   process.env.MLXTS_LIB,
-  join(here, "prebuilds", "darwin-arm64", "libmlxc.dylib"),   // bundled (repo / npm package)
+  join(root, "prebuilds", "darwin-arm64", "libmlxc.dylib"),   // bundled (repo / npm package)
   "/opt/homebrew/opt/mlx-c/lib/libmlxc.dylib",                // Homebrew dev fallback (Apple silicon)
   "/opt/homebrew/lib/libmlxc.dylib",
   "/usr/local/opt/mlx-c/lib/libmlxc.dylib",                   // Homebrew dev fallback (Intel)

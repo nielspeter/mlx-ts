@@ -66,11 +66,13 @@ which one it resolved. Set `MLXTS_LIB` to choose.
 
 ```
 src/          the SDK — ffi/ core/ nn/ text/ io/ models/, public API in index.ts
-tools/        codegen.ts: mlx-c headers -> src/ffi/generated.ts
+tools/        codegen.ts (headers -> src/ffi/generated.ts), inspect-real.ts
 examples/     server (OpenAI-compatible), chat UI, streaming CLI
 training/     pretrain, SFT, LoRA, RL, data prep                   [Bun-only]
-spikes/       the original feasibility spikes, kept as evidence
+validation/   TS side of the parity suite — every file here is re-run and
+              diffed against reference/ on each validate-all.sh
 reference/    MLX-Python / HF oracles every claim is checked against
+spikes/       feasibility probes nothing depends on, kept as evidence
 benchmarks/   op-level TS vs MLX-Python timings
 scripts/      validate-all.sh (the full suite), run.sh (the pipeline)
 docs/         FINDINGS.md first — the full write-up
@@ -86,23 +88,23 @@ gitignored and created by the setup steps below, so a fresh clone is small and
 
 ## What runs
 
-- `spikes/mlx.ts` — a minimal **hand-written** Bun-FFI binding over `libmlxc.dylib`:
+- `validation/mlx.ts` — a minimal **hand-written** Bun-FFI binding over `libmlxc.dylib`:
   handle management plus `matmul`, `rms_norm`, `rope`, `sdpa`, `silu`, etc.
 - `tools/codegen.ts` — **parses the mlx-c headers and emits `src/ffi/generated.ts`**: a full
   FFI symbol table (472 entries) + 242 typed op wrappers. The hand-written
-  `spikes/mlx.ts` exists only to bootstrap; `src/ffi/generated.ts` supersedes it.
-- `spikes/block.ts` — a full **Qwen3 decoder block** forward pass (mirrors mlx-lm's
+  `validation/mlx.ts` exists only to bootstrap; `src/ffi/generated.ts` supersedes it.
+- `validation/block.ts` — a full **Qwen3 decoder block** forward pass (mirrors mlx-lm's
   `qwen3.py`): pre-norm, GQA attention with per-head q/k RMSNorm, RoPE, causal
   SDPA, residual, SwiGLU MLP, residual — using the hand binding.
-- `spikes/block-gen.ts` — the **same block built entirely from the generated wrappers**.
-- `spikes/model-gen.ts` — a small **multi-layer Qwen3 model + KV-cache greedy decode
+- `validation/block-gen.ts` — the **same block built entirely from the generated wrappers**.
+- `validation/model-gen.ts` — a small **multi-layer Qwen3 model + KV-cache greedy decode
   loop** (prefill + autoregressive steps), built from the generated wrappers.
 - `src/io/loader.ts` — safetensors loading over `mlx_load_safetensors`: open a file
   into a `string -> array` map, pull tensors by name, enumerate via iterator.
-- `reference/save-model.py` / `spikes/model-load.ts` — Python writes the model to a real
+- `reference/save-model.py` / `validation/model-load.ts` — Python writes the model to a real
   `.safetensors`; TS loads it and runs the decode loop from the loaded weights.
-- `spikes/inspect-real.ts` — loads a real mlx-community model shard and lists tensors.
-- `reference/reference-quant.py` / `spikes/model-quant.ts` — **4-bit quantized** path: Python
+- `tools/inspect-real.ts` — loads a real mlx-community model shard and lists tensors.
+- `reference/reference-quant.py` / `validation/model-quant.ts` — **4-bit quantized** path: Python
   quantizes the Linear projections (`mx.quantize`) and saves `weight`/`scales`/
   `biases`; TS loads them and runs the decode with `quantizedMatmul`.
 - `src/text/tokenizer.ts` — pure-TS byte-level BPE tokenizer (the real Qwen3
@@ -172,8 +174,8 @@ created outside any `tidy()`.
 
 ```sh
 bun tools/codegen.ts       # parse headers -> generated.ts  (+ coverage report)
-bun spikes/block.ts         # hand binding:      TS -> mlx-c -> Metal
-bun spikes/block-gen.ts     # generated wrappers: TS -> mlx-c -> Metal
+bun validation/block.ts         # hand binding:      TS -> mlx-c -> Metal
+bun validation/block-gen.ts     # generated wrappers: TS -> mlx-c -> Metal
 python3 reference/reference.py # MLX Python reference
 ```
 
@@ -189,7 +191,7 @@ token ids must match exactly (any drift in cache concat, RoPE offset, masking,
 or sampling flips a token):
 
 ```sh
-bun spikes/model-gen.ts          # TS + KV cache
+bun validation/model-gen.ts          # TS + KV cache
 python3 reference/reference-decode.py
 # both: generated: [24, 3, 19, 2, 28, 1, 4, 14, 4, 14, 4, 14]
 ```
@@ -198,11 +200,11 @@ python3 reference/reference-decode.py
 
 ```sh
 python3 reference/save-model.py     # writes a real models/model.safetensors (25 tensors)
-bun spikes/model-load.ts         # loads it via mlx_load_safetensors, decodes
+bun validation/model-load.ts         # loads it via mlx_load_safetensors, decodes
 # -> same ids: [24, 3, 19, 2, 28, 1, 4, 14, 4, 14, 4, 14]
 
 # and on a genuine model file:
-bun spikes/inspect-real.ts ~/.cache/huggingface/hub/.../model-00001-of-00004.safetensors
+bun tools/inspect-real.ts ~/.cache/huggingface/hub/.../model-00001-of-00004.safetensors
 # -> loaded ... — 881 tensors  (real names + shapes)
 ```
 
@@ -215,11 +217,11 @@ the GPU compute graph normally.
 Real mlx-community models are quantized. `reference/reference-quant.py` quantizes the
 Linear projections with `mx.quantize` (group_size 64, 4 bits) and stores three
 tensors each — `weight` (packed uint32), `scales`, `biases`; norms/embedding
-stay fp32. `spikes/model-quant.ts` loads them and uses `quantizedMatmul(x, w, scales,
+stay fp32. `validation/model-quant.ts` loads them and uses `quantizedMatmul(x, w, scales,
 biases, transpose=true, 64, 4, "affine")`.
 
 ```sh
-python3 reference/reference-quant.py && bun spikes/model-quant.ts
+python3 reference/reference-quant.py && bun validation/model-quant.ts
 # both: generated: [27, 26, 16, 11, 12, 30, 26, 16, 11, 12, 30, 26]
 ```
 
@@ -251,7 +253,7 @@ loading step. The toy models here use a 32-token vocab for fast parity checks.
 ### Eval-boundary discipline
 
 MLX is lazy: ops build a graph, nothing runs until forced. The decode loop
-(`spikes/model-gen.ts`) calls `evalArray(...caches)` plus reads the token each step, so
+(`validation/model-gen.ts`) calls `evalArray(...caches)` plus reads the token each step, so
 the per-layer KV caches and the next token become concrete arrays. Skip this and
 the graph grows every step — unbounded memory and recompute. Per-step RoPE uses
 `offset = position`; prefill uses a `"causal"` mask, single-token decode uses
@@ -326,12 +328,12 @@ temperature, top-p, **top-k**, and **repetition penalty**
 - **Prompt-driven text tools** — summarize / rewrite / classify / extract /
   translate; **agent loops** (tool use via prompting + JS parsing).
 - **LoRA fine-tuning** of 4-bit Qwen3 (Adam + cross-entropy, `training/lora-train.ts`).
-- **Train a transformer from scratch** — `spikes/spike-microgpt.ts` builds Karpathy's
+- **Train a transformer from scratch** — `validation/spike-microgpt.ts` builds Karpathy's
   ~4k-param microGPT (embeddings → attention → MLP → tied head) and trains it
   end-to-end on the names corpus with the autograd being **real MLX over FFI**
   (his hand-rolled `Value` engine replaced by `value_and_grad`); step-0 loss is
   exact vs the MLX-Python mirror, both converge.
-- **Train a real small GPT** — `spikes/spike-nanogpt.ts` scales that up to nanoGPT:
+- **Train a real small GPT** — `validation/spike-nanogpt.ts` scales that up to nanoGPT:
   a multi-layer char-level GPT on tiny-shakespeare, **mini-batched `[B,T]`,
   AdamW + cosine LR + warmup + global grad clipping + dropout**. At nanoGPT's
   exact `shakespeare-char` config (6 layers, 384 dim, 10.7M params) it reaches

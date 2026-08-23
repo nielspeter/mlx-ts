@@ -15,7 +15,7 @@ clipping — the actual machinery you need to train something useful.
 ## What we built
 Faithful to nanoGPT's `shakespeare-char` recipe, scaled to run on a single Mac:
 
-| nanoGPT ingredient | this spike (`../spikes/spike-nanogpt.ts`) |
+| nanoGPT ingredient | this spike (`../validation/spike-nanogpt.ts`) |
 |---|---|
 | Multi-layer GPT-2 block stack | ✅ N pre-LN blocks (default 4), tied `lm_head` |
 | Multi-head causal attention | ✅ MLX `scaled_dot_product_attention` (causal) |
@@ -37,9 +37,9 @@ env-overridable (`N_LAYER`, `N_HEAD`, `N_EMBD`, `BLOCK`, `BATCH`, `ITERS`,
 
 ## Run it
 ```sh
-bun ../spikes/spike-nanogpt.ts           # fetches data/input.txt; writes shared init + batch-index files to /tmp
+bun ../validation/spike-nanogpt.ts           # fetches data/input.txt; writes shared init + batch-index files to /tmp
 python3 ../reference/reference-nanogpt.py   # the MLX-Python oracle (run the TS spike first)
-ITERS=300 N_LAYER=6 bun ../spikes/spike-nanogpt.ts   # bigger/shorter, etc.
+ITERS=300 N_LAYER=6 bun ../validation/spike-nanogpt.ts   # bigger/shorter, etc.
 ```
 
 ## Result (2000 iters, ~0.8M params)
@@ -71,7 +71,7 @@ iters / β2 0.99). Running that exact config:
 
 ```sh
 N_LAYER=6 N_HEAD=6 N_EMBD=384 BLOCK=256 BATCH=64 ITERS=5000 BETA2=0.99 \
-  DROPOUT=0.2 bun ../spikes/spike-nanogpt.ts
+  DROPOUT=0.2 bun ../validation/spike-nanogpt.ts
 ```
 
 ```
@@ -126,6 +126,6 @@ GPT-2-124M reproduction is single-Mac wall-clock and a BPE *encoder* (we ship
 tiktoken decode-only), **not** any missing capability in the TS↔MLX bridge.
 
 ## Files
-- `../spikes/spike-nanogpt.ts` — model, mini-batch pipeline, AdamW training loop, sampler
+- `../validation/spike-nanogpt.ts` — model, mini-batch pipeline, AdamW training loop, sampler
 - `../reference/reference-nanogpt.py` — MLX-Python oracle for the parity check
 - `data/input.txt` — tiny-shakespeare corpus (fetched, git-ignored)

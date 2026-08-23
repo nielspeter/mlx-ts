@@ -16,7 +16,7 @@ TS, validated against an MLX-Python oracle.
 - **microgpt on the web:** <https://karpathy.ai/microgpt.html> · micrograd video: <https://www.youtube.com/watch?v=VMj-3S1tku0>
 
 ## What we built
-| | Karpathy's microGPT | this spike (`../spikes/spike-microgpt.ts`) |
+| | Karpathy's microGPT | this spike (`../validation/spike-microgpt.ts`) |
 |---|---|---|
 | Autograd | hand-rolled `Value` class | **real MLX `value_and_grad`** over FFI (`../training/train.ts`) |
 | Language | pure Python, no deps | TypeScript + Bun FFI → `libmlxc.dylib` |
@@ -34,7 +34,7 @@ steps, LR `1e-2` decaying linearly to 0.
 
 ## Run it
 ```sh
-bun ../spikes/spike-microgpt.ts          # fetches data/names.txt on first run; writes /tmp/microgpt-init.f32
+bun ../validation/spike-microgpt.ts          # fetches data/names.txt on first run; writes /tmp/microgpt-init.f32
 python3 ../reference/reference-microgpt.py  # the MLX-Python oracle (run the TS spike first — it writes the shared init)
 ```
 
@@ -76,6 +76,6 @@ only the new params + Adam moments, and explicitly `free()` the prior generation
 A good reminder of *why* `tidy()` is the load-bearing memory primitive here.
 
 ## Files
-- `../spikes/spike-microgpt.ts` — the model, training loop, and sampler
+- `../validation/spike-microgpt.ts` — the model, training loop, and sampler
 - `../reference/reference-microgpt.py` — the MLX-Python oracle for the parity check
 - `data/names.txt` — fetched corpus (git-ignored)

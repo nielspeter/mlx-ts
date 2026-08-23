@@ -97,10 +97,10 @@ generalizes this: any opaque `mlx_*` type → `ptr`.
   `examples/chat.ts`, `training/lora-train.ts`. Note: `crossEntropy` (src/nn/loss.ts) uses stable
   `log_softmax` (`x − logsumexp`) — naive `softmax().log()` NaNs in backward at
   saturation (hit by SFT memorizing examples). `spike-*.ts` = de-risking experiments —
-  e.g. `spikes/spike-microgpt.ts` trains Karpathy's ~4k-param microGPT from scratch
+  e.g. `validation/spike-microgpt.ts` trains Karpathy's ~4k-param microGPT from scratch
   (real MLX `value_and_grad` over FFI, vs `reference/reference-microgpt.py`: step-0 loss
   exact, both converge). Per-step `tidy()` + freeing prior params/moments keeps
-  the 1000-step loop inside MLX's buffer limit (gotcha #5). `spikes/spike-nanogpt.ts`
+  the 1000-step loop inside MLX's buffer limit (gotcha #5). `validation/spike-nanogpt.ts`
   scales this to a real multi-layer char-level GPT (tiny-shakespeare,
   mini-batched `[B,T]`, AdamW + cosine LR + warmup + grad clip + dropout). At
   nanoGPT's exact 10.7M `shakespeare-char` config it reaches best val ≈ 1.50
@@ -124,7 +124,7 @@ generalizes this: any opaque `mlx_*` type → `ptr`.
 8. **Training is not bit-reproducible** over a 4-bit base (bf16 rounding + chaos
    near instabilities). Validation criterion: identical start + both converge.
 9. The codegen **skips function-pointer params** (closures) → `dlopen`
-   `mlx_closure_new_func` by hand (see `training/train.ts` / `spikes/spike-train.ts`).
+   `mlx_closure_new_func` by hand (see `training/train.ts` / `validation/spike-train.ts`).
 10. **`vmap` has no public mlx-c symbol**, but is **recoverable** over FFI from
     the internal `mlx_detail_vmap_trace`/`_replace` primitives (`spikes/spike-vmap.ts`:
     single-input, shared-input `-1` axis, and per-sample gradients `vmap(grad)` all

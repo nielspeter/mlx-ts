@@ -23,14 +23,14 @@ bun tools/codegen.ts >/tmp/v_cg.txt 2>&1 && grep -q "wrappers" /tmp/v_cg.txt \
   && ok "codegen ($(grep -oE '[0-9]+ FFI entries' /tmp/v_cg.txt), $(grep -oE '[0-9]+ typed op wrappers' /tmp/v_cg.txt))" || no "codegen" "see /tmp/v_cg.txt"
 
 echo "=== runtimes (same block fingerprint on Bun / Deno / Node) ==="
-FP_BUN=$(bun spikes/block-gen.ts 2>/dev/null | fp)
+FP_BUN=$(bun validation/block-gen.ts 2>/dev/null | fp)
 [ -n "$FP_BUN" ] && ok "bun: Qwen3 block ($FP_BUN)" || no "bun" "no fingerprint"
 if command -v deno >/dev/null 2>&1; then
-  FP=$(deno run --allow-all spikes/block-gen.ts 2>/dev/null | fp)
+  FP=$(deno run --allow-all validation/block-gen.ts 2>/dev/null | fp)
   [ -n "$FP" ] && [ "$FP" = "$FP_BUN" ] && ok "deno: identical to Bun" || no "deno" "DENO=$FP BUN=$FP_BUN"
 fi
 if command -v node >/dev/null 2>&1; then
-  FP=$(node spikes/block-gen.ts 2>/dev/null | fp)
+  FP=$(node validation/block-gen.ts 2>/dev/null | fp)
   [ -n "$FP" ] && [ "$FP" = "$FP_BUN" ] && ok "node: identical to Bun" || no "node" "NODE=$FP BUN=$FP_BUN"
 fi
 if [ -f models/model-q4.safetensors ]; then   # examples/ must run everywhere too
@@ -77,9 +77,9 @@ if [ -f data/input.txt ]; then   # tok_train: train BPE in native Rust -> our TS
 fi
 python3 reference/reference-chat.py >/dev/null 2>&1
 bun tests/chat-test.ts 2>&1 | grep -q "4/4" && ok "chat template vs Python jinja2 (4/4)" || no "chat-template" "parity"
-bun spikes/spike-moe.ts 2>&1 | grep -q "match: true" && ok "MoE gather_qmm op (vs MLX)" || no "spike-moe" "match"
-bun spikes/spike-moe-layer.ts 2>&1 | grep -q "match: true" && ok "MoE full layer (vs MLX)" || no "spike-moe-layer" "match"
-bun spikes/spike-throughput.ts 2>&1 | grep -q "identical (sync == async): true" && ok "async-overlap == sync tokens" || no "spike-throughput" "tokens"
+bun validation/spike-moe.ts 2>&1 | grep -q "match: true" && ok "MoE gather_qmm op (vs MLX)" || no "spike-moe" "match"
+bun validation/spike-moe-layer.ts 2>&1 | grep -q "match: true" && ok "MoE full layer (vs MLX)" || no "spike-moe-layer" "match"
+bun validation/spike-throughput.ts 2>&1 | grep -q "identical (sync == async): true" && ok "async-overlap == sync tokens" || no "spike-throughput" "tokens"
 bun tests/stream-test.ts 2>&1 | grep -q "STREAM OK" && ok "public stream() == generate() (ids + text)" || no "stream-test" "parity"
 python3 reference/reference-mel.py >/dev/null 2>&1
 bun tests/audio-test.ts 2>&1 | grep -q "MEL OK" && ok "log-Mel front-end vs numpy FFT" || no "audio-test" "mel spectrogram parity"
@@ -89,12 +89,12 @@ bun test tests/ 2>&1 | grep -q " 0 fail" && ok "op binding parity vs MLX (${ncas
 bun tests/validate-prod.ts 2>&1 | grep -q "reproducible (same seed -> same ids): true" && ok "sampling reproducible + batching" || no "validate-prod" "sampling"
 
 echo "=== synthetic parity (TS vs MLX Python) ==="
-bun spikes/block.ts >/tmp/v_t.txt 2>&1;        python3 reference/reference.py >/tmp/v_p.txt 2>&1;          cmp_pair "Qwen3 block fp32" /tmp/v_t.txt /tmp/v_p.txt fp
-bun spikes/block-gen.ts >/tmp/v_t.txt 2>&1;    cmp_pair "Qwen3 block (generated wrappers)" /tmp/v_t.txt /tmp/v_p.txt fp
-bun spikes/model-gen.ts >/tmp/v_t.txt 2>&1;    python3 reference/reference-decode.py >/tmp/v_p.txt 2>&1;   cmp_pair "KV-cache decode" /tmp/v_t.txt /tmp/v_p.txt genids
-python3 reference/save-model.py >/dev/null 2>&1; bun spikes/model-load.ts >/tmp/v_t.txt 2>&1;              cmp_pair "safetensors load + decode" /tmp/v_t.txt /tmp/v_p.txt genids
-python3 reference/reference-quant.py >/tmp/v_p.txt 2>&1; bun spikes/model-quant.ts >/tmp/v_t.txt 2>&1;     cmp_pair "4-bit quantized decode" /tmp/v_t.txt /tmp/v_p.txt genids
-bun spikes/spike-train.ts >/tmp/v_t.txt 2>&1; python3 reference/reference-train.py >/tmp/v_p.txt 2>&1;     cmp_pair "training (value_and_grad + SGD)" /tmp/v_t.txt /tmp/v_p.txt wline
+bun validation/block.ts >/tmp/v_t.txt 2>&1;        python3 reference/reference.py >/tmp/v_p.txt 2>&1;          cmp_pair "Qwen3 block fp32" /tmp/v_t.txt /tmp/v_p.txt fp
+bun validation/block-gen.ts >/tmp/v_t.txt 2>&1;    cmp_pair "Qwen3 block (generated wrappers)" /tmp/v_t.txt /tmp/v_p.txt fp
+bun validation/model-gen.ts >/tmp/v_t.txt 2>&1;    python3 reference/reference-decode.py >/tmp/v_p.txt 2>&1;   cmp_pair "KV-cache decode" /tmp/v_t.txt /tmp/v_p.txt genids
+python3 reference/save-model.py >/dev/null 2>&1; bun validation/model-load.ts >/tmp/v_t.txt 2>&1;              cmp_pair "safetensors load + decode" /tmp/v_t.txt /tmp/v_p.txt genids
+python3 reference/reference-quant.py >/tmp/v_p.txt 2>&1; bun validation/model-quant.ts >/tmp/v_t.txt 2>&1;     cmp_pair "4-bit quantized decode" /tmp/v_t.txt /tmp/v_p.txt genids
+bun validation/spike-train.ts >/tmp/v_t.txt 2>&1; python3 reference/reference-train.py >/tmp/v_p.txt 2>&1;     cmp_pair "training (value_and_grad + SGD)" /tmp/v_t.txt /tmp/v_p.txt wline
 # LoRA: identical start, both converge (training over a 4-bit base tracks to float tolerance, not bit-exact)
 bun training/lora-train.ts >/tmp/v_t.txt 2>&1; python3 reference/reference-lora.py >/tmp/v_p.txt 2>&1
 tf=$(grep 'final loss' /tmp/v_t.txt | grep -oE '[0-9.]+$'); pf=$(grep 'final loss' /tmp/v_p.txt | grep -oE '[0-9.]+$')
@@ -105,7 +105,7 @@ else no "lora-train" "TS final=$tf PY final=$pf"; fi
 # microGPT trained from scratch (real MLX autograd over FFI): identical init +
 # data -> exact step-0 loss; both converge (training drifts, FINDINGS §6 #8).
 if [ -f data/names.txt ]; then
-  bun spikes/spike-microgpt.ts >/tmp/v_t.txt 2>&1; python3 reference/reference-microgpt.py >/tmp/v_p.txt 2>&1
+  bun validation/spike-microgpt.ts >/tmp/v_t.txt 2>&1; python3 reference/reference-microgpt.py >/tmp/v_p.txt 2>&1
   t0=$(grep STEP0 /tmp/v_t.txt | grep -oE '[0-9.]+$'); p0=$(grep STEP0 /tmp/v_p.txt | grep -oE '[0-9.]+$')
   tf=$(grep FINAL /tmp/v_t.txt | grep -oE '[0-9.]+$'); pf=$(grep FINAL /tmp/v_p.txt | grep -oE '[0-9.]+$')
   if [ -n "$t0" ] && [ "$t0" = "$p0" ] && awk "BEGIN{exit !($tf<2.6 && $pf<2.6)}"; then
@@ -116,7 +116,7 @@ fi
 # nanoGPT: multi-layer char-level GPT, mini-batched, AdamW + cosine LR + grad clip.
 # 100 iters for speed; identical init + batches -> exact match vs MLX-Python.
 if [ -f data/input.txt ]; then
-  ITERS=100 bun spikes/spike-nanogpt.ts >/tmp/v_t.txt 2>&1; ITERS=100 python3 reference/reference-nanogpt.py >/tmp/v_p.txt 2>&1
+  ITERS=100 bun validation/spike-nanogpt.ts >/tmp/v_t.txt 2>&1; ITERS=100 python3 reference/reference-nanogpt.py >/tmp/v_p.txt 2>&1
   t0=$(grep STEP0 /tmp/v_t.txt | grep -oE '[0-9.]+$'); p0=$(grep STEP0 /tmp/v_p.txt | grep -oE '[0-9.]+$')
   tv=$(grep '^VAL' /tmp/v_t.txt | grep -oE '[0-9.]+$'); pv=$(grep '^VAL' /tmp/v_p.txt | grep -oE '[0-9.]+$')
   if [ -n "$t0" ] && [ "$t0" = "$p0" ] && [ -n "$tv" ] && awk "BEGIN{exit !($tv<3.0 && ($tv-$pv<0.05) && ($pv-$tv<0.05))}"; then

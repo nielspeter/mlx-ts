@@ -72,11 +72,11 @@ Each milestone is a runnable file validated against a reference.
 | # | Capability | File(s) | Validated against | Result |
 |---|---|---|---|---|
 | 1 | FFI → mlx-c → Metal; **autograd through a JS closure** | (initial PoC) | — | `value_and_grad` of a JS function returns correct gradient |
-| 2 | Full Qwen3 decoder block (fp32) | `../spikes/block.ts` / `../reference/reference.py` | MLX Python | `sum=0.005793`, `sum_sq=0.162600` exact |
-| 3 | **Op codegen** from headers | `../tools/codegen.ts` → `../src/ffi/generated.ts` | rebuild block | 242 wrappers; `../spikes/block-gen.ts` reproduces #2 |
-| 4 | KV-cache autoregressive decode | `../spikes/model-gen.ts` / `../reference/reference-decode.py` | MLX Python | identical token ids |
-| 5 | safetensors loading | `../src/io/loader.ts`, `../spikes/model-load.ts` | MLX + real file | round-trip exact; **881 tensors** from a real 27B gemma |
-| 6 | 4-bit `quantized_matmul` | `../spikes/model-quant.ts` / `../reference/reference-quant.py` | MLX Python | identical token ids |
+| 2 | Full Qwen3 decoder block (fp32) | `../validation/block.ts` / `../reference/reference.py` | MLX Python | `sum=0.005793`, `sum_sq=0.162600` exact |
+| 3 | **Op codegen** from headers | `../tools/codegen.ts` → `../src/ffi/generated.ts` | rebuild block | 242 wrappers; `../validation/block-gen.ts` reproduces #2 |
+| 4 | KV-cache autoregressive decode | `../validation/model-gen.ts` / `../reference/reference-decode.py` | MLX Python | identical token ids |
+| 5 | safetensors loading | `../src/io/loader.ts`, `../validation/model-load.ts` | MLX + real file | round-trip exact; **881 tensors** from a real 27B gemma |
+| 6 | 4-bit `quantized_matmul` | `../validation/model-quant.ts` / `../reference/reference-quant.py` | MLX Python | identical token ids |
 | 7 | Byte-level BPE **tokenizer** | `../src/text/tokenizer.ts` / `../tests/tok-test.ts` | HF `tokenizers` | **11/11** encode+decode cases |
 | 8 | **Real Qwen3-0.6B** (bf16), config-driven | `../src/models/qwen.ts` / `../reference/reference-qwen.py` | MLX Python | coherent text, exact ids, ~190 tok/s |
 | 9 | **Real Qwen3-0.6B-4bit** over `nn.Module` | `../src/models/qwen-nn.ts` / `../reference/reference-qwen-q4.py` | MLX Python | coherent text, exact ids, ~264 tok/s |
@@ -84,7 +84,7 @@ Each milestone is a runnable file validated against a reference.
 | 11 | **Real MoE model** (OLMoE-1B-7B, 64 experts top-8, 4-bit) | `../src/models/olmoe.ts` / `../reference/reference-olmoe.py` | MLX Python | coherent text, exact ids, ~209 tok/s |
 | 12 | **Sharded** multi-file checkpoint load | `../src/io/loader.ts` (`shardedWeights`) | MLX Python | identical ids, RSS ≈ model size |
 | 13 | **HF chat template** + end-to-end chat | `../src/text/chat-template.ts` / `../examples/chat.ts` | Python `jinja2` | 4/4 render parity; real assistant replies |
-| 14 | **Training** — `value_and_grad` over a multi-param JS closure + SGD | `../spikes/spike-train.ts` / `../reference/reference-train.py` | MLX Python | loss falls 0.237→0.009, final W bit-identical |
+| 14 | **Training** — `value_and_grad` over a multi-param JS closure + SGD | `../validation/spike-train.ts` / `../reference/reference-train.py` | MLX Python | loss falls 0.237→0.009, final W bit-identical |
 | 15 | **LoRA fine-tune** of real 4-bit Qwen3 — Adam + cross_entropy, frozen base | `../training/lora-train.ts` / `../reference/reference-lora.py` | MLX Python | loss falls 3.16→0.0007; tracks MLX to float tolerance |
 
 All fifteen are re-checked together by `../scripts/validate-all.sh` — **35/35 green**
@@ -292,7 +292,7 @@ The one piece genuinely outside MLX — the **tokenizer** — is done and valida
 
 Before committing to a production `@mlx-ts/lm`, we spiked the unknowns that could
 *kill* the project or limit it to a partial (correctness-only) toy. Both came
-back green. (`../spikes/spike-throughput.ts`, `../reference/spike-bench.py`, `../spikes/spike-moe.ts`.)
+back green. (`../validation/spike-throughput.ts`, `../reference/spike-bench.py`, `../validation/spike-moe.ts`.)
 
 **Spike A — serving viability (is JS/FFI overhead a wall?).** Measured tok/s on
 the same 4-bit Qwen3-0.6B, 128 tokens:
@@ -324,11 +324,11 @@ is retired.
 
 **Spike C — MoE (is `gather_qmm` callable over FFI?).** The expert-dispatch op
 (`gather_qmm` with `lhs_indices`/`rhs_indices` routing + optional group_size/bits)
-reproduced Python's result exactly (`0.409543`) over Bun FFI (`../spikes/spike-moe.ts`).
+reproduced Python's result exactly (`0.409543`) over Bun FFI (`../validation/spike-moe.ts`).
 Then the **full MoE layer** — router → softmax → top-K (`argpartition`) →
 weight renormalize → quantized expert dispatch → weighted combine — was built as
 an `nn.MoE` module (`../src/nn/nn.ts`) and matched the Python reference **exactly**
-(`sum=9.353439`, `sumsq=11773.206`; `../spikes/spike-moe-layer.ts`).
+(`sum=9.353439`, `sumsq=11773.206`; `../validation/spike-moe-layer.ts`).
 
 Finally, a **real MoE model end-to-end**: `nn.MoE` wired into a decoder loads
 **OLMoE-1B-7B** (64 experts, top-8, 4-bit, ~3.6 GB), generating coherent text —
@@ -545,15 +545,15 @@ Deep-dive notes: `MICROGPT.md`, `NANOGPT.md`, `GPT2.md`.
 - `../src/models/olmoe.ts` — config-driven **OLMoE-1B-7B MoE** (single-file or `MX_SHARDED`)
 - `../src/models/gpt2.ts` — real OpenAI **GPT-2-124M** (BPE + `gelu_new` + tied head), token-exact; sampling flags
 - `block*.ts`, `model-*.ts` — the staged PoCs (block, decode, safetensors, quant)
-- `../spikes/inspect-real.ts` — enumerate a real model file's tensors
+- `../tools/inspect-real.ts` — enumerate a real model file's tensors
 - `../reference/split-olmoe.py` — split a single file into shards (to exercise the sharded loader)
 
-**Spikes** — `../spikes/spike-throughput.ts` (async overlap / serving viability),
-`../reference/spike-bench.py` (Python tok/s bar), `../spikes/spike-moe.ts` (gather_qmm op),
-`../spikes/spike-moe-layer.ts` (full MoE layer), `../spikes/spike-train.ts` (training: value_and_grad
+**Spikes** — `../validation/spike-throughput.ts` (async overlap / serving viability),
+`../reference/spike-bench.py` (Python tok/s bar), `../validation/spike-moe.ts` (gather_qmm op),
+`../validation/spike-moe-layer.ts` (full MoE layer), `../validation/spike-train.ts` (training: value_and_grad
 + SGD), `../spikes/spike-istft.ts` (iSTFT vocoder synthesis — TTS de-risk),
 `../spikes/spike-vmap.ts` (`vmap` recovered from the detail trace/replace primitives),
-`../spikes/spike-microgpt.ts` (microGPT from scratch), `../spikes/spike-nanogpt.ts` (multi-layer GPT
+`../validation/spike-microgpt.ts` (microGPT from scratch), `../validation/spike-nanogpt.ts` (multi-layer GPT
 from scratch — trains to nanoGPT's Shakespeare baseline). See §7d.
 
 **References & validation**

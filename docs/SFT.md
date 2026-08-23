@@ -56,7 +56,7 @@ guarded on the GPT-2 weights).
 
 ## Scope
 This is the SFT *stage* of a nanochat-style pipeline. The pieces around it already
-exist in mlx-ts: pretraining (`../spikes/spike-nanogpt.ts`), KV-cache inference
+exist in mlx-ts: pretraining (`../validation/spike-nanogpt.ts`), KV-cache inference
 (`../src/models/gpt2.ts`), and an OpenAI-compatible chat server + web UI (`../examples/server.ts`). What's
 not built: tokenizer *training*, a Muon optimizer, and an RL stage — each just
 MLX ops + orchestration, no gap in the TS↔MLX bridge.

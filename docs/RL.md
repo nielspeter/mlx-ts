@@ -56,7 +56,7 @@ gradient-bearing part is validated cross-entropy.
 
 ## Where this lands
 RL was the last unbuilt nanochat stage. mlx-ts now covers the whole pipeline shape
-end to end — **tokenizer (BPE) → pretrain (`../spikes/spike-nanogpt.ts`) → SFT (`../training/sft.ts`) →
+end to end — **tokenizer (BPE) → pretrain (`../validation/spike-nanogpt.ts`) → SFT (`../training/sft.ts`) →
 RL (`../training/rl.ts`) → KV-cache inference (`../src/models/gpt2.ts`) → chat server + web UI
 (`../examples/server.ts`)** — all TypeScript over MLX, each stage validated against an
 MLX-Python mirror. What's not built: a Muon optimizer, BPE tokenizer *training*

@@ -20,7 +20,8 @@ export const backend: Backend = {
     return out;
   },
 
-  ptr: (v: ArrayBufferView) => bunPtr(v),
+  // bun:ffi types ptr() more narrowly than our ArrayBufferView contract.
+  ptr: (v: ArrayBufferView) => bunPtr(v as unknown as NodeJS.TypedArray),
   view: (addr: number, off: number, len: number) => toArrayBuffer(addr, off, len),
   cstring: (addr: number) => new CString(addr).toString(),
 

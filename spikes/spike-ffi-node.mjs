@@ -3,7 +3,7 @@
 // ([2.25, 4, 7.5, 6.25], sum 20) and answer the same three questions.
 //   node spike-ffi-node.mjs
 import koffi from "koffi";
-import { LIBMLXC } from "./native-lib.ts";
+import { LIBMLXC } from "../src/ffi/native-lib.ts";
 
 const FLOAT32 = 10;
 const lib = koffi.load(LIBMLXC);

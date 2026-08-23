@@ -22,6 +22,22 @@ echo "=== codegen ==="
 bun tools/codegen.ts >/tmp/v_cg.txt 2>&1 && grep -q "wrappers" /tmp/v_cg.txt \
   && ok "codegen ($(grep -oE '[0-9]+ FFI entries' /tmp/v_cg.txt), $(grep -oE '[0-9]+ typed op wrappers' /tmp/v_cg.txt))" || no "codegen" "see /tmp/v_cg.txt"
 
+echo "=== static analysis ==="
+# Nothing compiles this project — Bun/Deno/Node all strip types without checking
+# them — so tsc is the only thing that ever looks at the types.
+bunx tsc --noEmit >/tmp/v_tsc.txt 2>&1 \
+  && ok "tsc --noEmit (0 type errors)" \
+  || no "typecheck" "$(grep -c 'error TS' /tmp/v_tsc.txt) errors, see /tmp/v_tsc.txt"
+
+# The published surface: nothing else in the suite imports it, so a missing or
+# broken export would otherwise go unnoticed until a consumer hit it.
+NEXP=$(bun -e 'import * as m from "./src/index.ts";
+  const need = ["MX","tidy","Tokenizer","generate","valueAndGrad","loadWhisper","loadSafetensors","backend"];
+  const missing = need.filter((k) => !(k in m));
+  if (missing.length) { console.error("missing: " + missing.join(", ")); process.exit(1); }
+  console.log(Object.keys(m).length);' 2>/tmp/v_api.txt)
+[ -n "$NEXP" ] && ok "public API src/index.ts loads ($NEXP exports)" || no "public API" "$(cat /tmp/v_api.txt | tail -1)"
+
 echo "=== runtimes (same block fingerprint on Bun / Deno / Node) ==="
 FP_BUN=$(bun validation/block-gen.ts 2>/dev/null | fp)
 [ -n "$FP_BUN" ] && ok "bun: Qwen3 block ($FP_BUN)" || no "bun" "no fingerprint"

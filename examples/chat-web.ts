@@ -28,14 +28,28 @@ function acquire(): Promise<() => void> {
   return prev.then(() => { let done = false; return () => { if (!done) { done = true; release(); } }; });
 }
 
-type Msg = { role: string; content: string };
+import type { Message } from "../src/text/chat-template.ts";
+
+// Roles arrive from an untrusted HTTP body. `Msg` used to type them as plain
+// `string`, so anything at all reached the Jinja chat template; validate here so
+// the type is true and a bad role is a 400 rather than a surprise in the prompt.
+const ROLES = new Set(["system", "user", "assistant"]);
+function asMessages(v: unknown): Message[] | null {
+  if (!Array.isArray(v) || v.length === 0) return null;
+  const out: Message[] = [];
+  for (const msg of v) {
+    if (!msg || typeof msg.content !== "string" || !ROLES.has(msg.role)) return null;
+    out.push({ role: msg.role as Message["role"], content: msg.content });
+  }
+  return out;
+}
 // our SFT chat format: "User: ..\nAssistant: ..\n" turns, ending at "Assistant:"
-const renderPrompt = (messages: Msg[]) =>
+const renderPrompt = (messages: Message[]) =>
   messages.filter((m) => m.role !== "system").map((m) => (m.role === "user" ? `User: ${m.content}` : `Assistant: ${m.content}`)).join("\n") + "\nAssistant:";
 
 // streaming generation: one token at a time, incremental UTF-8 decode, stop at EOS
 // or when the model starts a new "User:" turn.
-async function* run(messages: Msg[], temp: number, maxNew: number, cancelled: () => boolean) {
+async function* run(messages: Message[], temp: number, maxNew: number, cancelled: () => boolean) {
   let ids = tok.encode(renderPrompt(messages));
   const det = tok.detokenizer();
   let full = "", n = 0;
@@ -66,8 +80,8 @@ const rid = () => "chatcmpl-" + Math.random().toString(36).slice(2);
 async function chat(req: Request): Promise<Response> {
   let body: any;
   try { body = await req.json(); } catch { return json({ error: "invalid JSON body" }, 400); }
-  const messages: Msg[] = body.messages;
-  if (!Array.isArray(messages) || messages.length === 0) return json({ error: "messages[] required" }, 400);
+  const messages = asMessages(body.messages);
+  if (!messages) return json({ error: "messages[] required: {role: system|user|assistant, content: string}" }, 400);
   const temp = body.temperature ?? 0, maxNew = body.max_tokens ?? 64;
   const id = rid(), created = now();
 

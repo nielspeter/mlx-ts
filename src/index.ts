@@ -36,8 +36,18 @@ export { SR, decodeAudio, padOrTrim, loadMelFilters, logMel } from "./audio/mel.
 // --- weights -------------------------------------------------------------
 export {
   loadSafetensors, singleFileWeights, shardedWeights, shapeOf, freeMap,
-  type Weights,
+  get, entries, type Weights, type WeightMap,
 } from "./io/loader.ts";
+
+// --- models --------------------------------------------------------------
+// Assembled models that are importable as modules. qwen.ts, gpt2.ts and
+// olmoe.ts are CLI scripts rather than modules and are deliberately absent —
+// run them with `bun src/models/<name>.ts "prompt"`.
+export { Whisper, loadWhisper } from "./models/whisper.ts";
+export { WhisperTokenizer, langToken } from "./text/whisper-tokenizer.ts";
+export { generateBatch } from "./models/qwen-nn.ts";
+// Namespaced: its `generate`/`forward` would collide with the ones above.
+export * as nanogpt from "./models/nanogpt-model.ts";
 
 // --- runtime / FFI -------------------------------------------------------
 // `backend.name` tells you which runtime was detected; LIBMLXC is the resolved

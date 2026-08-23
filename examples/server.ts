@@ -15,7 +15,7 @@ import { Qwen3 } from "../src/models/qwen-nn.ts";
 import { MX, fromI32, tidy } from "../src/core/mx.ts";
 import { streamTokens, type GenOptions } from "../src/text/lm.ts";
 import { Tokenizer } from "../src/text/tokenizer.ts";
-import { ChatTemplate } from "../src/text/chat-template.ts";
+import { ChatTemplate, type Message } from "../src/text/chat-template.ts";
 import { loadSafetensors } from "../src/io/loader.ts";
 import { Whisper, loadWhisper } from "../src/models/whisper.ts";
 import { WhisperTokenizer } from "../src/text/whisper-tokenizer.ts";
@@ -65,7 +65,19 @@ function acquire(): Promise<() => void> {
 }
 
 // ---- request -> GenOptions (OpenAI-ish field names) ----
-type Msg = { role: string; content: string };
+// Roles arrive from an untrusted HTTP body. `Msg` used to type them as plain
+// `string`, so anything at all reached the Jinja chat template; validate here so
+// the type is true and a bad role is a 400 rather than a surprise in the prompt.
+const ROLES = new Set(["system", "user", "assistant"]);
+function asMessages(v: unknown): Message[] | null {
+  if (!Array.isArray(v) || v.length === 0) return null;
+  const out: Message[] = [];
+  for (const msg of v) {
+    if (!msg || typeof msg.content !== "string" || !ROLES.has(msg.role)) return null;
+    out.push({ role: msg.role as Message["role"], content: msg.content });
+  }
+  return out;
+}
 function toOptions(b: any): GenOptions {
   return {
     max: b.max_tokens ?? 512,
@@ -79,7 +91,7 @@ function toOptions(b: any): GenOptions {
 
 // Generate text incrementally; yields decoded pieces, honoring `stop` strings.
 // Returns token counts via the final `done` record.
-async function* run(messages: Msg[], opts: GenOptions, stops: string[], cancelled: () => boolean) {
+async function* run(messages: Message[], opts: GenOptions, stops: string[], cancelled: () => boolean) {
   const ids = tok.encode(ct.render(messages));
   const det = tok.detokenizer();
   let full = "", n = 0;
@@ -161,13 +173,13 @@ async function transcriptions(req: Request): Promise<Response> {
 async function chat(req: Request): Promise<Response> {
   let body: any;
   try { body = await req.json(); } catch { return json({ error: "invalid JSON body" }, 400); }
-  const messages: Msg[] = body.messages;
-  if (!Array.isArray(messages) || messages.length === 0) return json({ error: "messages[] required" }, 400);
+  const messages = asMessages(body.messages);
+  if (!messages) return json({ error: "messages[] required: {role: system|user|assistant, content: string}" }, 400);
   const opts = toOptions(body);
   const stops: string[] = body.stop ? (Array.isArray(body.stop) ? body.stop : [body.stop]) : [];
   const id = rid(), created = now();
   // reply in the user's language unless the caller set its own system message
-  const sys: Msg = { role: "system", content: "You are a helpful assistant. Always reply in the same language as the user's message." };
+  const sys: Message = { role: "system", content: "You are a helpful assistant. Always reply in the same language as the user's message." };
   const msgs = messages.some((m) => m.role === "system") ? messages : [sys, ...messages];
 
   if (!body.stream) {

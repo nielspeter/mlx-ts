@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    // The repo runs .ts directly on Bun, Deno and Node — nothing is ever
+    // compiled, so this config exists purely to type-check (`bun run typecheck`).
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "types": ["node", "bun"],
+
+    "strict": true,
+    "noUncheckedIndexedAccess": false,
+    "noFallthroughCasesInSwitch": true,
+    "forceConsistentCasingInFileNames": true,
+
+    // Node runs .ts by stripping types only, so every construct here must be
+    // erasable — no enums, no parameter properties, no namespaces.
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "erasableSyntaxOnly": true,
+
+    "skipLibCheck": true
+  },
+  "include": ["src", "examples", "training", "validation", "spikes", "tests", "tools", "benchmarks"],
+  "exclude": ["node_modules", "models", "data", "checkpoints", "prebuilds"]
+}

@@ -13,10 +13,13 @@ const asBig = (x: unknown) => BigInt((x as number) ?? 0);
 const KEEP: unknown[] = [];
 function cstr(s: string) { const b = new Uint8Array([...new TextEncoder().encode(s), 0]); KEEP.push(b); return ptr(b); }
 
-export type Weights = number; // handle to mlx_map_string_to_array
+// The raw mlx_map_string_to_array handle. Distinct from the `Weights` accessor
+// below — they were both called `Weights`, which is a duplicate-identifier error
+// and silently gave consumers of the public type the wrong one.
+export type WeightMap = number;
 
 // Load a .safetensors file -> map<string, array>.
-export function loadSafetensors(path: string): Weights {
+export function loadSafetensors(path: string): WeightMap {
   const arrMap = new BigUint64Array(1); arrMap[0] = asBig(m.mlx_map_string_to_array_new());
   const strMap = new BigUint64Array(1); strMap[0] = asBig(m.mlx_map_string_to_string_new());
   const rc = m.mlx_load_safetensors(ptr(arrMap), ptr(strMap), cstr(path), cpuStream);
@@ -26,10 +29,10 @@ export function loadSafetensors(path: string): Weights {
 
 // Free the map once all needed tensors have been pulled into MX handles
 // (those keep their own refcount; mmap-backed originals are released).
-export function freeMap(w: Weights): void { m.mlx_map_string_to_array_free(w); }
+export function freeMap(w: WeightMap): void { m.mlx_map_string_to_array_free(w); }
 
 // Fetch one tensor by name.
-export function get(w: Weights, key: string): Arr {
+export function get(w: WeightMap, key: string): Arr {
   const slot = new BigUint64Array(1); slot[0] = asBig(m.mlx_array_new());
   const rc = m.mlx_map_string_to_array_get(ptr(slot), w, cstr(key));
   if (rc !== 0) throw new Error(`missing tensor '${key}'`);
@@ -37,7 +40,7 @@ export function get(w: Weights, key: string): Arr {
 }
 
 // List every (name, shape) in the map.
-export function entries(w: Weights): { name: string; shape: number[] }[] {
+export function entries(w: WeightMap): { name: string; shape: number[] }[] {
   const it = m.mlx_map_string_to_array_iterator_new(w) as number;
   const keyOut = new BigUint64Array(1);
   const valOut = new BigUint64Array(1); valOut[0] = asBig(m.mlx_array_new());

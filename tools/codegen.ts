@@ -119,6 +119,14 @@ function ffiOf(ct: string): string | null {
 const RESERVED = new Set(
   "break case catch class const continue debugger default delete do else enum export extends false finally for function if import in instanceof new null return super switch this throw true try typeof var void while with yield let static await async".split(" "));
 
+// Identifiers the emitted wrapper body uses itself. A C parameter named `m`
+// (mlx_eye, mlx_tri) would shadow the FFI symbol table and make the wrapper
+// throw at runtime — so rename any parameter that collides.
+const SHADOWS = new Set(
+  "m r ptr stream asBig kptr cstr optFloatU64 optIntU64 KEEP Arr Vec Dtype".split(" "));
+
+const safeParam = (n: string): string => (SHADOWS.has(n) || RESERVED.has(n) ? `${n}_` : n);
+
 function camel(mlxName: string): string {
   let n = mlxName.replace(/^mlx_/, "").replace(/_([a-z0-9])/g, (_, c) => c.toUpperCase());
   if (RESERVED.has(n)) n += "_";
@@ -155,7 +163,7 @@ for (const fn of allFns) {
   const callArgs: string[] = ["ptr(r)"];
   let ok = true;
   for (let i = 1; i < fn.params.length; i++) {
-    const p = fn.params[i];
+    const p = { ...fn.params[i], name: safeParam(fn.params[i].name) };
     const ct = p.ctype;
     if (ct === "mlx_stream") { callArgs.push("stream"); continue; }
     if (ct === "int*") {                         // const int* X, size_t X_num -> number[]

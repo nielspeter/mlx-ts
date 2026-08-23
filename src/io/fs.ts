@@ -7,12 +7,12 @@ import { dirname } from "node:path";
 
 const ensureDir = (p: string) => mkdir(dirname(p), { recursive: true });
 
-export const readText = (path: string): Promise<string> => readFile(path, "utf8");
+export const readText = (path: string | URL): Promise<string> => readFile(path, "utf8");
 
-export const readJson = async <T = any>(path: string): Promise<T> =>
+export const readJson = async <T = any>(path: string | URL): Promise<T> =>
   JSON.parse(await readFile(path, "utf8")) as T;
 
-export const readBytes = async (path: string): Promise<Uint8Array> =>
+export const readBytes = async (path: string | URL): Promise<Uint8Array> =>
   new Uint8Array((await readFile(path)).buffer as ArrayBuffer);
 
 export const writeText = async (path: string, data: string): Promise<void> => {

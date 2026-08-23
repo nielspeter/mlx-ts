@@ -4,6 +4,10 @@
 //   deno run --allow-ffi --allow-read --allow-env spike-ffi-deno.ts
 import { LIBMLXC } from "../src/ffi/native-lib.ts";
 
+// This spike is deliberately idiomatic Deno; the repo type-checks with Node/Bun
+// types, which do not know the Deno global.
+declare const Deno: any;
+
 const FLOAT32 = 10;
 const lib = Deno.dlopen(LIBMLXC, {
   mlx_default_gpu_stream_new: { parameters: [], result: "pointer" },

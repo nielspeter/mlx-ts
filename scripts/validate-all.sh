@@ -78,6 +78,14 @@ if [ -f models/model-q4.safetensors ]; then   # examples/ must run everywhere to
   done
 fi
 
+# load() from a repo id — only when the model is already cached, so the suite
+# never depends on the network.
+if bun -e 'import {isCached} from "./src/io/hub.ts"; process.exit(await isCached("mlx-community/Qwen3-0.6B-4bit","model.safetensors") ? 0 : 1)' 2>/dev/null; then
+  OUT=$(bun examples/hub.ts "The capital of France is" 2>&1 | tail -1)
+  case "$OUT" in *"chunks in"*) ok "load() from a hub repo id -> streaming text" ;;
+                 *) no "hub load()" "$OUT" ;; esac
+fi
+
 echo "=== examples (no model files needed) ==="
 for EX in basics module train; do
   OUT=$(bun examples/$EX.ts 2>&1 | tail -1)

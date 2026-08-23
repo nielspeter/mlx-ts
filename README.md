@@ -82,8 +82,17 @@ npm i @nielspeter/mlx-ts              # or: bun add / deno add npm:
 ```
 
 ```ts
-import { MX, fromF32, tidy, generate, Tokenizer } from "@nielspeter/mlx-ts";
+import { load, streamText } from "@nielspeter/mlx-ts";
+
+const { model, tokenizer } = await load("mlx-community/Qwen3-0.6B-4bit");
+for await (const piece of streamText(model, tokenizer, tokenizer.encode("Hello"), { max: 48 })) {
+  process.stdout.write(piece);
+}
 ```
+
+`load()` fetches config, tokenizer and weights from the hub and caches them in
+`~/.cache/mlx-ts` (`MLXTS_CACHE` overrides), so only the first run downloads.
+Supported today: 4-bit `qwen3` and `olmoe` checkpoints.
 
 macOS on Apple Silicon only. Bun and Deno work as-is; Node needs 24+ (the
 package ships compiled JS, because Node refuses to type-strip inside

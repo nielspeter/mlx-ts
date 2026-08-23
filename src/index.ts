@@ -52,6 +52,10 @@ export { WhisperTokenizer, langToken } from "./text/whisper-tokenizer.ts";
 // takes one as its first argument, so exporting the function without the class
 // gave consumers a signature they could not satisfy.
 export { Qwen3, generateBatch, stepTidy } from "./models/qwen-nn.ts";
+// Fetch-and-construct from a Hugging Face repo id — the step between `npm i`
+// and a token.
+export { load, type Loaded } from "./models/load.ts";
+export { hubFile, isCached, cacheDir, type FetchOptions } from "./io/hub.ts";
 // Namespaced: its `generate`/`forward` would collide with the ones above.
 export * as nanogpt from "./models/nanogpt-model.ts";
 

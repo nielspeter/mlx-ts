@@ -9,7 +9,7 @@
 // after a GC, which never happens inside a tight synchronous decode loop.
 export {
   MX, tidy, fromF32, fromI32, fromU32, scalar, stack, evalAll, asyncEval, seed,
-  saveSafetensors, dropout, applyRepetitionPenalty, sample,
+  saveSafetensors, dropout, applyRepetitionPenalty, sample, escape,
   activeMemoryMB, peakMemoryMB, cacheMemoryMB, clearCache, resetPeakMemory,
   setMemoryLimit, setWiredLimit,
 } from "./core/mx.ts";
@@ -17,6 +17,7 @@ export { treeFlatten, treeUnflattenLike, treeMap, type Tree } from "./core/pytre
 
 // --- modules, optimizers, losses ----------------------------------------
 export {
+  Module,
   LoraDelta, RMSNorm, Linear, QuantizedLinear, Embedding, QuantizedEmbedding,
   MoE, type Experts,
 } from "./nn/nn.ts";

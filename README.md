@@ -26,6 +26,20 @@ and tied embeddings), loads the real weights, tokenizes with the validated
 `src/text/tokenizer.ts`, and decodes with the KV cache — produced ids match MLX Python
 token-for-token. Everything below is the validated machinery underneath it.
 
+## Try it without downloading anything
+
+Three of the examples need no model files at all — after `brew install mlx-c`
+and `bun install` they run immediately:
+
+```sh
+bun examples/basics.ts     # arrays, ops, and why tidy() is not optional
+bun examples/module.ts     # compose nn Modules into a model
+bun examples/train.ts      # valueAndGrad + Adam + cross-entropy, loss going down
+```
+
+`basics.ts` measures the memory finding from `docs/FINDINGS.md` live — 200
+[512,512] matmuls grow active memory by ~210 MB without `tidy()` and ~3 MB with.
+
 ## Runtimes
 
 The same code runs on all three JS runtimes, producing bit-identical output.
@@ -67,7 +81,7 @@ which one it resolved. Set `MLXTS_LIB` to choose.
 ```
 src/          the SDK — ffi/ core/ nn/ text/ audio/ io/ models/, public API in index.ts
 tools/        codegen.ts (headers -> src/ffi/generated.ts), inspect-real.ts
-examples/     server (OpenAI-compatible), chat UI, streaming CLI
+examples/     basics/module/train need no weights; server, chat UI, streaming CLI
 training/     pretrain, SFT, LoRA, RL, data prep                   [Bun-only]
 validation/   TS side of the parity suite — every file here is re-run and
               diffed against reference/ on each validate-all.sh

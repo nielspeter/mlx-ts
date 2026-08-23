@@ -36,6 +36,18 @@ export function tidy<T>(fn: () => T): T {
   return result;
 }
 
+// Take arrays out of the enclosing tidy() arena so they survive it. The caller
+// becomes responsible for free()ing them.
+//
+// This exists for state that must outlive the step that produced it — an
+// optimizer's moment buffers, say. Without it an optimizer used inside tidy()
+// has its state freed underneath it on the next step, which is why the
+// hand-rolled AdamW in training/ keeps its state at module scope.
+export function escape<T>(v: T): T {
+  if (ARENA) { const s = new Set<MX>(); collect(v, s); for (const x of s) ARENA.delete(x); }
+  return v;
+}
+
 function slot(): BigUint64Array { const r = new BigUint64Array(1); r[0] = BigInt((m.mlx_array_new() as number) ?? 0); return r; }
 const optI = (v: number | null): bigint => v === null ? 0n : BigInt.asUintN(32, BigInt(v)) | (1n << 32n);
 const optF = (v: number | null): bigint => v === null ? 0n : BigInt(new Uint32Array(new Float32Array([v]).buffer)[0]) | (1n << 32n);

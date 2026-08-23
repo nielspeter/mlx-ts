@@ -58,6 +58,16 @@ if [ -f models/model-q4.safetensors ]; then   # examples/ must run everywhere to
   done
 fi
 
+echo "=== examples (no model files needed) ==="
+for EX in basics module train; do
+  OUT=$(bun examples/$EX.ts 2>&1 | tail -1)
+  [ -n "$OUT" ] && ok "examples/$EX.ts" || no "examples/$EX.ts" "$OUT"
+done
+# train.ts doubles as the regression test for Adam inside tidy(): its moment
+# buffers used to be freed as scope-local intermediates on the next step.
+bun examples/train.ts 2>&1 | tail -1 | grep -qE "loss 0\.[01]" \
+  && ok "Adam converges inside tidy() (loss < 0.2)" || no "Adam in tidy" "did not converge"
+
 echo "=== unit/self checks ==="
 python3 reference/tok-reference.py >/dev/null 2>&1
 bun tests/tok-test.ts 2>&1 | grep -q "11/11" && ok "tokenizer vs HF tokenizers (11/11)" || no "tokenizer" "parity"

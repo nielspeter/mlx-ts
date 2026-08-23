@@ -2,7 +2,7 @@
 // and a matching grads tree and returns the updated params tree. Per-leaf
 // first/second moment state is keyed by position in the flattened tree.
 
-import { MX, scalar, evalAll } from "../core/mx.ts";
+import { MX, scalar, evalAll, escape } from "../core/mx.ts";
 import { treeFlatten, treeUnflattenLike, type Tree } from "../core/pytree.ts";
 
 export class Adam {
@@ -21,7 +21,14 @@ export class Adam {
       const mi = (this.m[i] ? this.m[i]!.mul(scalar(this.b1)) : scalar(0)).add(g.mul(scalar(1 - this.b1)));
       const vi = (this.v[i] ? this.v[i]!.mul(scalar(this.b2)) : scalar(0)).add(g.mul(g).mul(scalar(1 - this.b2)));
       evalAll(mi, vi);
-      this.m[i] = mi; this.v[i] = vi;
+      // The moments must outlive this step. If update() is called inside a
+      // tidy() — which is the normal way to train without leaking — they would
+      // otherwise be freed as scope-local intermediates, and the next step
+      // would read freed handles. escape() hands ownership to us; the previous
+      // pair is freed explicitly, so nothing accumulates.
+      const oldM = this.m[i], oldV = this.v[i];
+      this.m[i] = escape(mi); this.v[i] = escape(vi);
+      oldM?.free(); oldV?.free();
       const update = mi.div(scalar(bc1)).div(vi.div(scalar(bc2)).sqrt().add(scalar(this.eps)));
       return p.sub(update.mul(scalar(this.lr)));
     });

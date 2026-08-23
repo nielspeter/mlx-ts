@@ -1,0 +1,19 @@
+{
+  // Publishing config. The repo itself never compiles — Bun/Deno/Node run the
+  // .ts directly — but Node refuses to type-strip inside node_modules
+  // (ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING), so the *package* must ship
+  // JavaScript. rewriteRelativeImportExtensions turns the "./x.ts" specifiers
+  // into "./x.js" on the way out.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "dist",
+    "rootDir": "src",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "rewriteRelativeImportExtensions": true
+  },
+  "include": ["src"],
+  "exclude": ["node_modules"]
+}

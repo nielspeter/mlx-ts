@@ -29,6 +29,20 @@ bunx tsc --noEmit >/tmp/v_tsc.txt 2>&1 \
   && ok "tsc --noEmit (0 type errors)" \
   || no "typecheck" "$(grep -c 'error TS' /tmp/v_tsc.txt) errors, see /tmp/v_tsc.txt"
 
+# Structural invariants (imports resolve, src/ stands alone, docs point at real
+# files). Same script CI runs; needs no MLX.
+bun tools/audit.ts >/tmp/v_audit.txt 2>&1 \
+  && ok "$(tail -1 /tmp/v_audit.txt)" \
+  || no "structural audit" "$(head -1 /tmp/v_audit.txt)"
+
+# Distribution: pack, install into a throwaway project, and use it from all
+# three runtimes. Nothing else in the suite sees what a consumer sees.
+if bash scripts/verify-package.sh >/tmp/v_pkg.txt 2>&1; then
+  ok "npm package installs and runs ($(grep -c ': ok' /tmp/v_pkg.txt)/3 runtimes)"
+else
+  no "npm package" "$(tail -2 /tmp/v_pkg.txt | tr '\n' ' ')"
+fi
+
 # The published surface: nothing else in the suite imports it, so a missing or
 # broken export would otherwise go unnoticed until a consumer hit it.
 NEXP=$(bun -e 'import * as m from "./src/index.ts";

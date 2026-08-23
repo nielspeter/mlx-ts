@@ -26,6 +26,26 @@ and tied embeddings), loads the real weights, tokenizes with the validated
 `src/text/tokenizer.ts`, and decodes with the KV cache — produced ids match MLX Python
 token-for-token. Everything below is the validated machinery underneath it.
 
+## Install
+
+```sh
+brew install mlx-c                      # the native dependency
+npm i @npstrandberg/mlx-ts              # or: bun add / deno add npm:
+```
+
+```ts
+import { MX, fromF32, tidy, generate, Tokenizer } from "@npstrandberg/mlx-ts";
+```
+
+macOS on Apple Silicon only. Bun and Deno work as-is; Node needs 24+ (the
+package ships compiled JS, because Node refuses to type-strip inside
+`node_modules`) and pulls in `koffi` for FFI. The package contains `src/` only —
+no weights, no binaries; `brew install mlx-c` provides `libmlxc.dylib`, and
+`MLXTS_LIB` overrides the lookup.
+
+The repo itself is not the package: clone it for the examples, the parity suite
+against MLX-Python, and `docs/FINDINGS.md`.
+
 ## Try it without downloading anything
 
 Three of the examples need no model files at all — after `brew install mlx-c`
@@ -37,7 +57,7 @@ bun examples/module.ts     # compose nn Modules into a model
 bun examples/train.ts      # valueAndGrad + Adam + cross-entropy, loss going down
 ```
 
-`basics.ts` measures the memory finding from `docs/FINDINGS.md` live — 200
+`examples/basics.ts` measures the memory finding from `docs/FINDINGS.md` live — 200
 [512,512] matmuls grow active memory by ~210 MB without `tidy()` and ~3 MB with.
 
 ## Runtimes

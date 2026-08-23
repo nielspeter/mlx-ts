@@ -1,0 +1,55 @@
+name: ci
+
+on:
+  push: { branches: [main] }
+  pull_request:
+
+jobs:
+  # Everything that does not need Metal, a GPU, or multi-GB weights.
+  static:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - name: typecheck
+        run: bun run typecheck
+      - name: structural audit
+        run: bun tools/audit.ts
+
+  # Needs Apple Silicon + Metal + mlx-c. Runs the checks that need no weights:
+  # codegen against real headers, the arena tests, and the three zero-download
+  # examples on all three runtimes. The full parity suite (scripts/validate-all.sh)
+  # is not run here — it needs ~9 GB of model files — so it stays a local gate.
+  metal:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: denoland/setup-deno@v2
+        with: { deno-version: v2.x }
+      - uses: actions/setup-node@v4
+        with: { node-version: "24" }
+      - run: brew install mlx-c
+      - run: bun install --frozen-lockfile
+      - name: codegen from the installed mlx-c headers
+        run: bun tools/codegen.ts
+      - name: arena / ownership tests
+        run: bun test tests/arena.test.ts
+      - name: op parity fixtures
+        run: bun test tests/lib.test.ts
+      - name: examples on Bun, Deno and Node
+        run: |
+          for ex in basics module train; do
+            bun examples/$ex.ts
+            deno run --allow-all examples/$ex.ts
+            node examples/$ex.ts
+          done
+      - name: same fingerprint on all three runtimes
+        run: |
+          fp() { grep -oE 'sum *= *[-0-9.]+' | tr -d ' '; }
+          B=$(bun validation/block-gen.ts | fp)
+          D=$(deno run --allow-all validation/block-gen.ts | fp)
+          N=$(node validation/block-gen.ts | fp)
+          echo "bun=$B deno=$D node=$N"
+          [ "$B" = "$D" ] && [ "$B" = "$N" ] && [ -n "$B" ]

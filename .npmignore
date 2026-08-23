@@ -1,0 +1,3 @@
+# npm falls back to .gitignore when this file is absent, which would drop
+# src/ffi/generated.ts — the emitted FFI binding the package cannot run without.
+# The `files` field in package.json is what actually selects contents.

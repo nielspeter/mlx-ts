@@ -36,3 +36,7 @@ prebuilds/
 # editor / OS cruft
 .DS_Store
 .claude/
+
+# build output (published, not tracked)
+dist/
+*.tgz

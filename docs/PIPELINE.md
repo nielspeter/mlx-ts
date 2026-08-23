@@ -1,12 +1,12 @@
-# The full nanochat-style pipeline in mlx-ts — `run.sh`
+# The full nanochat-style pipeline in mlx-ts — `../scripts/run.sh`
 
-`run.sh` is the TypeScript-over-MLX analogue of
+`../scripts/run.sh` is the TypeScript-over-MLX analogue of
 [nanochat](https://github.com/karpathy/nanochat)'s `runs/runcpu.sh`: train a
 tokenizer, pretrain a GPT from scratch, SFT it into a chat model, and chat with
 it — **end to end on one Apple-Silicon machine**.
 
 ```sh
-bash run.sh
+bash ../scripts/run.sh
 ```
 
 Same honest caveat as nanochat's own `runcpu.sh`: *a MacBook won't train a strong
@@ -22,19 +22,19 @@ work (raw web text needs far more params/compute to be coherent).
 
 | # | stage | script | engine |
 |---|---|---|---|
-| 0 | dataset | `run.sh` (curl) | bounded prefix of TinyStories (HTTP range request) |
-| 1 | `tok_train` | `tok-train.py` | byte-level BPE in **native Rust** (HF tokenizers) → `tokenizer.json` |
-| 2 | `data_prep` | `data-prep.ts` | **stream-encode** the corpus (pure-TS BPE) → uint16 token shards (`tokens-{train,val}.bin`) |
-| 3 | `base_train` | `base-train.ts` | pretrain a GPT on the **memmapped** token stream, **save `base-ckpt.safetensors`** — real MLX over FFI |
-| 4 | `chat_sft` | `chat-sft.ts` | load the base checkpoint, **batched** SFT (BS examples/step, padded, masked loss on completion tokens only), save `chat-ckpt.safetensors`. **Story-aligned** (`STORIES=<corpus>`): instruction-tunes on *"Tell me a story about {topic}." → {a real story}* so the chat matches a TinyStories base's competence |
-| 5 | `chat_cli` | `chat-ckpt.ts` | load the chat checkpoint and generate replies (CLI) |
-| 5b | `chat_web` | `chat-web.ts` | serve the checkpoint behind the OpenAI API + `chat.html` UI (`bun chat-web.ts` → http://localhost:8080) |
+| 0 | dataset | `../scripts/run.sh` (curl) | bounded prefix of TinyStories (HTTP range request) |
+| 1 | `tok_train` | `../reference/tok-train.py` | byte-level BPE in **native Rust** (HF tokenizers) → `tokenizer.json` |
+| 2 | `data_prep` | `../training/data-prep.ts` | **stream-encode** the corpus (pure-TS BPE) → uint16 token shards (`tokens-{train,val}.bin`) |
+| 3 | `base_train` | `../training/base-train.ts` | pretrain a GPT on the **memmapped** token stream, **save `base-ckpt.safetensors`** — real MLX over FFI |
+| 4 | `chat_sft` | `../training/chat-sft.ts` | load the base checkpoint, **batched** SFT (BS examples/step, padded, masked loss on completion tokens only), save `chat-ckpt.safetensors`. **Story-aligned** (`STORIES=<corpus>`): instruction-tunes on *"Tell me a story about {topic}." → {a real story}* so the chat matches a TinyStories base's competence |
+| 5 | `chat_cli` | `../training/chat-ckpt.ts` | load the chat checkpoint and generate replies (CLI) |
+| 5b | `chat_web` | `../examples/chat-web.ts` | serve the checkpoint behind the OpenAI API + `../examples/chat.html` UI (`bun ../examples/chat-web.ts` → http://localhost:8080) |
 
 Everything except the tokenizer trainer is TypeScript driving MLX. The data
-pipeline streams: `data-prep.ts` reads the corpus in chunks, encodes whole lines
-with the validated TS tokenizer, and appends uint16 tokens to disk; `base-train.ts`
+pipeline streams: `../training/data-prep.ts` reads the corpus in chunks, encodes whole lines
+with the validated TS tokenizer, and appends uint16 tokens to disk; `../training/base-train.ts`
 **`Bun.mmap`s** those shards so training scales past RAM (the OS pages them in).
-The shared GPT + checkpoint load/save live in `nanogpt-model.ts`; the cross-stage
+The shared GPT + checkpoint load/save live in `../src/models/nanogpt-model.ts`; the cross-stage
 handoff is plain safetensors checkpoints (writer = `mx.saveSafetensors`, round-trip
 verified).
 
@@ -72,12 +72,12 @@ The theme throughout: at this scale the *training recipe* dominates, not paramet
 
 ## Pipeline coverage vs nanochat `runcpu.sh`
 - ✅ `tok_train`, ✅ `base_train`, ✅ `chat_sft`, ✅ `chat_cli`, ✅ `chat_web`
-  (`chat-web.ts` serves the checkpoint behind the same OpenAI API + `chat.html` UI)
+  (`../examples/chat-web.ts` serves the checkpoint behind the same OpenAI API + `../examples/chat.html` UI)
 - Not built (not bridge gaps): `base_eval`'s CORE-score harness, the Muon
-  optimizer, multi-GPU scale. RL (GRPO) exists in `rl.ts` (it's in nanochat's
+  optimizer, multi-GPU scale. RL (GRPO) exists in `../training/rl.ts` (it's in nanochat's
   `speedrun.sh`, not `runcpu.sh`).
 
 ## Files
-- `run.sh` — the pipeline runner
-- `tok-train.py` · `base-train.ts` · `chat-sft.ts` · `chat-ckpt.ts` — the stages
-- `nanogpt-model.ts` — shared GPT forward + checkpoint load/save + generation
+- `../scripts/run.sh` — the pipeline runner
+- `../reference/tok-train.py` · `../training/base-train.ts` · `../training/chat-sft.ts` · `../training/chat-ckpt.ts` — the stages
+- `../src/models/nanogpt-model.ts` — shared GPT forward + checkpoint load/save + generation

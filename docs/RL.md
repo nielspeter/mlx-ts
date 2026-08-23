@@ -27,8 +27,8 @@ GSM8K-style verifiable rewards.)
 
 ## Run it
 ```sh
-bun rl.ts                  # needs GPT-2 weights (see GPT2.md / README)
-CHECK=1 bun rl.ts          # deterministic GRPO-loss check (matches reference-rl.py)
+bun ../training/rl.ts                  # needs GPT-2 weights (see GPT2.md / README)
+CHECK=1 bun ../training/rl.ts          # deterministic GRPO-loss check (matches ../reference/reference-rl.py)
 ```
 
 ## Result
@@ -48,20 +48,20 @@ improved from a scalar reward signal, with no supervised targets.
 
 ## Validation
 Rollouts are random, so the *trajectory* isn't reproducible — but the **loss path
-is**. `CHECK=1 bun rl.ts` computes the GRPO loss (forward + CE + advantage
-weighting) on a *fixed* batch and `reference-rl.py` computes the same in MLX
-Python: **RLLOSS = −0.03563 on both**. Wired into `validate-all.sh` (guarded on
+is**. `CHECK=1 bun ../training/rl.ts` computes the GRPO loss (forward + CE + advantage
+weighting) on a *fixed* batch and `../reference/reference-rl.py` computes the same in MLX
+Python: **RLLOSS = −0.03563 on both**. Wired into `../scripts/validate-all.sh` (guarded on
 the GPT-2 weights). The reward/advantage math is pure host arithmetic; the
 gradient-bearing part is validated cross-entropy.
 
 ## Where this lands
 RL was the last unbuilt nanochat stage. mlx-ts now covers the whole pipeline shape
-end to end — **tokenizer (BPE) → pretrain (`spike-nanogpt.ts`) → SFT (`sft.ts`) →
-RL (`rl.ts`) → KV-cache inference (`gpt2.ts`) → chat server + web UI
-(`server.ts`)** — all TypeScript over MLX, each stage validated against an
+end to end — **tokenizer (BPE) → pretrain (`../spikes/spike-nanogpt.ts`) → SFT (`../training/sft.ts`) →
+RL (`../training/rl.ts`) → KV-cache inference (`../src/models/gpt2.ts`) → chat server + web UI
+(`../examples/server.ts`)** — all TypeScript over MLX, each stage validated against an
 MLX-Python mirror. What's not built: a Muon optimizer, BPE tokenizer *training*
 (merge counting — not MLX compute), and multi-GPU scale. None are bridge gaps.
 
 ## Files
-- `rl.ts` — GRPO: rollout + reward + group-relative advantage + policy-gradient update
-- `reference-rl.py` — MLX-Python oracle for the GRPO loss path
+- `../training/rl.ts` — GRPO: rollout + reward + group-relative advantage + policy-gradient update
+- `../reference/reference-rl.py` — MLX-Python oracle for the GRPO loss path

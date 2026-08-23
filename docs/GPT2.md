@@ -12,14 +12,14 @@ achievable form: reproducing GPT-2's *outputs* end-to-end from TypeScript over
 - GPT-2 paper "Language Models are Unsupervised Multitask Learners" (Radford et al., 2019)
 
 ## What we built
-**1. A GPT-2 BPE encoder** (the genuinely missing piece). `tokenizer.ts` was
+**1. A GPT-2 BPE encoder** (the genuinely missing piece). `../src/text/tokenizer.ts` was
 already a byte-level BPE encoder/decoder; GPT-2 needed its specific r50k
 pretokenization (lowercase contractions, grouped digit runs) — added as
 `GPT2_SPLIT`, plus skipping NFC normalization (GPT-2 has no normalizer). Now
-token-exact vs HF `tokenizers` (`gpt2-tok-test.ts`, **8/8** incl. contractions,
+token-exact vs HF `tokenizers` (`../tests/gpt2-tok-test.ts`, **8/8** incl. contractions,
 digit runs, leading whitespace, unicode, em-dashes).
 
-**2. The GPT-2 model** (`gpt2.ts`) — GPT-2's architecture exactly:
+**2. The GPT-2 model** (`../src/models/gpt2.ts`) — GPT-2's architecture exactly:
 
 | GPT-2 detail | implementation |
 |---|---|
@@ -39,21 +39,21 @@ curl -sL $HF/config.json    -o config-gpt2.json
 curl -sL $HF/tokenizer.json -o gpt2-tokenizer.json
 curl -sL $HF/model.safetensors -o gpt2-model.safetensors
 
-bun gpt2.ts "The capital of France is"
-python3 reference-gpt2.py "The capital of France is"   # MLX-Python oracle
+bun ../src/models/gpt2.ts "The capital of France is"
+python3 ../reference/reference-gpt2.py "The capital of France is"   # MLX-Python oracle
 ```
 
 ### Sampling
 Default decode is greedy argmax (deterministic, token-exact vs the oracle), which
 makes the 124M model loop ("…capital of the French Republic…"). Set any of
 `TEMP` / `TOP_K` / `TOP_P` / `REP` (repetition penalty) to sample — reusing
-`mx.ts`'s `sample()` + `applyRepetitionPenalty()`:
+`../src/core/mx.ts`'s `sample()` + `applyRepetitionPenalty()`:
 
 ```sh
-TEMP=0.8 TOP_K=40 SEED=1 bun gpt2.ts "Once upon a time, there was a"
+TEMP=0.8 TOP_K=40 SEED=1 bun ../src/models/gpt2.ts "Once upon a time, there was a"
 #  -> "...chance that you might actually be able to get a good start with your own skills..."
-TEMP=0.9 TOP_P=0.95 REP=1.3 SEED=2 bun gpt2.ts "Once upon a time, there was a"
-REP=1.3 bun gpt2.ts "Once upon a time, there was a"   # greedy + repetition penalty, no loop
+TEMP=0.9 TOP_P=0.95 REP=1.3 SEED=2 bun ../src/models/gpt2.ts "Once upon a time, there was a"
+REP=1.3 bun ../src/models/gpt2.ts "Once upon a time, there was a"   # greedy + repetition penalty, no loop
 ```
 Sampling kills the repetition and gives varied, coherent completions. `SEED`
 makes a sampled run reproducible.
@@ -67,8 +67,8 @@ completion:" the capital of the French Republic, and the capital of the French R
 (24 tokens in 0.11s — 211.5 tok/s)
 ```
 Classic GPT-2 greedy output (fluent, repetitive), at ~210 tok/s. The generated
-token ids match `reference-gpt2.py` **exactly** on every prompt tried — same real
-weights, same BPE, same argmax. Wired into `validate-all.sh` (guarded on the
+token ids match `../reference/reference-gpt2.py` **exactly** on every prompt tried — same real
+weights, same BPE, same argmax. Wired into `../scripts/validate-all.sh` (guarded on the
 weights being present).
 
 ## Scope: what "chase GPT-2-124M" means here
@@ -83,8 +83,8 @@ There are two senses of reproducing GPT-2-124M:
   *attempting* it is compute and disk — a practical limit, not a feasibility one.
 
 ## Files
-- `gpt2.ts` — model: load real weights, GPT-2 forward, KV-cache greedy decode
-- `reference-gpt2.py` — MLX-Python oracle for the token-exact check
-- `tokenizer.ts` — extended with `GPT2_SPLIT` (GPT-2 r50k pretokenization)
-- `gpt2-tok-test.ts` / `reference-gpt2-tok.py` — BPE encoder parity vs HF tokenizers
+- `../src/models/gpt2.ts` — model: load real weights, GPT-2 forward, KV-cache greedy decode
+- `../reference/reference-gpt2.py` — MLX-Python oracle for the token-exact check
+- `../src/text/tokenizer.ts` — extended with `GPT2_SPLIT` (GPT-2 r50k pretokenization)
+- `../tests/gpt2-tok-test.ts` / `../reference/reference-gpt2-tok.py` — BPE encoder parity vs HF tokenizers
 - `config-gpt2.json`, `gpt2-tokenizer.json`, `gpt2-model.safetensors` — fetched, git-ignored

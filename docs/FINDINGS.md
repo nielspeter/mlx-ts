@@ -18,7 +18,7 @@ TypeScript** plus **~1,900 lines of generated FFI bindings**, and it runs real
 **dense** (Qwen3-0.6B) and **MoE** (OLMoE-1B-7B, 64 experts) models — bf16 and
 4-bit, single-file and sharded — at **~200–300 tok/s** with **bounded memory**,
 producing output **token-for-token identical** to MLX's own Python stack
-(`validate-all.sh`: 27/27). It also **trains transformers from scratch** —
+(`../scripts/validate-all.sh`: 32/32). It also **trains transformers from scratch** —
 microGPT → nanoGPT (to the ~1.47 Shakespeare baseline) → real GPT-2-124M — the
 optimizer driven by MLX `value_and_grad` over FFI, at ~parity with Python (§7d).
 
@@ -27,8 +27,8 @@ SDK, which is what makes it tractable:
 
 | Apple's Python SDK | This TS stack | Effort |
 |---|---|---|
-| `mlx.core` — ~15.5k LOC nanobind C++ over the C++ core | `generated.ts` — FFI over **`mlx-c`** (Apple's C API) | mechanical codegen |
-| `mlx.nn` / `optimizers` — ~6.6k LOC **pure Python** | `nn.ts` — pure TypeScript | direct port |
+| `mlx.core` — ~15.5k LOC nanobind C++ over the C++ core | `../src/ffi/generated.ts` — FFI over **`mlx-c`** (Apple's C API) | mechanical codegen |
+| `mlx.nn` / `optimizers` — ~6.6k LOC **pure Python** | `../src/nn/nn.ts` — pure TypeScript | direct port |
 
 The native binding layer is **generated from headers**, not hand-written. The
 framework layer is ordinary TypeScript. Neither requires touching C++.
@@ -72,30 +72,32 @@ Each milestone is a runnable file validated against a reference.
 | # | Capability | File(s) | Validated against | Result |
 |---|---|---|---|---|
 | 1 | FFI → mlx-c → Metal; **autograd through a JS closure** | (initial PoC) | — | `value_and_grad` of a JS function returns correct gradient |
-| 2 | Full Qwen3 decoder block (fp32) | `block.ts` / `reference.py` | MLX Python | `sum=0.005793`, `sum_sq=0.162600` exact |
-| 3 | **Op codegen** from headers | `codegen.ts` → `generated.ts` | rebuild block | 242 wrappers; `block-gen.ts` reproduces #2 |
-| 4 | KV-cache autoregressive decode | `model-gen.ts` / `reference-decode.py` | MLX Python | identical token ids |
-| 5 | safetensors loading | `loader.ts`, `model-load.ts` | MLX + real file | round-trip exact; **881 tensors** from a real 27B gemma |
-| 6 | 4-bit `quantized_matmul` | `model-quant.ts` / `reference-quant.py` | MLX Python | identical token ids |
-| 7 | Byte-level BPE **tokenizer** | `tokenizer.ts` / `tok-test.ts` | HF `tokenizers` | **11/11** encode+decode cases |
-| 8 | **Real Qwen3-0.6B** (bf16), config-driven | `qwen.ts` / `reference-qwen.py` | MLX Python | coherent text, exact ids, ~190 tok/s |
-| 9 | **Real Qwen3-0.6B-4bit** over `nn.Module` | `qwen-nn.ts` / `reference-qwen-q4.py` | MLX Python | coherent text, exact ids, ~264 tok/s |
-| 10 | Sampling, batching, sliding window, bounded memory | `validate-prod.ts` | self/measured | reproducible sampling; B=2; +23 MB / 200 tok |
-| 11 | **Real MoE model** (OLMoE-1B-7B, 64 experts top-8, 4-bit) | `olmoe.ts` / `reference-olmoe.py` | MLX Python | coherent text, exact ids, ~209 tok/s |
-| 12 | **Sharded** multi-file checkpoint load | `loader.ts` (`shardedWeights`) | MLX Python | identical ids, RSS ≈ model size |
-| 13 | **HF chat template** + end-to-end chat | `chat-template.ts` / `chat.ts` | Python `jinja2` | 4/4 render parity; real assistant replies |
-| 14 | **Training** — `value_and_grad` over a multi-param JS closure + SGD | `spike-train.ts` / `reference-train.py` | MLX Python | loss falls 0.237→0.009, final W bit-identical |
-| 15 | **LoRA fine-tune** of real 4-bit Qwen3 — Adam + cross_entropy, frozen base | `lora-train.ts` / `reference-lora.py` | MLX Python | loss falls 3.16→0.0007; tracks MLX to float tolerance |
+| 2 | Full Qwen3 decoder block (fp32) | `../spikes/block.ts` / `../reference/reference.py` | MLX Python | `sum=0.005793`, `sum_sq=0.162600` exact |
+| 3 | **Op codegen** from headers | `../tools/codegen.ts` → `../src/ffi/generated.ts` | rebuild block | 242 wrappers; `../spikes/block-gen.ts` reproduces #2 |
+| 4 | KV-cache autoregressive decode | `../spikes/model-gen.ts` / `../reference/reference-decode.py` | MLX Python | identical token ids |
+| 5 | safetensors loading | `../src/io/loader.ts`, `../spikes/model-load.ts` | MLX + real file | round-trip exact; **881 tensors** from a real 27B gemma |
+| 6 | 4-bit `quantized_matmul` | `../spikes/model-quant.ts` / `../reference/reference-quant.py` | MLX Python | identical token ids |
+| 7 | Byte-level BPE **tokenizer** | `../src/text/tokenizer.ts` / `../tests/tok-test.ts` | HF `tokenizers` | **11/11** encode+decode cases |
+| 8 | **Real Qwen3-0.6B** (bf16), config-driven | `../src/models/qwen.ts` / `../reference/reference-qwen.py` | MLX Python | coherent text, exact ids, ~190 tok/s |
+| 9 | **Real Qwen3-0.6B-4bit** over `nn.Module` | `../src/models/qwen-nn.ts` / `../reference/reference-qwen-q4.py` | MLX Python | coherent text, exact ids, ~264 tok/s |
+| 10 | Sampling, batching, sliding window, bounded memory | `../tests/validate-prod.ts` | self/measured | reproducible sampling; B=2; +23 MB / 200 tok |
+| 11 | **Real MoE model** (OLMoE-1B-7B, 64 experts top-8, 4-bit) | `../src/models/olmoe.ts` / `../reference/reference-olmoe.py` | MLX Python | coherent text, exact ids, ~209 tok/s |
+| 12 | **Sharded** multi-file checkpoint load | `../src/io/loader.ts` (`shardedWeights`) | MLX Python | identical ids, RSS ≈ model size |
+| 13 | **HF chat template** + end-to-end chat | `../src/text/chat-template.ts` / `../examples/chat.ts` | Python `jinja2` | 4/4 render parity; real assistant replies |
+| 14 | **Training** — `value_and_grad` over a multi-param JS closure + SGD | `../spikes/spike-train.ts` / `../reference/reference-train.py` | MLX Python | loss falls 0.237→0.009, final W bit-identical |
+| 15 | **LoRA fine-tune** of real 4-bit Qwen3 — Adam + cross_entropy, frozen base | `../training/lora-train.ts` / `../reference/reference-lora.py` | MLX Python | loss falls 3.16→0.0007; tracks MLX to float tolerance |
 
-All fifteen are re-checked together by `validate-all.sh` — **20/20 green** (the
-fifteen above plus the codegen, async-overlap, public-`stream()`, gather_qmm op,
-and per-op binding-parity (`bun test tests/`) checks).
+All fifteen are re-checked together by `../scripts/validate-all.sh` — **32/32 green**
+(the fifteen above plus the codegen, async-overlap, public-`stream()`, gather_qmm
+op, per-op binding-parity (`bun test tests/`), and cross-runtime checks). The
+count tracks which model files you have fetched; checks whose weights are absent
+are skipped rather than failed.
 
 The strongest checks are the **discrete** ones (#4, #6, #8, #9): greedy token ids
 must match MLX exactly, so any drift anywhere — cache concat, RoPE offset, mask
 selection, quantization layout — would flip a token and desync. They don't.
 
-Sample real output (`qwen-nn.ts`, 4-bit):
+Sample real output (`../src/models/qwen-nn.ts`, 4-bit):
 
 ```
 "The capital of France is" -> " Paris, and the capital of Italy is Rome.
@@ -106,7 +108,7 @@ Sample real output (`qwen-nn.ts`, 4-bit):
 
 ## 4. The codegen
 
-`codegen.ts` parses the mlx-c headers and emits `generated.ts` — the FFI symbol
+`../tools/codegen.ts` parses the mlx-c headers and emits `../src/ffi/generated.ts` — the FFI symbol
 table plus typed wrappers. Final coverage:
 
 ```
@@ -128,7 +130,7 @@ The decisive property: across nine milestones, expanding capability almost never
 required new binding code. Adding a header to the list (and one rule — "opaque
 `mlx_*` → `ptr`") carried entire new surfaces. Quantized matmul, dequantize,
 sampling, memory introspection, the safetensors/map API — all generated. Symbol
-count grew `322 → 339 → 412 → 440` purely from config; the 242 wrappers never
+count grew `322 → 339 → 412 → 440 → 472` purely from config; the 242 wrappers never
 needed editing.
 
 ---
@@ -139,8 +141,8 @@ On this machine (Apple Silicon, `Darwin 25.5.0`, Bun 1.3.14):
 
 | Model | tok/s |
 |---|---|
-| Qwen3-0.6B bf16 (`qwen.ts`) | ~190 |
-| Qwen3-0.6B 4-bit (`qwen-nn.ts`) | ~260–300 |
+| Qwen3-0.6B bf16 (`../src/models/qwen.ts`) | ~190 |
+| Qwen3-0.6B 4-bit (`../src/models/qwen-nn.ts`) | ~260–300 |
 
 As predicted at the outset, the JS runtime is not the bottleneck — compute lives
 in Metal kernels. The FFI boundary is crossed thousands of times per token and it
@@ -213,7 +215,7 @@ These are the things you only learn by building it — the real value of the stu
 
 10. **Sharded checkpoints: mmap all shards (evictable), don't stream-materialize.**
     Large MoE are always split across files (`model-0000N-of-…` + an index).
-    `shardedWeights` (in `loader.ts`) mmaps each shard once and returns views;
+    `shardedWeights` (in `../src/io/loader.ts`) mmaps each shard once and returns views;
     the OS pages out unused regions, so resident memory stays ~the working set.
     Measured on a 2-shard OLMoE: identical tokens, **RSS 3.90 GB** — the same as
     (slightly under) the single-file 4.11 GB. A *streaming* variant that copies
@@ -234,7 +236,7 @@ ergonomics, packaging, and breadth.
 **Done since this list was first written:** tokenizer (11/11 vs HF, and it
 generalized unchanged from Qwen BPE to OLMoE GPT-NeoX BPE), **HF chat template**
 (`@huggingface/jinja`, 4/4 vs Python `jinja2`, real assistant replies via
-`chat.ts`), KV-cache decode, temp/top-p sampling, equal-length batching, **MoE**
+`../examples/chat.ts`), KV-cache decode, temp/top-p sampling, equal-length batching, **MoE**
 + **sharded multi-file loading**, deterministic memory management (`tidy` /
 `freeMap` / memory limits), and the **async-eval overlap mechanism** (proven in
 §7b — works, composes with `tidy`, and is simply not a lever at 0.6B because
@@ -242,13 +244,13 @@ decode is compute-bound).
 
 **Genuinely remaining:**
 
-- ~~**Public streaming / disposable API.**~~ **Done** (`lm.ts`). An async-generator
+- ~~**Public streaming / disposable API.**~~ **Done** (`../src/text/lm.ts`). An async-generator
   `streamTokens()` / `streamText()` drives the decode loop over a model-agnostic
   `Decoder` interface; a `try/finally` frees the whole KV cache on completion, on
   early `break`, and on throw — so callers never call `tidy()` or free a handle.
   `MX` is now `Disposable` (`using a = x.add(y)`), and the async generators carry
   `[Symbol.asyncDispose]`. Greedy output is token-for-token identical to the
-  proven `generate()` (`stream-test.ts`, in `validate-all.sh`); memory is flat
+  proven `generate()` (`../tests/stream-test.ts`, in `../scripts/validate-all.sh`); memory is flat
   across repeated early-broken streams (338 MB steady state, no leak). The
   `Decoder` interface (`numLayers`, `eos`, `logitsLastMX`) is proven across both
   families: **Qwen3** (dense) and **OLMoE** (MoE) generate through the identical
@@ -258,10 +260,10 @@ decode is compute-bound).
   left-padding/position bookkeeping.
 - **Training is demonstrated end to end with ergonomic APIs** (milestones 14–15):
   the keystone (SGD over a multi-param JS closure, bit-identical to MLX) *and* the
-  mechanical tail — **Adam** (`optim.ts`), **cross_entropy** (`loss.ts`), **pytree
-  utilities** (`pytree.ts`), **`Module.parameters()`** (`nn.ts`), and a tree-based
-  **`valueAndGrad`** (`train.ts`). The real **LoRA fine-tune** of the 4-bit Qwen3
-  (`lora-train.ts`: frozen quantized base, rank-8 adapters on q/v) now reads like
+  mechanical tail — **Adam** (`../src/nn/optim.ts`), **cross_entropy** (`../src/nn/loss.ts`), **pytree
+  utilities** (`../src/core/pytree.ts`), **`Module.parameters()`** (`../src/nn/nn.ts`), and a tree-based
+  **`valueAndGrad`** (`../training/train.ts`). The real **LoRA fine-tune** of the 4-bit Qwen3
+  (`../training/lora-train.ts`: frozen quantized base, rank-8 adapters on q/v) now reads like
   mlx.nn — parameters come from `Module.parameters()`, gradients come back as a
   matching tree, and `Adam.update(params, grads)` flattens/unflattens internally;
   no hand-threaded parameter indices. Loss 3.16→0.0007. Honest caveat: training
@@ -290,7 +292,7 @@ The one piece genuinely outside MLX — the **tokenizer** — is done and valida
 
 Before committing to a production `@mlx-ts/lm`, we spiked the unknowns that could
 *kill* the project or limit it to a partial (correctness-only) toy. Both came
-back green. (`spike-throughput.ts`, `spike-bench.py`, `spike-moe.ts`.)
+back green. (`../spikes/spike-throughput.ts`, `../reference/spike-bench.py`, `../spikes/spike-moe.ts`.)
 
 **Spike A — serving viability (is JS/FFI overhead a wall?).** Measured tok/s on
 the same 4-bit Qwen3-0.6B, 128 tokens:
@@ -322,30 +324,30 @@ is retired.
 
 **Spike C — MoE (is `gather_qmm` callable over FFI?).** The expert-dispatch op
 (`gather_qmm` with `lhs_indices`/`rhs_indices` routing + optional group_size/bits)
-reproduced Python's result exactly (`0.409543`) over Bun FFI (`spike-moe.ts`).
+reproduced Python's result exactly (`0.409543`) over Bun FFI (`../spikes/spike-moe.ts`).
 Then the **full MoE layer** — router → softmax → top-K (`argpartition`) →
 weight renormalize → quantized expert dispatch → weighted combine — was built as
-an `nn.MoE` module (`nn.ts`) and matched the Python reference **exactly**
-(`sum=9.353439`, `sumsq=11773.206`; `spike-moe-layer.ts`).
+an `nn.MoE` module (`../src/nn/nn.ts`) and matched the Python reference **exactly**
+(`sum=9.353439`, `sumsq=11773.206`; `../spikes/spike-moe-layer.ts`).
 
 Finally, a **real MoE model end-to-end**: `nn.MoE` wired into a decoder loads
 **OLMoE-1B-7B** (64 experts, top-8, 4-bit, ~3.6 GB), generating coherent text —
 `"The capital of France is"` → `" Paris.\n\nThe Louvre is a world-famous art
 museum in Paris.\n\nThe Eiffel Tower is a famous iron lattice tower..."` at
-~209 tok/s — and **token-for-token identical** to MLX Python (`olmoe.ts` /
-`reference-olmoe.py`). This exercised the real-model quirks: experts stored
+~209 tok/s — and **token-for-token identical** to MLX Python (`../src/models/olmoe.ts` /
+`../reference/reference-olmoe.py`). This exercised the real-model quirks: experts stored
 *individually* (stacked into `[E,out,in]` at load via `mlx_stack`), a *quantized
 router*, full-projection q/k-norm (vs Qwen3's per-head), untied lm_head, and
-`norm_topk_prob=false`. The tokenizer (`tokenizer.ts`) also handled OLMoE's
+`norm_topk_prob=false`. The tokenizer (`../src/text/tokenizer.ts`) also handled OLMoE's
 GPT-NeoX BPE unchanged. MoE is fully proven — op, layer, and real model.
 
 **Spike D — `vmap` recovered over FFI (the last asterisk).** `mlx-c` exposes no
 public `vmap`, only the internal `mlx_detail_vmap_trace` / `mlx_detail_vmap_replace`
-primitives its own `vmap` composes from. `spike-vmap.ts` `dlopen`s those two and
+primitives its own `vmap` composes from. `../spikes/spike-vmap.ts` `dlopen`s those two and
 replicates the composition (trace the function once, then replace with the real
 batched inputs) — the per-op batching rules live in the C++ core and run inside
 `vmap_replace`, so we only orchestrate; the closure plumbing is the same
-`mlx_closure_new_func` + `JSCallback` trick as `train.ts`. Validated three ways:
+`mlx_closure_new_func` + `JSCallback` trick as `../training/train.ts`. Validated three ways:
 single-input `vmap` (sum-of-squares), a **shared (non-mapped) input** via the
 `-1` axis sentinel (`A @ x`), and **per-sample gradients** `vmap(grad(f))` — `grad
 of sum(x²)` per example equals `2x` exactly. So the one capability previously
@@ -359,8 +361,50 @@ over FFI" — both resolved positive. Remaining caveats are scope, not risk:
 throughput was measured at 0.6B/4-bit only (larger/batched serving may shift the
 JS:GPU ratio, which is exactly where the now-proven overlap mechanism would
 start to pay); MoE is proven at the op level but not yet wired into a full model;
-and Node FFI parity remains deliberately deferred (Bun-only is the recommended v1
-scope).
+and Node/Deno FFI parity, once deferred as v1 scope, is now done — see §7e.
+
+## 7e. The FFI layer is not Bun-specific
+
+Bun-only was the single biggest limit on who could use this, so it was worth
+testing rather than assuming. It turned out to be a thin constraint: the same
+code now runs on **Bun, Deno and Node**, producing bit-identical output, with the
+runtime difference confined to five primitives in `../src/ffi/`
+(`open`/`ptr`/`view`/`cstring`/`callback`).
+
+Two risks were expected and both evaporated:
+
+- **The ABI trick ports.** `mlx_array` is `struct { void* ctx; }`, passed and
+  returned in a register like a bare pointer. Declaring it `void *` works
+  identically in `bun:ffi`, `Deno.dlopen` and koffi — no struct support needed.
+- **Zero-copy readback exists everywhere**: `toArrayBuffer` (Bun),
+  `UnsafePointerView.getArrayBuffer` (Deno), `koffi.view` (Node). Verified by
+  *aliasing* — write through one view, read from another — not by timing, which
+  cannot distinguish a fast copy from a genuine view. koffi's `decode()` is the
+  copying path and is the wrong one.
+
+The real cost was **handle representation**: Bun hands back numbers (with NULL as
+`null`), Deno opaque PointerObjects, koffi BigInt addresses. Normalising every
+pointer to a JS number at the boundary — safe because macOS user-space addresses
+fit in 2^48 — kept `type Arr = number` intact, so `../src/core/mx.ts`, the 242 generated
+wrappers and every model file are untouched by any of this.
+
+Dispatch cost, 500k calls warmed, best of 3, result observed so the JIT cannot
+elide it: **Bun ~12 ns, Deno ~3 ns, Node/koffi ~21 ns**. All are cheap beside an
+MLX op, and end-to-end generation is equal across the three within noise — the
+compute-bound finding of §5 holding up. One sharp edge: a 64-bit *return* costs
+Deno ~52 ns, falling off V8's fast-call path, so hot accessors declare a 32-bit
+return. First measurements were 4–8x higher and ranked Deno last; that was JIT
+warmup, not dispatch, and is a caution about single-shot FFI microbenchmarks.
+
+Node imposed two source constraints, since it runs `.ts` by stripping types only:
+no `enum` (codegen emits a const object) and no parameter properties (expanded to
+explicit fields). Both are what `isolatedModules` wants anyway.
+
+**Unresolved:** the relocatable `prebuilds/` bundle is a *different MLX build*
+from Homebrew's mlx-c and does not agree with it numerically — real Qwen3 (bf16
+and 4-bit) and LoRA diverge from MLX-Python when the bundle is loaded, and agree
+when Homebrew's is. The packaging spike is therefore not yet validated; the suite
+prints which dylib it resolved so this cannot be mistaken for a code regression.
 
 ## 7c. Audio: speech-to-text (done) and text-to-speech (de-risked)
 
@@ -371,21 +415,21 @@ is the same with the inverse-DFT basis (Hermitian 2× weighting). Both run on op
 we already have, validated to ~1e-6/1e-7 against numpy / mlx-audio.
 
 **Speech-to-text — done, validated.**
-- `audio.ts`: ffmpeg-decode → 16 kHz mono → Whisper log-Mel (rfft-as-matmul + the
+- `../examples/audio.ts`: ffmpeg-decode → 16 kHz mono → Whisper log-Mel (rfft-as-matmul + the
   shipped librosa filterbank). Matches numpy FFT to ~1e-6.
-- `whisper.ts`: the full Whisper architecture over mlx-c — Conv1d stem,
+- `../src/models/whisper.ts`: the full Whisper architecture over mlx-c — Conv1d stem,
   bidirectional encoder, causal decoder with **cross-attention** + a KV cache
   (self-attn grows, cross-attn k/v computed once), tied-embedding logits. Greedy
   transcription is **token-for-token identical to `mlx_whisper`**
-  (`whisper-transcribe-test.ts`), encoder/decoder parity separately checked
-  (`whisper-test.ts`). Special-token ids derived from `n_vocab` (handles v3's 100
+  (`../tests/whisper-transcribe-test.ts`), encoder/decoder parity separately checked
+  (`../tests/whisper-test.ts`). Special-token ids derived from `n_vocab` (handles v3's 100
   languages), with **language auto-detection** and a **sliding 25 s window** for
   unbounded dictation. Runs `whisper-large-v3-turbo` (128-mel); Danish and Swedish
   verified end to end (macOS `say` clips). Served at `/v1/audio/transcriptions`.
   The only non-MLX step is ffmpeg decoding — preprocessing, not the model.
 
 **Text-to-speech — de-risked, then scoped out.** A neural vocoder's one *novel*
-unknown is audio synthesis (spectrum → samples). `spike-istft.ts` implements the
+unknown is audio synthesis (spectrum → samples). `../spikes/spike-istft.ts` implements the
 iSTFT in mlx-c/TS (inverse rfft matmul + windowed overlap-add) and matches
 mlx-audio's `istft` to **1.2e-7**. So TTS feasibility is **proven at the kill-risk
 level**. The remainder of a Kokoro-class port — weight-norm conv, AdaIN,
@@ -408,7 +452,7 @@ hand-rolled engine. Three rungs, each validated against an MLX-Python mirror.
 names) — but where his version hand-rolls a `Value` autograd class, here the
 autograd is real MLX. Trains end to end (forward + backprop + Adam + sampling),
 loss 3.19 → 1.72, emits name-like strings. Identical init (shared via a flat f32
-blob) + identical data order → **step-0 loss bit-exact** vs `reference-microgpt.py`
+blob) + identical data order → **step-0 loss bit-exact** vs `../reference/reference-microgpt.py`
 (3.1896 = 3.1896); both converge (not bit-reproducible past step 0 — the §6
 gotcha — so the bar is "same start, both converge"). It re-confirmed gotcha #5
 live: the 1000-step loop blew MLX's buffer limit until per-step `tidy()` + freeing
@@ -421,7 +465,7 @@ machinery, all just MLX ops from TS. At nanoGPT's exact `shakespeare-char` confi
 (6 layers / 6 heads / 384-d / 10.7M params, dropout 0.2) it reaches **best val
 loss 1.4964 — matching nanoGPT's published ~1.47 baseline** — and writes coherent
 Shakespeare (speaker turns, real words, real *Winter's Tale* character names). The
-dropout-free path is **bit-exact end to end** vs `reference-nanogpt.py` (shared
+dropout-free path is **bit-exact end to end** vs `../reference/reference-nanogpt.py` (shared
 init + mini-batches): step-0, final-train, and val all match to 4 decimals. Two
 capabilities fell out: **device-side dropout** (`mx.dropout` via
 `mlx_random_bernoulli`, seed-derived so the oracle reproduces the same masks) and
@@ -432,13 +476,13 @@ MLX's *fused* SDPA exposes no dropout parameter; best-val lands on it regardless
 
 **GPT-2-124M (real OpenAI weights).** The capstone: load the actual
 `openai-community/gpt2` weights and generate, **token-exact** vs an MLX-Python
-mirror. Two pieces. (1) A **GPT-2 BPE encoder** — `tokenizer.ts` was already
+mirror. Two pieces. (1) A **GPT-2 BPE encoder** — `../src/text/tokenizer.ts` was already
 byte-level BPE; GPT-2 needed its r50k pretokenization (`GPT2_SPLIT`) and no NFC
 normalization, now **8/8 token-exact** vs HF `tokenizers`. (2) GPT-2's architecture
-exactly (`gpt2.ts`): learned positional embeddings, LayerNorm-with-bias, fused QKV
+exactly (`../src/models/gpt2.ts`): learned positional embeddings, LayerNorm-with-bias, fused QKV
 (Conv1D weight `[in,out]` → `matmul` directly, no transpose), **`gelu_new`** (tanh
 approx via `mlx_tanh`), tied `lm_head`, KV-cached greedy decode. Generation is
-token-for-token identical to `reference-gpt2.py` on every prompt, at ~210–250
+token-for-token identical to `../reference/reference-gpt2.py` on every prompt, at ~210–250
 tok/s, with optional temperature / top-k / top-p / repetition-penalty sampling.
 
 **Scope — what "reproduce GPT-2-124M" means.** Two senses: reproduce its *outputs*
@@ -472,51 +516,51 @@ Deep-dive notes: `MICROGPT.md`, `NANOGPT.md`, `GPT2.md`.
 ## 8. File map
 
 **Runtime & codegen**
-- `codegen.ts` → `generated.ts` — header parser → FFI bindings (472 symbols, 242 wrappers)
-- `mx.ts` — `MX` array class, `FinalizationRegistry` + `tidy()`, ops, sampling,
+- `../tools/codegen.ts` → `../src/ffi/generated.ts` — header parser → FFI bindings (472 symbols, 242 wrappers)
+- `../src/core/mx.ts` — `MX` array class, `FinalizationRegistry` + `tidy()`, ops, sampling,
   **`dropout`** (device-side Bernoulli), `async_eval`, `stack`, `copy`, memory introspection/limits
-- `nn.ts` — `Module`, `Linear`, `QuantizedLinear`, `RMSNorm`, `Embedding`,
+- `../src/nn/nn.ts` — `Module`, `Linear`, `QuantizedLinear`, `RMSNorm`, `Embedding`,
   `QuantizedEmbedding`, **`MoE`** (router + top-K + quantized expert dispatch)
-- `optim.ts` — `Adam` (pytree-aware); `loss.ts` — `crossEntropy`
-- `pytree.ts` — `treeFlatten` / `treeUnflattenLike` / `treeMap`;
-  `train.ts` — tree-based `valueAndGrad` (the ergonomic training layer)
-- `lm.ts` — public generation surface: `Decoder` interface + async-generator
+- `../src/nn/optim.ts` — `Adam` (pytree-aware); `../src/nn/loss.ts` — `crossEntropy`
+- `../src/core/pytree.ts` — `treeFlatten` / `treeUnflattenLike` / `treeMap`;
+  `../training/train.ts` — tree-based `valueAndGrad` (the ergonomic training layer)
+- `../src/text/lm.ts` — public generation surface: `Decoder` interface + async-generator
   `streamTokens` / `streamText` / `generate` (auto KV-cache cleanup, no manual `tidy`)
-- `loader.ts` — safetensors loading; `singleFileWeights` / **`shardedWeights`**
+- `../src/io/loader.ts` — safetensors loading; `singleFileWeights` / **`shardedWeights`**
   (multi-file, mmap-evictable) + `freeMap`
-- `tokenizer.ts` — pure-TS byte-level BPE (Qwen + **GPT-2 `GPT2_SPLIT`**, 8/8 vs HF)
-- `chat-template.ts` — HF chat template via `@huggingface/jinja`
-- `audio.ts` — speech front-end: ffmpeg decode + log-Mel (rfft-as-matmul)
-- `whisper.ts` / `whisper-tokenizer.ts` — Whisper STT (encoder + cross-attn decoder
+- `../src/text/tokenizer.ts` — pure-TS byte-level BPE (Qwen + **GPT-2 `GPT2_SPLIT`**, 8/8 vs HF)
+- `../src/text/chat-template.ts` — HF chat template via `@huggingface/jinja`
+- `../examples/audio.ts` — speech front-end: ffmpeg decode + log-Mel (rfft-as-matmul)
+- `../src/models/whisper.ts` / `../src/text/whisper-tokenizer.ts` — Whisper STT (encoder + cross-attn decoder
   + KV cache, multilingual, auto language detect); tiktoken decode
 
 **Models / demos**
-- `qwen.ts` — config-driven Qwen3-0.6B (bf16)
-- `qwen-nn.ts` — config-driven Qwen3-0.6B-4bit over `nn.Module` (CLI: sampling, window)
-- `chat.ts` — end-to-end chat: message → template → tokenizer → model → reply
-- `stream.ts` — streaming chat over the public `lm.streamText` API (tokens printed live)
-- `server.ts` / `chat.html` — Bun.serve OpenAI-compatible server (chat / embeddings /
+- `../src/models/qwen.ts` — config-driven Qwen3-0.6B (bf16)
+- `../src/models/qwen-nn.ts` — config-driven Qwen3-0.6B-4bit over `nn.Module` (CLI: sampling, window)
+- `../examples/chat.ts` — end-to-end chat: message → template → tokenizer → model → reply
+- `../examples/stream.ts` — streaming chat over the public `lm.streamText` API (tokens printed live)
+- `../examples/server.ts` / `../examples/chat.html` — Bun.serve OpenAI-compatible server (chat / embeddings /
   audio transcriptions) + a chat web UI with live mic transcription
-- `lora-train.ts` — **LoRA fine-tune** of real 4-bit Qwen3 (Adam + cross_entropy)
-- `olmoe.ts` — config-driven **OLMoE-1B-7B MoE** (single-file or `MX_SHARDED`)
-- `gpt2.ts` — real OpenAI **GPT-2-124M** (BPE + `gelu_new` + tied head), token-exact; sampling flags
+- `../training/lora-train.ts` — **LoRA fine-tune** of real 4-bit Qwen3 (Adam + cross_entropy)
+- `../src/models/olmoe.ts` — config-driven **OLMoE-1B-7B MoE** (single-file or `MX_SHARDED`)
+- `../src/models/gpt2.ts` — real OpenAI **GPT-2-124M** (BPE + `gelu_new` + tied head), token-exact; sampling flags
 - `block*.ts`, `model-*.ts` — the staged PoCs (block, decode, safetensors, quant)
-- `inspect-real.ts` — enumerate a real model file's tensors
-- `split-olmoe.py` — split a single file into shards (to exercise the sharded loader)
+- `../spikes/inspect-real.ts` — enumerate a real model file's tensors
+- `../reference/split-olmoe.py` — split a single file into shards (to exercise the sharded loader)
 
-**Spikes** — `spike-throughput.ts` (async overlap / serving viability),
-`spike-bench.py` (Python tok/s bar), `spike-moe.ts` (gather_qmm op),
-`spike-moe-layer.ts` (full MoE layer), `spike-train.ts` (training: value_and_grad
-+ SGD), `spike-istft.ts` (iSTFT vocoder synthesis — TTS de-risk),
-`spike-vmap.ts` (`vmap` recovered from the detail trace/replace primitives),
-`spike-microgpt.ts` (microGPT from scratch), `spike-nanogpt.ts` (multi-layer GPT
+**Spikes** — `../spikes/spike-throughput.ts` (async overlap / serving viability),
+`../reference/spike-bench.py` (Python tok/s bar), `../spikes/spike-moe.ts` (gather_qmm op),
+`../spikes/spike-moe-layer.ts` (full MoE layer), `../spikes/spike-train.ts` (training: value_and_grad
++ SGD), `../spikes/spike-istft.ts` (iSTFT vocoder synthesis — TTS de-risk),
+`../spikes/spike-vmap.ts` (`vmap` recovered from the detail trace/replace primitives),
+`../spikes/spike-microgpt.ts` (microGPT from scratch), `../spikes/spike-nanogpt.ts` (multi-layer GPT
 from scratch — trains to nanoGPT's Shakespeare baseline). See §7d.
 
 **References & validation**
 - `reference*.py` — MLX Python mirrors for every milestone
-- `tok-reference.py` / `tok-test.ts` — tokenizer ground truth
-- `validate-prod.ts` — sampling / batching / bounded-memory checks
-- **`validate-all.sh`** — the full suite: every TS path vs its reference (27/27)
+- `../reference/tok-reference.py` / `../tests/tok-test.ts` — tokenizer ground truth
+- `../tests/validate-prod.ts` — sampling / batching / bounded-memory checks
+- **`../scripts/validate-all.sh`** — the full suite: every TS path vs its reference (32/32)
 
 ---
 

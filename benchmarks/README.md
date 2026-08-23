@@ -4,9 +4,9 @@ TypeScript ports of the MLX micro-benchmarks (`mlx/benchmarks/python`), running
 the same ops over `mlx-c` via Bun FFI. Same protocol as the originals
 (`time_utils.py`): **5 warmup iters, then 100 timed iters of `eval(fn(args))`**,
 reported in msec. Per-iteration intermediates are freed with `tidy()` (a tight
-sync loop never triggers GC — see `FINDINGS.md` §6.5).
+sync loop never triggers GC — see `../docs/FINDINGS.md` §6.5).
 
-The point: confirm at the **op level** what `FINDINGS.md` §5/§7b showed at the
+The point: confirm at the **op level** what `../docs/FINDINGS.md` §5/§7b showed at the
 model level — TS is compute-bound, not FFI-bound, so it tracks MLX Python closely.
 
 ## Run
@@ -53,8 +53,8 @@ active memory exceeds 6 GB** — a harness bug can no longer OOM the machine.
 
 **Forward-pass only.** The Python benches also time `mx.grad` / `mx.compile` /
 `mx.vjp` / `mx.vmap` variants; those aren't part of this SDK's surface (training
-uses the closure-based `value_and_grad` in `train.ts`; `vmap` is the one genuine
-mlx-c gap — `FINDINGS.md` §6/§7). The forward kernels are what govern inference,
+uses the closure-based `value_and_grad` in `../training/train.ts`; `vmap` is the one genuine
+mlx-c gap — `../docs/FINDINGS.md` §6/§7). The forward kernels are what govern inference,
 which is the comparison that matters here.
 
 `mlx-ts` always runs on the default stream (Metal/GPU on Apple silicon). For the

@@ -14,8 +14,8 @@ parameters**, the autograd being real MLX `value_and_grad` over FFI.
 
 ## Run it
 ```sh
-bun sft.ts                 # needs the GPT-2 weights (see GPT2.md / README)
-python3 reference-sft.py   # MLX-Python oracle
+bun ../training/sft.ts                 # needs the GPT-2 weights (see GPT2.md / README)
+python3 ../reference/reference-sft.py   # MLX-Python oracle
 ```
 
 ## Result
@@ -38,9 +38,9 @@ from GPT-2's pretraining. (With only 6 examples this is a demo: it memorizes the
 training answers and generalizes the format; real SFT uses far more data.)
 
 ## Validation
-`reference-sft.py` runs the identical SFT (same loaded weights, same chat data,
+`../reference/reference-sft.py` runs the identical SFT (same loaded weights, same chat data,
 same completion-sliced loss, same AdamW + grad-clip): **step-0 loss matches
-exactly (1.5514)** and both converge to ~0. Wired into `validate-all.sh` (28/28,
+exactly (1.5514)** and both converge to ~0. Wired into `../scripts/validate-all.sh` (28/28,
 guarded on the GPT-2 weights).
 
 ## Two findings worth noting
@@ -56,12 +56,12 @@ guarded on the GPT-2 weights).
 
 ## Scope
 This is the SFT *stage* of a nanochat-style pipeline. The pieces around it already
-exist in mlx-ts: pretraining (`spike-nanogpt.ts`), KV-cache inference
-(`gpt2.ts`), and an OpenAI-compatible chat server + web UI (`server.ts`). What's
+exist in mlx-ts: pretraining (`../spikes/spike-nanogpt.ts`), KV-cache inference
+(`../src/models/gpt2.ts`), and an OpenAI-compatible chat server + web UI (`../examples/server.ts`). What's
 not built: tokenizer *training*, a Muon optimizer, and an RL stage — each just
 MLX ops + orchestration, no gap in the TS↔MLX bridge.
 
 ## Files
-- `sft.ts` — load GPT-2 into a trainable params tree, completion-loss SFT loop, before/after generation
-- `reference-sft.py` — MLX-Python oracle for the step-0 + convergence check
-- shared: `MX.tanh` / `MX.slice` / `MX.logsumexp` (`mx.ts`), stable `crossEntropy` (`loss.ts`)
+- `../training/sft.ts` — load GPT-2 into a trainable params tree, completion-loss SFT loop, before/after generation
+- `../reference/reference-sft.py` — MLX-Python oracle for the step-0 + convergence check
+- shared: `MX.tanh` / `MX.slice` / `MX.logsumexp` (`../src/core/mx.ts`), stable `crossEntropy` (`../src/nn/loss.ts`)

@@ -16,9 +16,9 @@ TS, validated against an MLX-Python oracle.
 - **microgpt on the web:** <https://karpathy.ai/microgpt.html> · micrograd video: <https://www.youtube.com/watch?v=VMj-3S1tku0>
 
 ## What we built
-| | Karpathy's microGPT | this spike (`spike-microgpt.ts`) |
+| | Karpathy's microGPT | this spike (`../spikes/spike-microgpt.ts`) |
 |---|---|---|
-| Autograd | hand-rolled `Value` class | **real MLX `value_and_grad`** over FFI (`train.ts`) |
+| Autograd | hand-rolled `Value` class | **real MLX `value_and_grad`** over FFI (`../training/train.ts`) |
 | Language | pure Python, no deps | TypeScript + Bun FFI → `libmlxc.dylib` |
 | Compute | scalar, CPU | MLX kernels on Apple GPU (Metal) |
 | Model | 1 block, 4 heads, ~4k params | **identical**: 1 block, 4 heads, **4000 params** |
@@ -34,8 +34,8 @@ steps, LR `1e-2` decaying linearly to 0.
 
 ## Run it
 ```sh
-bun spike-microgpt.ts          # fetches names.txt on first run; writes /tmp/microgpt-init.f32
-python3 reference-microgpt.py  # the MLX-Python oracle (run the TS spike first — it writes the shared init)
+bun ../spikes/spike-microgpt.ts          # fetches names.txt on first run; writes /tmp/microgpt-init.f32
+python3 ../reference/reference-microgpt.py  # the MLX-Python oracle (run the TS spike first — it writes the shared init)
 ```
 
 ## Result
@@ -55,7 +55,7 @@ it's that a **complete transformer — forward, backprop, Adam, sampling — tra
 end-to-end with TypeScript driving real MLX**.
 
 ## Validation (the project's bar: parity vs MLX-Python)
-`reference-microgpt.py` trains the identical model from the **same init** (shared
+`../reference/reference-microgpt.py` trains the identical model from the **same init** (shared
 via `/tmp/microgpt-init.f32`, written by the TS spike) on the **same data order**:
 
 - **Step-0 loss is exact: `3.1896` (TS) = `3.1896` (PY)** — clean parity of init +
@@ -65,7 +65,7 @@ via `/tmp/microgpt-init.f32`, written by the TS spike) on the **same data order*
   diverge over many steps), so the bar is *"identical start, both converge"* — the
   same criterion used for the LoRA check.
 
-Wired into `validate-all.sh` (guarded on `names.txt`).
+Wired into `../scripts/validate-all.sh` (guarded on `names.txt`).
 
 ## What it re-confirmed about mlx-ts
 The first run hit MLX's buffer limit around step 900 — a live reproduction of
@@ -76,6 +76,6 @@ only the new params + Adam moments, and explicitly `free()` the prior generation
 A good reminder of *why* `tidy()` is the load-bearing memory primitive here.
 
 ## Files
-- `spike-microgpt.ts` — the model, training loop, and sampler
-- `reference-microgpt.py` — the MLX-Python oracle for the parity check
+- `../spikes/spike-microgpt.ts` — the model, training loop, and sampler
+- `../reference/reference-microgpt.py` — the MLX-Python oracle for the parity check
 - `names.txt` — fetched corpus (git-ignored)

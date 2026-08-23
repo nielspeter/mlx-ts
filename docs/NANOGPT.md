@@ -15,7 +15,7 @@ clipping — the actual machinery you need to train something useful.
 ## What we built
 Faithful to nanoGPT's `shakespeare-char` recipe, scaled to run on a single Mac:
 
-| nanoGPT ingredient | this spike (`spike-nanogpt.ts`) |
+| nanoGPT ingredient | this spike (`../spikes/spike-nanogpt.ts`) |
 |---|---|
 | Multi-layer GPT-2 block stack | ✅ N pre-LN blocks (default 4), tied `lm_head` |
 | Multi-head causal attention | ✅ MLX `scaled_dot_product_attention` (causal) |
@@ -26,7 +26,7 @@ Faithful to nanoGPT's `shakespeare-char` recipe, scaled to run on a single Mac:
 | Char-level tokenizer | ✅ sorted-unique vocab (65 chars) |
 | train/val split + best-val eval | ✅ 90/10, periodic eval, tracks best checkpoint |
 | **Dropout** | ✅ device-side `mx.dropout` (`mlx_random_bernoulli`), train-only |
-| Autograd | **real MLX `value_and_grad`** over FFI (`train.ts`) |
+| Autograd | **real MLX `value_and_grad`** over FFI (`../training/train.ts`) |
 | DDP / `torch.compile` | N/A — single device; MLX has its own lazy graph |
 
 Default config: 4 layers, 4 heads, `n_embd=128`, `block_size=64`, batch 32,
@@ -37,9 +37,9 @@ env-overridable (`N_LAYER`, `N_HEAD`, `N_EMBD`, `BLOCK`, `BATCH`, `ITERS`,
 
 ## Run it
 ```sh
-bun spike-nanogpt.ts           # fetches input.txt; writes shared init + batch-index files to /tmp
-python3 reference-nanogpt.py   # the MLX-Python oracle (run the TS spike first)
-ITERS=300 N_LAYER=6 bun spike-nanogpt.ts   # bigger/shorter, etc.
+bun ../spikes/spike-nanogpt.ts           # fetches input.txt; writes shared init + batch-index files to /tmp
+python3 ../reference/reference-nanogpt.py   # the MLX-Python oracle (run the TS spike first)
+ITERS=300 N_LAYER=6 bun ../spikes/spike-nanogpt.ts   # bigger/shorter, etc.
 ```
 
 ## Result (2000 iters, ~0.8M params)
@@ -71,7 +71,7 @@ iters / β2 0.99). Running that exact config:
 
 ```sh
 N_LAYER=6 N_HEAD=6 N_EMBD=384 BLOCK=256 BATCH=64 ITERS=5000 BETA2=0.99 \
-  DROPOUT=0.2 bun spike-nanogpt.ts
+  DROPOUT=0.2 bun ../spikes/spike-nanogpt.ts
 ```
 
 ```
@@ -107,7 +107,7 @@ dropout, since MLX's *fused* `scaled_dot_product_attention` has no dropout
 parameter; the best-val still lands on the baseline.
 
 ## Validation (parity vs MLX-Python)
-`reference-nanogpt.py` trains the identical model from the **same init**
+`../reference/reference-nanogpt.py` trains the identical model from the **same init**
 (`/tmp/nanogpt-init.bin`) and the **same mini-batches**
 (`/tmp/nanogpt-train-idx.bin`, `/tmp/nanogpt-val-idx.bin`), all written by the TS
 spike. At 100 iters the runs are **bit-identical end-to-end** — step-0, final
@@ -115,7 +115,7 @@ train loss, *and* val loss all match to 4 decimals (4.1783 / 2.6014 / 2.5312) �
 because identical init + identical batches + the same MLX kernels leave nothing to
 diverge. (Over thousands of steps fp-reduction order can drift — FINDINGS §6
 gotcha #8 — so the suite uses the fast, exact 100-iter check.) Wired into
-`validate-all.sh` (guarded on `input.txt`).
+`../scripts/validate-all.sh` (guarded on `input.txt`).
 
 ## Why this matters for the feasibility study
 microGPT showed the autograd *mechanism* is reachable from TS. nanoGPT shows the
@@ -126,6 +126,6 @@ GPT-2-124M reproduction is single-Mac wall-clock and a BPE *encoder* (we ship
 tiktoken decode-only), **not** any missing capability in the TS↔MLX bridge.
 
 ## Files
-- `spike-nanogpt.ts` — model, mini-batch pipeline, AdamW training loop, sampler
-- `reference-nanogpt.py` — MLX-Python oracle for the parity check
+- `../spikes/spike-nanogpt.ts` — model, mini-batch pipeline, AdamW training loop, sampler
+- `../reference/reference-nanogpt.py` — MLX-Python oracle for the parity check
 - `input.txt` — tiny-shakespeare corpus (fetched, git-ignored)

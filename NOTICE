@@ -1,0 +1,78 @@
+# Third-party notices
+
+This project is MIT-licensed (see `LICENSE`). It also contains, derives from, or
+at runtime depends on the work listed below. Nothing here is an official Apple,
+Hugging Face, or OpenAI project, and no endorsement is implied.
+
+## Apple MLX / mlx-c — MIT, Copyright © 2023-2024 Apple Inc.
+
+- <https://github.com/ml-explore/mlx> · <https://github.com/ml-explore/mlx-c>
+- `benchmarks/*.py` are the upstream MLX Python micro-benchmarks
+  (`mlx/benchmarks/python`), used verbatim or lightly adapted as the timing
+  oracle. The original Apple copyright headers are retained in those files.
+- The `benchmarks/*.ts` files are TypeScript ports of those benchmarks and follow
+  the same measurement protocol.
+- The `reference-*.py` oracles mirror model implementations from MLX, `mlx-lm`,
+  `mlx-examples`, `mlx-whisper`, and `mlx-audio` so the TypeScript output can be
+  compared token-for-token against them.
+- `generated.ts` is emitted by `codegen.ts` from the installed `mlx-c` C headers.
+  It is machine-generated FFI glue over Apple's public C API; the API surface it
+  mirrors is Apple's.
+- `prebuilds/` (when present; not tracked in git) contains compiled `libmlx`,
+  `libmlxc`, `libjaccl`, and `mlx.metallib` binaries built from the MLX and
+  mlx-c sources above. Redistributing them means shipping this MIT notice.
+
+MLX and mlx-c are distributed under the MIT License:
+
+    MIT License
+
+    Copyright © 2023-2024 Apple Inc.
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE.
+
+## OpenAI Whisper — MIT, Copyright © 2022 OpenAI
+
+- <https://github.com/openai/whisper>
+- The mel filterbank (`whisper-mel-filters-*.f32`) and the multilingual BPE vocab
+  (`whisper-multilingual.tiktoken`) are Whisper assets, copied locally by the
+  setup steps in the docs. They are not tracked in git.
+- `whisper.ts` / `whisper-tokenizer.ts` follow the reference Whisper preprocessing
+  and decoding described by that project and by `mlx-whisper`.
+
+## @huggingface/jinja — MIT, Copyright © Hugging Face
+
+- <https://github.com/huggingface/huggingface.js> — a runtime dependency, used to
+  render model chat templates.
+- The tokenizer parity checks compare against the Hugging Face `tokenizers`
+  library (Apache-2.0), which is a Python dev-time dependency, not bundled.
+
+## Model weights, tokenizers, and datasets — not included
+
+No weights, tokenizer vocabularies, or corpora are tracked in this repository.
+The documented setup steps download them from their original sources, and each
+carries its own license, which you accept from that source:
+
+- Qwen3-0.6B (Alibaba Cloud) — Apache-2.0
+- GPT-2 124M (OpenAI) — MIT
+- OLMoE-1B-7B (Allen Institute for AI) — Apache-2.0
+- Whisper tiny / large-v3-turbo (OpenAI) — MIT
+- 4-bit conversions of the above published by the `mlx-community` org
+- TinyStories — CDLA-Sharing-1.0 · FineWeb — ODC-By-1.0
+- tiny-shakespeare (`input.txt`) and `names.txt`, from Andrej Karpathy's
+  char-rnn / makemore — MIT

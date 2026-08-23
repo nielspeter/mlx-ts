@@ -27,3 +27,7 @@ base-ckpt-config.json
 chat-ckpt.safetensors
 chat-ckpt-config.json
 prebuilds/
+
+# editor / OS cruft
+.DS_Store
+.claude/

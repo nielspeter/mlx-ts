@@ -537,8 +537,9 @@ explicit fields). Both are what `isolatedModules` wants anyway.
 **Unresolved:** the relocatable `prebuilds/` bundle is a *different MLX build*
 from Homebrew's mlx-c and does not agree with it numerically — real Qwen3 (bf16
 and 4-bit) and LoRA diverge from MLX-Python when the bundle is loaded, and agree
-when Homebrew's is. The packaging spike is therefore not yet validated — though §7f identifies the
-cause (a different `libmlx` build) and a route that avoids building one at all.
+when Homebrew's is. **Resolved in §7f** by not building `libmlx` at all: `prebuilds/` is now
+assembled from Apple's own `mlx-metal` binaries, and the whole suite passes
+(46/46) forced onto the bundled path.
 
 The sharper version of that finding is how it was nearly missed. The resolver
 *preferred* the bundle over Homebrew, on the reasoning that a bundled copy makes
@@ -600,9 +601,29 @@ Apple's own `mlx-metal` wheel — the exact binaries the parity oracle runs
 against — and compile only `libmlxc.dylib` (0.7 MB, a thin C shim) against them.
 Then the bundled path is the *same* build the suite validates, not a lookalike.
 
-One wrinkle to plan for: Apple ships three macOS variants (14, 15, 26), so the
-Metal target is not one artifact. A single blob, which is what `prebuilds/`
-currently is, was never going to be portable.
+One wrinkle: Apple ships three macOS variants (14, 15, 26), so the Metal target
+is not one artifact — a single blob was never going to be portable.
+`tools/fetch-prebuilds.sh` picks the newest wheel at or below the host's macOS
+major version.
+
+**This is done.** The script downloads the wheel, copies `libmlx` / `libjaccl` /
+`mlx.metallib` out of it, adds an `@loader_path` rpath (Apple's `libmlx`
+references `@rpath/libjaccl.dylib` but carries no `LC_RPATH` — in the wheel the
+Python extension supplies it), takes `libmlxc` from Homebrew and repoints it at
+the neighbouring `libmlx`. The bundled path then reproduces Apple's `mlx-lm`
+token for token, and `../scripts/validate-all.sh` is **46/46 forced onto it**.
+
+Two things worth keeping:
+
+- **The verification nearly did not work.** The obvious check — the synthetic
+  Qwen3 block fingerprint — *passed with the old, broken bundle*. The divergence
+  only appeared on a real model. A smoke test that cannot fail is worse than no
+  test, so the script verifies with real Qwen3 whenever the weights are present
+  and says so loudly when it has to fall back.
+- **`libmlxc` is still built against Homebrew's `libmlx`.** It works because both
+  are the same mlx version and the C API is ABI-stable across it — verified, not
+  assumed — but the rigorous version compiles mlx-c from source against the
+  wheel's `libmlx`.
 
 ## 8. File map
 **Runtime & codegen**

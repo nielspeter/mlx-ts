@@ -11,12 +11,11 @@ const here = dirname(fileURLToPath(import.meta.url));
 // src/ffi -> repo root when running from source; dist/ffi -> package root
 // when running from the published build. Try both.
 const roots = [join(here, "..", ".."), join(here, "..", "..", "..")];
-// Order matters, and not the way you would guess. A Homebrew mlx-c is the build
-// the parity suite is run against; the bundled prebuilds/ copy is a *different*
-// MLX build that does NOT agree with MLX-Python numerically (real Qwen3 and
-// LoRA diverge). So the validated path wins whenever it is present, and the
-// bundle is the fallback for machines without Homebrew — which is the case the
-// bundle exists for. MLXTS_LIB overrides everything.
+// Homebrew first, bundle second. Both are validated now — prebuilds/ is
+// assembled from Apple's own mlx-metal binaries by tools/fetch-prebuilds.sh and
+// reproduces MLX-Python token for token — but a Homebrew install is the one a
+// developer can upgrade and inspect, so it wins when present. The bundle is for
+// machines without it, which is what it exists for. MLXTS_LIB overrides both.
 const bundles = roots.map((r) => join(r, "prebuilds", "darwin-arm64", "libmlxc.dylib"));
 const BUNDLED = bundles.find(existsSync) ?? bundles[0];
 const candidates = [
@@ -34,16 +33,6 @@ if (!found) {
     "libmlxc.dylib not found. Install with `brew install mlx-c`, ship a copy in\n" +
     "prebuilds/darwin-arm64/, or point MLXTS_LIB at one. Tried:\n" +
     candidates.map((c) => `  ${c}`).join("\n"),
-  );
-}
-
-// Say so out loud: numbers from the bundle are not the numbers the suite checks.
-if (found === BUNDLED && !process.env.MLXTS_QUIET) {
-  console.warn(
-    `mlx-ts: using the bundled libmlxc (${BUNDLED}).\n` +
-    "        It is a different MLX build from Homebrew's and is not covered by\n" +
-    "        the parity suite. Install mlx-c (brew install mlx-c) for the\n" +
-    "        validated path, or set MLXTS_QUIET=1 to silence this.",
   );
 }
 

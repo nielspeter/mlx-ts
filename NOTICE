@@ -18,9 +18,11 @@ Hugging Face, or OpenAI project, and no endorsement is implied.
 - `generated.ts` is emitted by `codegen.ts` from the installed `mlx-c` C headers.
   It is machine-generated FFI glue over Apple's public C API; the API surface it
   mirrors is Apple's.
-- `prebuilds/` (when present; not tracked in git) contains compiled `libmlx`,
-  `libmlxc`, `libjaccl`, and `mlx.metallib` binaries built from the MLX and
-  mlx-c sources above. Redistributing them means shipping this MIT notice.
+- `prebuilds/` (when present; not tracked in git) contains `libmlx.dylib`,
+  `libjaccl.dylib` and `mlx.metallib` taken verbatim from Apple's `mlx-metal`
+  PyPI wheel (MIT, © 2023 Apple Inc.), plus a `libmlxc.dylib` built from mlx-c
+  and relinked to sit beside them. `tools/fetch-prebuilds.sh` assembles it.
+  Redistributing any of these means shipping this MIT notice.
 
 MLX and mlx-c are distributed under the MIT License:
 

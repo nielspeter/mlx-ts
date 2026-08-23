@@ -11,6 +11,8 @@
 // its shipped mel_filters when weights are added.
 
 import { MX, fromF32, tidy } from "../src/core/mx.ts";
+import { spawn } from "node:child_process";
+import { readBytes } from "../src/io/fs.ts";
 
 export const SR = 16000, N_FFT = 400, HOP = 160, N_MELS = 80, N_SAMPLES = 30 * SR; // 30 s chunk
 
@@ -49,10 +51,13 @@ function melFilterT(): MX {
 // Decode any audio file to 16 kHz mono PCM via ffmpeg, as s16 -> float32/32768
 // (matches Whisper's load_audio so mel/transcription line up bit-for-bit).
 export async function decodeAudio(path: string): Promise<Float32Array> {
-  const p = Bun.spawn(["ffmpeg", "-nostdin", "-i", path, "-f", "s16le", "-ac", "1", "-ar", String(SR), "-"],
-    { stdout: "pipe", stderr: "ignore" });
-  const buf = new Uint8Array(await new Response(p.stdout).arrayBuffer());
-  await p.exited;
+  // node:child_process rather than Bun.spawn — Deno and Node implement it too.
+  const p = spawn("ffmpeg", ["-nostdin", "-i", path, "-f", "s16le", "-ac", "1", "-ar", String(SR), "-"],
+    { stdio: ["ignore", "pipe", "ignore"] });
+  const chunks: Uint8Array[] = [];
+  for await (const c of p.stdout) chunks.push(c as Uint8Array);
+  const buf = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
+  let off = 0; for (const c of chunks) { buf.set(c, off); off += c.length; }
   const i16 = new Int16Array(buf.buffer, buf.byteOffset, Math.floor(buf.byteLength / 2));
   const f = new Float32Array(i16.length);
   for (let i = 0; i < i16.length; i++) f[i] = i16[i] / 32768;
@@ -71,7 +76,7 @@ export function padOrTrim(pcm: Float32Array, length = N_SAMPLES): Float32Array {
 // Load Whisper's shipped librosa mel filterbank ([n_mels, bins]) -> [bins, n_mels]
 // for `power @ filtersT`. (The HTK filterbank above is only for the self-test.)
 export async function loadMelFilters(path = "models/whisper-mel-filters-80.f32", nMels = N_MELS): Promise<MX> {
-  const b = new Uint8Array(await Bun.file(path).arrayBuffer());
+  const b = await readBytes(path);
   const data = new Float32Array(b.buffer, b.byteOffset, Math.floor(b.byteLength / 4));
   return fromF32(data, [nMels, data.length / nMels]).transpose([1, 0]);
 }

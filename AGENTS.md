@@ -16,7 +16,7 @@ honest write-up; this file is the operational guide.
 - **macOS, Apple Silicon** (the ABI trick below assumes ARM64).
 - **A JS runtime**: Bun (developed on 1.3.14), Deno 2, or Node 24+. `bun install`
   (or `npm i`) for `@huggingface/jinja`, plus `koffi` if you run on Node.
-  `examples/` and `training/` are still Bun-only; `src/` is not.
+  `src/` and `examples/` run on all three; only `training/` is still Bun-only.
 - **`mlx-c` via Homebrew**: `brew install mlx-c`. Headers and the dylib are both
   resolved at runtime — Homebrew's version-independent symlinks first, then the
   newest Cellar install — so a `brew upgrade mlx-c` no longer breaks codegen.

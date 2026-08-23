@@ -1,4 +1,4 @@
-// Local inference HTTP server over Bun.serve — an OpenAI-compatible
+// Local inference HTTP server — an OpenAI-compatible
 // /v1/chat/completions endpoint (streaming SSE or single JSON) backed by the
 // public lm.ts streaming API and 4-bit Qwen3.
 //
@@ -21,16 +21,19 @@ import { Whisper, loadWhisper } from "../src/models/whisper.ts";
 import { WhisperTokenizer } from "../src/text/whisper-tokenizer.ts";
 import { decodeAudio, loadMelFilters } from "./audio.ts";
 import { unlink } from "node:fs/promises";
+import { readJson, readText } from "../src/io/fs.ts";
+import { serve } from "./serve.ts";
+import { writeFile } from "node:fs/promises";
 
 const MODEL_ID = "qwen3-0.6b-4bit";
 const PORT = Number(process.env.PORT ?? 8080);
 
 console.log("loading model…");
-const cfg = await Bun.file("models/config-4bit.json").json();
+const cfg = await readJson("models/config-4bit.json");
 const model = new Qwen3(cfg, loadSafetensors("models/model-q4.safetensors"));
 const tok = await Tokenizer.fromFile("models/tokenizer.json");
 const ct = await ChatTemplate.fromConfig("models/tokenizer_config-qwen.json");
-const CHAT_HTML = await Bun.file(new URL("./chat.html", import.meta.url)).text();
+const CHAT_HTML = await readText(new URL("./chat.html", import.meta.url));
 console.log("model ready");
 
 // Whisper is optional: load it only if its assets are present, otherwise the
@@ -139,7 +142,7 @@ async function transcriptions(req: Request): Promise<Response> {
   if (!(file instanceof Blob)) return json({ error: "missing audio `file` field" }, 400);
   const fmt = String(form.get("response_format") ?? "json");
   const tmp = `/tmp/mlxts-upload-${Math.random().toString(36).slice(2)}`;
-  await Bun.write(tmp, file);
+  await writeFile(tmp, new Uint8Array(await file.arrayBuffer()));
   const release = await acquire();
   try {
     const pcm = await decodeAudio(tmp);                       // ffmpeg decode (no MLX) then transcribe
@@ -207,19 +210,16 @@ async function chat(req: Request): Promise<Response> {
   return new Response(stream, { headers: { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive", ...CORS } });
 }
 
-Bun.serve({
-  port: PORT,
-  async fetch(req) {
-    const { pathname } = new URL(req.url);
-    if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
-    if (pathname === "/" || pathname === "/index.html") return new Response(CHAT_HTML, { headers: { "content-type": "text/html; charset=utf-8" } });
-    if (pathname === "/favicon.ico") return new Response(null, { status: 204 });
-    if (pathname === "/health") return json({ status: "ok", model: MODEL_ID });
-    if (pathname === "/v1/models") return json({ object: "list", data: [{ id: MODEL_ID, object: "model", created: now(), owned_by: "mlx-ts" }, ...(whisper ? [{ id: WHISPER_ID, object: "model", created: now(), owned_by: "mlx-ts" }] : [])] });
-    if (pathname === "/v1/chat/completions" && req.method === "POST") return chat(req);
-    if (pathname === "/v1/embeddings" && req.method === "POST") return embeddings(req);
-    if (pathname === "/v1/audio/transcriptions" && req.method === "POST") return transcriptions(req);
-    return json({ error: "not found", routes: ["/ (chat UI)", "/health", "/v1/models", "POST /v1/chat/completions", "POST /v1/embeddings", "POST /v1/audio/transcriptions"] }, 404);
-  },
+await serve(PORT, async (req) => {
+  const { pathname } = new URL(req.url);
+  if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
+  if (pathname === "/" || pathname === "/index.html") return new Response(CHAT_HTML, { headers: { "content-type": "text/html; charset=utf-8" } });
+  if (pathname === "/favicon.ico") return new Response(null, { status: 204 });
+  if (pathname === "/health") return json({ status: "ok", model: MODEL_ID });
+  if (pathname === "/v1/models") return json({ object: "list", data: [{ id: MODEL_ID, object: "model", created: now(), owned_by: "mlx-ts" }, ...(whisper ? [{ id: WHISPER_ID, object: "model", created: now(), owned_by: "mlx-ts" }] : [])] });
+  if (pathname === "/v1/chat/completions" && req.method === "POST") return chat(req);
+  if (pathname === "/v1/embeddings" && req.method === "POST") return embeddings(req);
+  if (pathname === "/v1/audio/transcriptions" && req.method === "POST") return transcriptions(req);
+  return json({ error: "not found", routes: ["/ (chat UI)", "/health", "/v1/models", "POST /v1/chat/completions", "POST /v1/embeddings", "POST /v1/audio/transcriptions"] }, 404);
 });
 console.log(`listening on http://localhost:${PORT}  (chat UI at / , API at POST /v1/chat/completions)`);

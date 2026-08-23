@@ -29,7 +29,10 @@ token-for-token. Everything below is the validated machinery underneath it.
 ## Runtimes
 
 The same code runs on all three JS runtimes, producing bit-identical output.
-Only `src/ffi/` differs; it selects a backend at import time.
+Only `src/ffi/` differs; it selects a backend at import time. Everything in
+`src/` and `examples/` — including the OpenAI-compatible server, SSE streaming
+and audio transcription — runs on all three. `training/` is still Bun-only
+(`Bun.mmap` for the token shards, and `Bun.file(...).writer()` streams).
 
 ```sh
 bun  src/models/qwen.ts "The capital of France is"
@@ -64,7 +67,7 @@ which one it resolved. Set `MLXTS_LIB` to choose.
 ```
 src/          the SDK — ffi/ core/ nn/ text/ io/ models/, public API in index.ts
 tools/        codegen.ts: mlx-c headers -> src/ffi/generated.ts
-examples/     server (OpenAI-compatible), chat UI, streaming CLI   [Bun-only]
+examples/     server (OpenAI-compatible), chat UI, streaming CLI
 training/     pretrain, SFT, LoRA, RL, data prep                   [Bun-only]
 spikes/       the original feasibility spikes, kept as evidence
 reference/    MLX-Python / HF oracles every claim is checked against
@@ -299,7 +302,7 @@ base, packed into a u64), `mlx_fast_scaled_dot_product_attention` with
 mlx-ts today is a **local inference runtime for text LLMs *and* Whisper
 speech-to-text** (plus LoRA training) — Apple-Silicon-only, run as scripts in
 this repo (not yet an npm package). The library under `src/` runs on Bun, Deno
-and Node; `examples/` and `training/` are still Bun-only. Sampling supports greedy,
+and Node, as do all of `examples/`; only `training/` is still Bun-only. Sampling supports greedy,
 temperature, top-p, **top-k**, and **repetition penalty**
 (`bun examples/stream.ts --temp 0.8 --topp 0.95 --topk 40 --reppenalty 1.1 "…"`).
 

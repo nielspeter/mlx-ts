@@ -33,6 +33,14 @@ if command -v node >/dev/null 2>&1; then
   FP=$(node spikes/block-gen.ts 2>/dev/null | fp)
   [ -n "$FP" ] && [ "$FP" = "$FP_BUN" ] && ok "node: identical to Bun" || no "node" "NODE=$FP BUN=$FP_BUN"
 fi
+if [ -f models/model-q4.safetensors ]; then   # examples/ must run everywhere too
+  for RT in "deno run --allow-all" "node"; do
+    command -v ${RT%% *} >/dev/null 2>&1 || continue
+    OUT=$($RT examples/chat.ts "What is 2+2?" 2>&1 | tail -1)
+    case "$OUT" in *"tok/s"*) ok "${RT%% *}: examples/chat.ts runs" ;;
+                   *) no "${RT%% *} examples/chat.ts" "$OUT" ;; esac
+  done
+fi
 
 echo "=== unit/self checks ==="
 python3 reference/tok-reference.py >/dev/null 2>&1

@@ -6,6 +6,8 @@
 import { MX, fromI32, tidy, sample } from "../src/core/mx.ts";
 import { Tokenizer, GPT2_SPLIT } from "../src/text/tokenizer.ts";
 import { loadCkpt, forward } from "../src/models/nanogpt-model.ts";
+import { readText } from "../src/io/fs.ts";
+import { serve } from "./serve.ts";
 
 const CKPT = process.env.CHAT_CKPT ?? "checkpoints/chat-ckpt.safetensors";
 const PORT = Number(process.env.PORT ?? 8080);
@@ -15,7 +17,7 @@ console.log(`loading ${CKPT}…`);
 const tok = await Tokenizer.fromFile("models/tokenizer-trained.json", GPT2_SPLIT);
 const EOS = tok.encode("<|endoftext|>")[0];
 const { params, cfg } = await loadCkpt(CKPT);
-const CHAT_HTML = await Bun.file(new URL("./chat.html", import.meta.url)).text();
+const CHAT_HTML = await readText(new URL("./chat.html", import.meta.url));
 console.log("model ready");
 
 // async mutex — one generation at a time (shared model + global tidy arena)
@@ -96,17 +98,14 @@ async function chat(req: Request): Promise<Response> {
   return new Response(stream, { headers: { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive", ...CORS } });
 }
 
-Bun.serve({
-  port: PORT,
-  async fetch(req) {
-    const { pathname } = new URL(req.url);
-    if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
-    if (pathname === "/" || pathname === "/index.html") return new Response(CHAT_HTML, { headers: { "content-type": "text/html; charset=utf-8" } });
-    if (pathname === "/favicon.ico") return new Response(null, { status: 204 });
-    if (pathname === "/health") return json({ status: "ok", model: MODEL_ID });
-    if (pathname === "/v1/models") return json({ object: "list", data: [{ id: MODEL_ID, object: "model", created: now(), owned_by: "mlx-ts" }] });
-    if (pathname === "/v1/chat/completions" && req.method === "POST") return chat(req);
-    return json({ error: "not found", routes: ["/ (chat UI)", "/health", "POST /v1/chat/completions"] }, 404);
-  },
+await serve(PORT, async (req) => {
+  const { pathname } = new URL(req.url);
+  if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
+  if (pathname === "/" || pathname === "/index.html") return new Response(CHAT_HTML, { headers: { "content-type": "text/html; charset=utf-8" } });
+  if (pathname === "/favicon.ico") return new Response(null, { status: 204 });
+  if (pathname === "/health") return json({ status: "ok", model: MODEL_ID });
+  if (pathname === "/v1/models") return json({ object: "list", data: [{ id: MODEL_ID, object: "model", created: now(), owned_by: "mlx-ts" }] });
+  if (pathname === "/v1/chat/completions" && req.method === "POST") return chat(req);
+  return json({ error: "not found", routes: ["/ (chat UI)", "/health", "POST /v1/chat/completions"] }, 404);
 });
 console.log(`listening on http://localhost:${PORT}  (chat UI at / , API at POST /v1/chat/completions)`);

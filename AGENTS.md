@@ -3,7 +3,7 @@
 A working TypeScript MLX SDK over Apple's `mlx-c` C API via FFI — no custom
 C/C++, no build step, and it runs on **Bun, Deno and Node**. It runs real dense
 and MoE LLMs (inference + LoRA training), every layer validated against MLX
-Python or HF. **`scripts/validate-all.sh` is 35/35 green** against Homebrew
+Python or HF. **`scripts/validate-all.sh` is 45/45 green** against Homebrew
 mlx-c (the count varies with which model files you have fetched). Read `docs/FINDINGS.md` first — it's the full,
 honest write-up; this file is the operational guide.
 
@@ -32,16 +32,38 @@ honest write-up; this file is the operational guide.
   one it resolved.
 
 ## How to run / validate
+
+Fast checks first — these need no weights, no GPU and no model files, and are
+what CI runs:
+
+```sh
+bun run typecheck          # tsc --noEmit. Nothing compiles this project, so tsc
+                           # is the ONLY thing that ever checks the types.
+bun run audit              # tools/audit.ts: imports resolve, src/ imports nothing
+                           # outside src/, no cross-directory imports, doc paths exist
+bun test tests/            # op parity fixtures + arena/ownership semantics
+bun examples/basics.ts     # arrays, ops, tidy() — no downloads
+bash scripts/verify-package.sh   # pack, install into a temp project, use it from
+                                 # Bun/Deno/Node — the only check that sees what a
+                                 # consumer sees
+```
+
+Then the full thing (needs the model files, ~9 GB, and Apple Silicon):
+
 ```sh
 bun tools/codegen.ts        # REQUIRED first: regenerates generated.ts (the FFI binding) from mlx-c headers
 bash scripts/validate-all.sh  # full suite, TS vs MLX-Python / HF (also checks Deno + Node)
-bun test tests/       # per-op binding parity vs MLX (fixtures from tests/gen-fixtures.py)
 bun examples/chat.ts "Write a haiku about the sea"   # a real chat turn (4-bit Qwen3)
 bun examples/stream.ts "Write a haiku about the sea" # streaming chat over the public src/text/lm.ts API
 bun examples/server.ts                               # HTTP server: chat UI /, /v1/chat/completions, /v1/embeddings, /v1/audio/transcriptions
 bun training/lora-train.ts     # LoRA fine-tune of 4-bit Qwen3 (loss 3.16 -> 0.0007)
 ```
-Every TS path has a `reference-*.py` MLX/HF mirror; parity is the bar.
+Every TS path has a `reference/reference-*.py` MLX/HF mirror; parity is the bar.
+
+**CI** (`.github/workflows/ci.yml`) runs typecheck + audit on Linux, and codegen,
+tests and the zero-download examples on macOS. The full parity suite stays local:
+it needs the weights. The macOS job is written but unverified — nobody has
+confirmed GitHub's runners give MLX a usable Metal device.
 
 ## The one ABI fact everything rests on
 Every mlx-c handle is `struct { void* ctx; }` — a single pointer. On ARM64 it's
@@ -150,8 +172,9 @@ generalizes this: any opaque `mlx_*` type → `ptr`.
 - **Training breadth**: AdamW/schedulers, more losses, multi-example batches, the
   backward-memory regime at scale (`tidy()` *after* the step).
 - **Coverage**: more architectures (key-mapping), quant formats (AWQ/GPTQ, bit-
-  widths), sampling (top-k, penalties), and **npm packaging of a prebuilt
-  `libmlxc`** (the only native artifact to ship).
+  widths), sampling (top-k, penalties). Packaging is done
+  (`@npstrandberg/mlx-ts`); **bundling a prebuilt `libmlxc`** is not — that
+  build disagrees with MLX-Python numerically.
 
 ## Working norms
 - **Validate against MLX/HF, always.** The project's value is in *proven*, not

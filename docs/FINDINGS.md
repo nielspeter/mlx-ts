@@ -12,13 +12,12 @@ from first principles.
 ---
 
 ## 1. Verdict
-
 A Bun-FFI MLX SDK is not just possible; it is **~1,400 lines of hand-written
 TypeScript** plus **~1,900 lines of generated FFI bindings**, and it runs real
 **dense** (Qwen3-0.6B) and **MoE** (OLMoE-1B-7B, 64 experts) models — bf16 and
 4-bit, single-file and sharded — at **~200–300 tok/s** with **bounded memory**,
 producing output **token-for-token identical** to MLX's own Python stack
-(`../scripts/validate-all.sh`: 35/35). It also **trains transformers from scratch** —
+(`../scripts/validate-all.sh`: 45/45). It also **trains transformers from scratch** —
 microGPT → nanoGPT (to the ~1.47 Shakespeare baseline) → real GPT-2-124M — the
 optimizer driven by MLX `value_and_grad` over FFI, at ~parity with Python (§7d).
 
@@ -36,7 +35,6 @@ framework layer is ordinary TypeScript. Neither requires touching C++.
 ---
 
 ## 2. The pivotal discovery
-
 The MLX core in this repository is **pure C++** (`namespace mlx::core`, `class
 array`, `StreamOrDevice` default args) with **no C ABI** — `MLX_API` is only a
 visibility macro. If that were the whole story, the real work would be designing
@@ -66,7 +64,6 @@ streams, maps, closures, devices) is one pointer, so the codegen treats unknown
 ---
 
 ## 3. What was proven, in order
-
 Each milestone is a runnable file validated against a reference.
 
 | # | Capability | File(s) | Validated against | Result |
@@ -87,7 +84,7 @@ Each milestone is a runnable file validated against a reference.
 | 14 | **Training** — `value_and_grad` over a multi-param JS closure + SGD | `../validation/spike-train.ts` / `../reference/reference-train.py` | MLX Python | loss falls 0.237→0.009, final W bit-identical |
 | 15 | **LoRA fine-tune** of real 4-bit Qwen3 — Adam + cross_entropy, frozen base | `../training/lora-train.ts` / `../reference/reference-lora.py` | MLX Python | loss falls 3.16→0.0007; tracks MLX to float tolerance |
 
-All fifteen are re-checked together by `../scripts/validate-all.sh` — **35/35 green**
+All fifteen are re-checked together by `../scripts/validate-all.sh` — **45/45 green**
 (the fifteen above plus the codegen, async-overlap, public-`stream()`, gather_qmm
 op, per-op binding-parity (`bun test tests/`), and cross-runtime checks). The
 count tracks which model files you have fetched; checks whose weights are absent
@@ -107,22 +104,24 @@ Sample real output (`../src/models/qwen-nn.ts`, 4-bit):
 ---
 
 ## 4. The codegen
-
 `../tools/codegen.ts` parses the mlx-c headers and emits `../src/ffi/generated.ts` — the FFI symbol
 table plus typed wrappers. Final coverage:
 
 ```
-parsed   446 decls across 10 headers
-symbols  440 FFI entries
+parsed   491 decls across 12 headers
+symbols  472 FFI entries
 wrappers 242 typed op wrappers (from ops.h, fast.h)
-skipped  34   (every one reported by name)
+skipped  47:
+   24  non-standard (multi/zero output)
+   17  unsupported param type '…'
+    4  unwrappable param shape
 ```
 
 It encodes the ABI knowledge as transformation rules: map each C type to an FFI
 type, auto-supply the trailing `mlx_stream`, collapse `const int* x, size_t
 x_num` pairs into one `number[]`, expose `/* may be null */` arrays as
 `Arr | null`, and pack the by-value `mlx_optional_float/int` structs into a
-`u64`. The 34 skips are all exotic and named — float16-by-value, function
+`u64`. The 47 skips are all exotic and named — float16-by-value, function
 pointers, and the metal/cuda **kernel-builder** API (opaque builders) — never a
 standard tensor op. **No silent truncation.**
 
@@ -136,7 +135,6 @@ needed editing.
 ---
 
 ## 5. Performance
-
 On this machine (Apple Silicon, `Darwin 25.5.0`, Bun 1.3.14):
 
 | Model | tok/s |
@@ -151,7 +149,6 @@ doesn't matter.
 ---
 
 ## 6. Engineering findings (the non-obvious part)
-
 These are the things you only learn by building it — the real value of the study.
 
 1. **Empty handles are `null`, not `0`.** `mlx_array_new()` returns a handle with
@@ -227,8 +224,41 @@ These are the things you only learn by building it — the real value of the stu
 
 ---
 
-## 7. What a production `@mlx-ts/lm` still needs
+## 6.6. The memory model has a second half: ownership transfer
+`tidy()` (§6.5) frees everything created in its scope except what is returned.
+That is the right default and it is what makes a decode loop bounded — but it is
+only half a memory model, and the missing half stayed missing long enough to
+make the exported optimizer unusable.
 
+Anything whose lifetime spans *more* than one scope does not fit: an optimizer's
+first/second-moment buffers are created during `update()` and must survive to the
+next step. Called inside a `tidy()`, they were freed as scope-local
+intermediates, and the following step read freed handles. The symptom was
+`expected a non-empty mlx_array` on step 1.
+
+This had been silently worked around rather than fixed, which is the interesting
+part. `../training/sft.ts` and `../validation/spike-nanogpt.ts` both hand-roll AdamW with module-level
+state instead of using `../src/nn/optim.ts`, and `../training/lora-train.ts` — the only user of the
+class — avoids `tidy()` altogether. Three files had independently routed around
+the same defect without anyone naming it.
+
+The fix is an explicit ownership transfer, `escape()`:
+
+```ts
+const oldM = this.m[i], oldV = this.v[i];
+this.m[i] = escape(mi); this.v[i] = escape(vi);   // out of the caller's arena
+oldM?.free(); oldV?.free();                        // we own them now, so we free them
+```
+
+`escape()` removes arrays from the enclosing arena and hands ownership to the
+caller, who becomes responsible for freeing them. Measured: 500 optimizer steps
+inside `tidy()` grow active memory by 0.03 MB.
+
+The general lesson is that an arena needs an escape hatch as much as it needs a
+scope, and that a workaround appearing independently in three places is evidence
+of a defect rather than a style choice.
+
+## 7. What a production `@mlx-ts/lm` still needs
 The list has shrunk a lot — most of the original items are now built and
 validated (§3, §6, §7b). None of what remains is a feasibility risk; it is
 ergonomics, packaging, and breadth.
@@ -281,15 +311,15 @@ decode is compute-bound).
   **recoverable over FFI** (see below), so even that is no longer a hard gap.
 - **Breadth.** More architectures (dense + MoE families proven; each new one is
   key-mapping), more quant formats (AWQ/GPTQ, other bit-widths), more sampling
-  (top-k, repetition penalties, min-p), and **npm packaging of a prebuilt
-  `libmlxc`** — the only native artifact to ship.
+  (top-k, repetition penalties, min-p), and **bundling a prebuilt `libmlxc`** —
+  the only native artifact to ship, and still blocked: the `prebuilds/` build
+  disagrees with MLX-Python numerically (§7e). The package itself ships.
 
 The one piece genuinely outside MLX — the **tokenizer** — is done and validated.
 
 ---
 
 ## 7b. Spikes: de-risking the kill-risk unknowns
-
 Before committing to a production `@mlx-ts/lm`, we spiked the unknowns that could
 *kill* the project or limit it to a partial (correctness-only) toy. Both came
 back green. (`../validation/spike-throughput.ts`, `../benchmarks/qwen_q4_throughput_bench.py`, `../validation/spike-moe.ts`.)
@@ -363,51 +393,7 @@ JS:GPU ratio, which is exactly where the now-proven overlap mechanism would
 start to pay); MoE is proven at the op level but not yet wired into a full model;
 and Node/Deno FFI parity, once deferred as v1 scope, is now done — see §7e.
 
-## 7e. The FFI layer is not Bun-specific
-
-Bun-only was the single biggest limit on who could use this, so it was worth
-testing rather than assuming. It turned out to be a thin constraint: the same
-code now runs on **Bun, Deno and Node**, producing bit-identical output, with the
-runtime difference confined to five primitives in `../src/ffi/`
-(`open`/`ptr`/`view`/`cstring`/`callback`).
-
-Two risks were expected and both evaporated:
-
-- **The ABI trick ports.** `mlx_array` is `struct { void* ctx; }`, passed and
-  returned in a register like a bare pointer. Declaring it `void *` works
-  identically in `bun:ffi`, `Deno.dlopen` and koffi — no struct support needed.
-- **Zero-copy readback exists everywhere**: `toArrayBuffer` (Bun),
-  `UnsafePointerView.getArrayBuffer` (Deno), `koffi.view` (Node). Verified by
-  *aliasing* — write through one view, read from another — not by timing, which
-  cannot distinguish a fast copy from a genuine view. koffi's `decode()` is the
-  copying path and is the wrong one.
-
-The real cost was **handle representation**: Bun hands back numbers (with NULL as
-`null`), Deno opaque PointerObjects, koffi BigInt addresses. Normalising every
-pointer to a JS number at the boundary — safe because macOS user-space addresses
-fit in 2^48 — kept `type Arr = number` intact, so `../src/core/mx.ts`, the 242 generated
-wrappers and every model file are untouched by any of this.
-
-Dispatch cost, 500k calls warmed, best of 3, result observed so the JIT cannot
-elide it: **Bun ~12 ns, Deno ~3 ns, Node/koffi ~21 ns**. All are cheap beside an
-MLX op, and end-to-end generation is equal across the three within noise — the
-compute-bound finding of §5 holding up. One sharp edge: a 64-bit *return* costs
-Deno ~52 ns, falling off V8's fast-call path, so hot accessors declare a 32-bit
-return. First measurements were 4–8x higher and ranked Deno last; that was JIT
-warmup, not dispatch, and is a caution about single-shot FFI microbenchmarks.
-
-Node imposed two source constraints, since it runs `.ts` by stripping types only:
-no `enum` (codegen emits a const object) and no parameter properties (expanded to
-explicit fields). Both are what `isolatedModules` wants anyway.
-
-**Unresolved:** the relocatable `prebuilds/` bundle is a *different MLX build*
-from Homebrew's mlx-c and does not agree with it numerically — real Qwen3 (bf16
-and 4-bit) and LoRA diverge from MLX-Python when the bundle is loaded, and agree
-when Homebrew's is. The packaging spike is therefore not yet validated; the suite
-prints which dylib it resolved so this cannot be mistaken for a code regression.
-
 ## 7c. Audio: speech-to-text (done) and text-to-speech (de-risked)
-
 A second modality, carried to the same bar. The reusable insight: for a fixed,
 small `n_fft`, **the FFT is a matmul** — no FFT binding needed. The forward rfft
 (audio → spectrum) is `frames @ cos / @ sin`; the inverse rfft (spectrum → audio)
@@ -442,7 +428,6 @@ talking pipeline would pull in a non-MLX dependency analogous to ffmpeg. That is
 TTS question — "does the audio-synthesis math run in mlx-c/TS?" — is answered yes.
 
 ## 7d. From-scratch training: microGPT → nanoGPT → GPT-2-124M
-
 The training above (§7, LoRA over a frozen base) is *fine-tuning*. This is the
 harder claim: **train a transformer from random init, end to end, in TypeScript
 driving MLX** — the autograd being real `value_and_grad` over FFI, not a
@@ -513,8 +498,58 @@ bandwidth that pessimizes large (GPU-bound) ones.
 
 Deep-dive notes: `MICROGPT.md`, `NANOGPT.md`, `GPT2.md`.
 
-## 8. File map
+## 7e. The FFI layer is not Bun-specific
+Bun-only was the single biggest limit on who could use this, so it was worth
+testing rather than assuming. It turned out to be a thin constraint: the same
+code now runs on **Bun, Deno and Node**, producing bit-identical output, with the
+runtime difference confined to five primitives in `../src/ffi/`
+(`open`/`ptr`/`view`/`cstring`/`callback`).
 
+Two risks were expected and both evaporated:
+
+- **The ABI trick ports.** `mlx_array` is `struct { void* ctx; }`, passed and
+  returned in a register like a bare pointer. Declaring it `void *` works
+  identically in `bun:ffi`, `Deno.dlopen` and koffi — no struct support needed.
+- **Zero-copy readback exists everywhere**: `toArrayBuffer` (Bun),
+  `UnsafePointerView.getArrayBuffer` (Deno), `koffi.view` (Node). Verified by
+  *aliasing* — write through one view, read from another — not by timing, which
+  cannot distinguish a fast copy from a genuine view. koffi's `decode()` is the
+  copying path and is the wrong one.
+
+The real cost was **handle representation**: Bun hands back numbers (with NULL as
+`null`), Deno opaque PointerObjects, koffi BigInt addresses. Normalising every
+pointer to a JS number at the boundary — safe because macOS user-space addresses
+fit in 2^48 — kept `type Arr = number` intact, so `../src/core/mx.ts`, the 242 generated
+wrappers and every model file are untouched by any of this.
+
+Dispatch cost, 500k calls warmed, best of 3, result observed so the JIT cannot
+elide it: **Bun ~12 ns, Deno ~3 ns, Node/koffi ~21 ns**. All are cheap beside an
+MLX op, and end-to-end generation is equal across the three within noise — the
+compute-bound finding of §5 holding up. One sharp edge: a 64-bit *return* costs
+Deno ~52 ns, falling off V8's fast-call path, so hot accessors declare a 32-bit
+return. First measurements were 4–8x higher and ranked Deno last; that was JIT
+warmup, not dispatch, and is a caution about single-shot FFI microbenchmarks.
+
+Node imposed two source constraints, since it runs `.ts` by stripping types only:
+no `enum` (codegen emits a const object) and no parameter properties (expanded to
+explicit fields). Both are what `isolatedModules` wants anyway.
+
+**Unresolved:** the relocatable `prebuilds/` bundle is a *different MLX build*
+from Homebrew's mlx-c and does not agree with it numerically — real Qwen3 (bf16
+and 4-bit) and LoRA diverge from MLX-Python when the bundle is loaded, and agree
+when Homebrew's is. The packaging spike is therefore not yet validated.
+
+The sharper version of that finding is how it was nearly missed. The resolver
+*preferred* the bundle over Homebrew, on the reasoning that a bundled copy makes
+the package self-contained. So the default configuration silently produced
+different numbers, and the suite only passed because `MLXTS_LIB` was being set by
+hand — the parity checks were, for a while, testing a path that was not the
+default. The order is now inverted: the validated build wins when present, the
+bundle is the fallback for machines without Homebrew, and using it prints a
+warning. `../scripts/validate-all.sh` also prints which dylib it resolved, so a parity
+failure can never again be mistaken for a code regression.
+
+## 8. File map
 **Runtime & codegen**
 - `../tools/codegen.ts` → `../src/ffi/generated.ts` — header parser → FFI bindings (472 symbols, 242 wrappers)
 - `../src/core/mx.ts` — `MX` array class, `FinalizationRegistry` + `tidy()`, ops, sampling,
@@ -560,12 +595,11 @@ from scratch — trains to nanoGPT's Shakespeare baseline). See §7d.
 - `reference*.py` — MLX Python mirrors for every milestone
 - `../reference/tok-reference.py` / `../tests/tok-test.ts` — tokenizer ground truth
 - `../tests/validate-prod.ts` — sampling / batching / bounded-memory checks
-- **`../scripts/validate-all.sh`** — the full suite: every TS path vs its reference (35/35)
+- **`../scripts/validate-all.sh`** — the full suite: every TS path vs its reference (45/45)
 
 ---
 
 ## 9. Environment
-
 - Apple Silicon, macOS (`Darwin 25.5.0`)
 - Bun 1.3.14 (FFI host)
 - `mlx-c` 0.6.0, `libmlx` (MLX) 0.31.2 — both prebuilt via Homebrew
@@ -575,7 +609,6 @@ from scratch — trains to nanoGPT's Shakespeare baseline). See §7d.
 ---
 
 ## 10. Bottom line
-
 The original architecture instinct — build a runtime-agnostic TS layer over a
 stable C ABI, let Bun be the nice frontend — was correct, and **cheaper than
 expected**, because the C ABI already exists and is maintained by Apple, the

@@ -3,10 +3,43 @@
 A TypeScript MLX SDK over **`mlx-c`** (Apple's official C API) via FFI, with
 **zero custom C/C++** and no build step — running on **Bun, Deno and Node**, and
 **numerically identical** to MLX's Python reference (`scripts/validate-all.sh`:
-35/35).
+45/45).
 
-It is a research artifact carried to a working state, not a released package:
-read `docs/FINDINGS.md` for what was proven and how. Apple Silicon + Metal only.
+Read `docs/FINDINGS.md` for what was proven and how. Apple Silicon + Metal only.
+
+## When you'd want this
+
+Reach for mlx-ts when you are **writing TypeScript on Apple Silicon and need the
+model in your process** — not behind an HTTP hop, a subprocess, or a Python
+sidecar. Concretely, when you need:
+
+- **more than text out.** Embeddings, raw logits, the KV cache, a custom sampler,
+  constrained decoding — anything a generate-endpoint cannot hand you. Nothing
+  crosses a serialization boundary here; an `MX` is a pointer to GPU memory.
+- **to build the model, not just call one.** `src/models/` are ordinary
+  TypeScript files composing `nn` Modules. A new architecture is a forward pass,
+  not a new binary.
+- **training or fine-tuning from TypeScript.** Real `value_and_grad` over a
+  pytree of parameters, Adam, cross-entropy, LoRA — proven from a linear fit up
+  to a full fine-tune of GPT-2-124M.
+- **MLX specifically** — Apple's own kernels and unified memory, and output that
+  matches `mlx-lm` token-for-token, so a Python prototype ports without drift.
+
+## When you'd want something else
+
+Being honest about it is cheaper than you finding out later:
+
+| if you need… | use |
+|---|---|
+| Linux, CUDA, Windows, or an Intel Mac | not this — Apple Silicon + Metal only |
+| a chat endpoint with the least possible work | Ollama or LM Studio; a server is less code than an SDK |
+| the same thing in Python | `mlx-lm` — same engine, far more models, maintained by Apple |
+| GGUF, AWQ/GPTQ, or the widest model coverage | the llama.cpp ecosystem (e.g. `node-llama-cpp`) |
+| to run in a browser | `transformers.js` — ONNX/WebGPU, a different engine entirely |
+| high-throughput multi-tenant serving | not this yet: no continuous batching, generation is serialized |
+
+The narrow version: **if a generation API is enough, something else will get you
+there faster. This is for when it isn't.**
 
 ## End to end: real Qwen3-0.6B generating text
 
@@ -336,9 +369,10 @@ base, packed into a u64), `mlx_fast_scaled_dot_product_attention` with
 ## What you can build with it
 
 mlx-ts today is a **local inference runtime for text LLMs *and* Whisper
-speech-to-text** (plus LoRA training) — Apple-Silicon-only, run as scripts in
-this repo (not yet an npm package). The library under `src/` runs on Bun, Deno
-and Node, as do all of `examples/`; only `training/` is still Bun-only. Sampling supports greedy,
+speech-to-text** (plus LoRA training) — Apple-Silicon-only, published as
+`@npstrandberg/mlx-ts` and also runnable as scripts in this repo. The library
+under `src/` runs on Bun, Deno and Node, as do all of `examples/`; only
+`training/` is still Bun-only. Sampling supports greedy,
 temperature, top-p, **top-k**, and **repetition penalty**
 (`bun examples/stream.ts --temp 0.8 --topp 0.95 --topk 40 --reppenalty 1.1 "…"`).
 
@@ -450,8 +484,11 @@ bun src/models/gpt2.ts "The capital of France is"   # greedy; TEMP/TOP_K/TOP_P/R
 - **Better embeddings** — a *dedicated* embedding model (BERT encoder + WordPiece,
   or Qwen3-Embedding with last-token pooling) for stronger retrieval than the
   current mean-pooled base-LLM vectors.
-- **npm packaging** — bundle a prebuilt `libmlxc`, replace the hardcoded
-  `/opt/homebrew/...` dylib paths with runtime resolution.
+- **Shipping a prebuilt `libmlxc`** — the package currently requires
+  `brew install mlx-c` and ships no binaries. Bundling one would drop that
+  prerequisite, but `prebuilds/` is a *different* MLX build that does not agree
+  with MLX-Python numerically, so it is not shippable until that is diagnosed.
+  (Packaging itself is done: `@npstrandberg/mlx-ts`, dylib resolved at runtime.)
 
 ### ❌ Not yet (substantial new code or a real gap)
 - **Text-to-speech** — **de-risked, not built**: the novel vocoder step (iSTFT,

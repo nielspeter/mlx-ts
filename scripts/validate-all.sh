@@ -52,6 +52,12 @@ NEXP=$(bun -e 'import * as m from "./src/index.ts";
   console.log(Object.keys(m).length);' 2>/tmp/v_api.txt)
 [ -n "$NEXP" ] && ok "public API src/index.ts loads ($NEXP exports)" || no "public API" "$(cat /tmp/v_api.txt | tail -1)"
 
+
+# Completeness, not just presence — see tools/check-api.ts for why.
+bun tools/check-api.ts >/tmp/v_apic.txt 2>&1 \
+  && ok "$(tail -1 /tmp/v_apic.txt)" \
+  || no "public API completeness" "$(tail -1 /tmp/v_apic.txt)"
+
 echo "=== runtimes (same block fingerprint on Bun / Deno / Node) ==="
 FP_BUN=$(bun validation/block-gen.ts 2>/dev/null | fp)
 [ -n "$FP_BUN" ] && ok "bun: Qwen3 block ($FP_BUN)" || no "bun" "no fingerprint"

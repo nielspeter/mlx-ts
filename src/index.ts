@@ -48,12 +48,19 @@ export {
 export { Whisper, loadWhisper } from "./models/whisper.ts";
 export { OLMoE } from "./models/olmoe.ts";
 export { WhisperTokenizer, langToken } from "./text/whisper-tokenizer.ts";
-export { generateBatch } from "./models/qwen-nn.ts";
+// Qwen3 is the model class the rest of the repo is built around; generateBatch
+// takes one as its first argument, so exporting the function without the class
+// gave consumers a signature they could not satisfy.
+export { Qwen3, generateBatch, stepTidy } from "./models/qwen-nn.ts";
 // Namespaced: its `generate`/`forward` would collide with the ones above.
 export * as nanogpt from "./models/nanogpt-model.ts";
 
 // --- runtime / FFI -------------------------------------------------------
 // `backend.name` tells you which runtime was detected; LIBMLXC is the resolved
 // dylib path (override with MLXTS_LIB).
-export { backend } from "./ffi/index.ts";
+// The escape hatch: call an mlx-c entry point we do not wrap. `open` binds
+// symbols, `ptr`/`view` cross the buffer boundary, `callback` makes a C function
+// pointer. Pointers are plain numbers on every runtime.
+export { backend, open, ptr, view, cstring, callback } from "./ffi/index.ts";
+export type { Backend, CType, SymbolSpec, SymbolTable, Callback } from "./ffi/types.ts";
 export { LIBMLXC } from "./ffi/native-lib.ts";

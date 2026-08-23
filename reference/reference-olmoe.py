@@ -5,15 +5,15 @@ import sys, json
 import mlx.core as mx
 from tokenizers import Tokenizer
 
-cfg = json.load(open("config-olmoe.json"))
+cfg = json.load(open("models/config-olmoe.json"))
 D, NL, nH = cfg["hidden_size"], cfg["num_hidden_layers"], cfg["num_attention_heads"]
 nKV, Dh, E, K = cfg["num_key_value_heads"], D // cfg["num_attention_heads"], cfg["num_experts"], cfg["num_experts_per_tok"]
 EPS, THETA, SCALE = cfg["rms_norm_eps"], cfg["rope_theta"], (D // nH) ** -0.5
 GS, BITS, EOS, B = cfg["quantization"]["group_size"], cfg["quantization"]["bits"], cfg.get("eos_token_id", 50279), 1
 NORM_TOPK = cfg["norm_topk_prob"]
 
-w = mx.load("model-olmoe.safetensors")
-tok = Tokenizer.from_file("tokenizer-olmoe.json")
+w = mx.load("models/model-olmoe.safetensors")
+tok = Tokenizer.from_file("models/tokenizer-olmoe.json")
 
 def qmm(x, p): return mx.quantized_matmul(x, w[f"{p}.weight"], w[f"{p}.scales"], w[f"{p}.biases"], transpose=True, group_size=GS, bits=BITS)
 def rms(x, n): return mx.fast.rms_norm(x, w[n], EPS)

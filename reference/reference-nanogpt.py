@@ -15,7 +15,7 @@ LR0, MIN_LR, WD, CLIP, B1, EPSA = 1e-3, 1e-4, 0.1, 1.0, 0.9, 1e-8
 B2 = float(os.environ.get("BETA2", 0.95)); DROP = float(os.environ.get("DROPOUT", 0.0))
 EPS, ASCALE = 1e-5, 1.0 / (DH ** 0.5)
 
-text = open("input.txt").read()
+text = open("data/input.txt").read()
 chars = sorted(set(text)); V = len(chars)
 stoi = {c: i for i, c in enumerate(chars)}
 data = np.array([stoi[c] for c in text], dtype=np.int32)

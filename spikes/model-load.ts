@@ -15,8 +15,8 @@ import { loadSafetensors, get, entries } from "../src/io/loader.ts";
 const VOCAB = 32, D = 64, nH = 4, nKV = 2, Dh = 16, I = 128, LAYERS = 2;
 const EPS = 1e-6, THETA = 1_000_000, SCALE = Dh ** -0.5, B = 1;
 
-const w = loadSafetensors("model.safetensors");
-console.log(`loaded model.safetensors — ${entries(w).length} tensors`);
+const w = loadSafetensors("models/model.safetensors");
+console.log(`loaded models/model.safetensors — ${entries(w).length} tensors`);
 
 const embed = get(w, "embed");
 const finalNorm = get(w, "finalNorm");

@@ -3,7 +3,7 @@
 // `Decoder` interface (lm.ts), so it generates through the same public
 // streamTokens/generate path as Qwen3. Greedy ids match the MLX Python reference.
 //   bun olmoe.ts "The capital of France is"
-//   MX_SHARDED=model-olmoe-sharded/model.safetensors.index.json bun olmoe.ts "..."
+//   MX_SHARDED=models/model-olmoe-sharded/model.safetensors.index.json bun olmoe.ts "..."
 
 import { MX, fromI32, stack, activeMemoryMB, peakMemoryMB, cacheMemoryMB, setMemoryLimit, resetPeakMemory } from "../core/mx.ts";
 import { RMSNorm, QuantizedLinear, QuantizedEmbedding, MoE, type Experts } from "../nn/nn.ts";
@@ -95,11 +95,11 @@ export { OLMoE };
 // ---- CLI / demo ----
 if (import.meta.main) {
   if (process.env.MX_MEM_LIMIT) setMemoryLimit(Number(process.env.MX_MEM_LIMIT)); // cap MLX memory (spills to OS)
-  const cfg = await readJson("config-olmoe.json");
+  const cfg = await readJson("models/config-olmoe.json");
   // streaming sharded load (one shard mmapped at a time) when MX_SHARDED points
   // at an index.json; otherwise the whole single file.
-  const W: Weights = process.env.MX_SHARDED ? shardedWeights(process.env.MX_SHARDED) : singleFileWeights("model-olmoe.safetensors");
-  const tok = await Tokenizer.fromFile("tokenizer-olmoe.json");
+  const W: Weights = process.env.MX_SHARDED ? shardedWeights(process.env.MX_SHARDED) : singleFileWeights("models/model-olmoe.safetensors");
+  const tok = await Tokenizer.fromFile("models/tokenizer-olmoe.json");
 
   const mem = (tag: string) => console.log(`[mem] ${tag}: active ${activeMemoryMB() | 0} / peak ${peakMemoryMB() | 0} / cache ${cacheMemoryMB() | 0} MB`);
   const model = new OLMoE(cfg, W);

@@ -16,17 +16,17 @@ import { treeFlatten, treeUnflattenLike, type Tree } from "../src/core/pytree.ts
 import { loadSafetensors, get } from "../src/io/loader.ts";
 import { Tokenizer, GPT2_SPLIT } from "../src/text/tokenizer.ts";
 
-const cfg = await Bun.file("config-gpt2.json").json();
+const cfg = await Bun.file("models/config-gpt2.json").json();
 const D = cfg.n_embd, NL = cfg.n_layer, NH = cfg.n_head, Dh = D / NH;
 const EPS = cfg.layer_norm_epsilon, ASCALE = Dh ** -0.5, EOS = 50256, VOCAB = cfg.vocab_size;
 const STEPS = +(process.env.STEPS ?? 25), G = +(process.env.GROUP ?? 8), MAXNEW = +(process.env.MAXNEW ?? 12);
 const TEMP = +(process.env.TEMP ?? 1.0), TOPK = +(process.env.TOPK ?? 50), LR0 = +(process.env.LR ?? 1e-5);
 const B1 = 0.9, B2 = 0.95, EPSA = 1e-8, CLIP = 1.0;
 
-const tok = await Tokenizer.fromFile("gpt2-tokenizer.json", GPT2_SPLIT);
+const tok = await Tokenizer.fromFile("models/gpt2-tokenizer.json", GPT2_SPLIT);
 
 // --- load GPT-2 into a trainable MX params tree (same as sft.ts) ---
-const w = loadSafetensors("gpt2-model.safetensors");
+const w = loadSafetensors("models/gpt2-model.safetensors");
 const cp = (name: string): MX => new MX(get(w, name) as number).copy();
 const blocks = Array.from({ length: NL }, (_, i) => {
   const p = `h.${i}`;

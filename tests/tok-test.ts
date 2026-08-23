@@ -3,8 +3,8 @@
 
 import { Tokenizer } from "../src/text/tokenizer.ts";
 
-const fixtures = await Bun.file("tok-fixtures.json").json();
-const tok = await Tokenizer.fromFile("tokenizer.json");
+const fixtures = await Bun.file("tests/tok-fixtures.json").json();
+const tok = await Tokenizer.fromFile("models/tokenizer.json");
 
 let pass = 0, fail = 0;
 for (const f of fixtures) {

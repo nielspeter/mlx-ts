@@ -70,7 +70,7 @@ export function padOrTrim(pcm: Float32Array, length = N_SAMPLES): Float32Array {
 
 // Load Whisper's shipped librosa mel filterbank ([n_mels, bins]) -> [bins, n_mels]
 // for `power @ filtersT`. (The HTK filterbank above is only for the self-test.)
-export async function loadMelFilters(path = "whisper-mel-filters-80.f32", nMels = N_MELS): Promise<MX> {
+export async function loadMelFilters(path = "models/whisper-mel-filters-80.f32", nMels = N_MELS): Promise<MX> {
   const b = new Uint8Array(await Bun.file(path).arrayBuffer());
   const data = new Float32Array(b.buffer, b.byteOffset, Math.floor(b.byteLength / 4));
   return fromF32(data, [nMels, data.length / nMels]).transpose([1, 0]);

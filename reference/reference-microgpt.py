@@ -29,7 +29,7 @@ for name, shape in SPEC:
     params[name] = mx.array(blob[off:off + n].reshape(shape))
     off += n
 
-names = [s.strip().lower() for s in open("names.txt")]
+names = [s.strip().lower() for s in open("data/names.txt")]
 names = [s for s in names if s.isascii() and s.isalpha()]
 enc = lambda nm: [0] + [ord(c) - 96 for c in nm]
 

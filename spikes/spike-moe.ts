@@ -2,7 +2,7 @@
 // Reproduces the exact gather_qmm expert-dispatch call from spike (Python) and
 // checks the sum matches -> proves the routing args (lhs/rhs indices, optional
 // group_size/bits) wire correctly over Bun FFI. Python ref sum = 0.409543.
-//   python3 (saves moe-test.safetensors) ; bun spike-moe.ts
+//   python3 (saves models/moe-test.safetensors) ; bun spike-moe.ts
 
 import { ptr } from "../src/ffi/index.ts";
 import { MX } from "../src/core/mx.ts";
@@ -10,7 +10,7 @@ import { m, stream, gatherQmm } from "../src/ffi/generated.ts";
 import { loadSafetensors, get } from "../src/io/loader.ts";
 
 const T = 6, IN = 64, GS = 64, BITS = 4;
-const w = loadSafetensors("moe-test.safetensors");
+const w = loadSafetensors("models/moe-test.safetensors");
 const wq = new MX(get(w, "wq")), scales = new MX(get(w, "scales")), biases = new MX(get(w, "biases"));
 const x = new MX(get(w, "x"));
 

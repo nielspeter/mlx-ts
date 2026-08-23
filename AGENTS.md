@@ -3,7 +3,7 @@
 A working TypeScript MLX SDK over Apple's `mlx-c` C API via FFI — no custom
 C/C++, no build step, and it runs on **Bun, Deno and Node**. It runs real dense
 and MoE LLMs (inference + LoRA training), every layer validated against MLX
-Python or HF. **`scripts/validate-all.sh` is 32/32 green** against Homebrew
+Python or HF. **`scripts/validate-all.sh` is 35/35 green** against Homebrew
 mlx-c (the count varies with which model files you have fetched). Read `docs/FINDINGS.md` first — it's the full,
 honest write-up; this file is the operational guide.
 
@@ -61,7 +61,7 @@ generalizes this: any opaque `mlx_*` type → `ptr`.
   **write** via `mx.saveSafetensors(path, {name: MX})` (training checkpoints).
 - **`src/text/tokenizer.ts`** (byte-level BPE inference), **`src/text/chat-template.ts`** (`@huggingface/jinja`).
   Tokenizer *training* (`reference/tok-train.py`) runs in native Rust (HF `tokenizers`, as
-  nanochat does — not MLX compute); output `tokenizer.json` is consumed token-exact
+  nanochat does — not MLX compute); output `models/tokenizer.json` is consumed token-exact
   by `src/text/tokenizer.ts` (`tests/tok-train-test.ts`, 4/4).
 - **Full nanochat-style pipeline** (`scripts/run.sh`, see docs/PIPELINE.md): dataset
   (TinyStories) → `reference/tok-train.py` (Rust BPE) → `training/data-prep.ts` (stream-encode →
@@ -79,8 +79,8 @@ generalizes this: any opaque `mlx_*` type → `ptr`.
 - **`src/models/whisper.ts`** — Whisper STT, end to end: encoder + decoder (cross-attention)
   + greedy decode + `src/text/whisper-tokenizer.ts` (tiktoken decode-only). `bun src/models/whisper.ts
   <audio>` transcribes; **token-exact vs mlx_whisper** (`tests/whisper-transcribe-test.ts`,
-  also `tests/whisper-test.ts` for encoder/decoder parity). Needs `whisper-tiny.safetensors`
-  (npz→safetensors), `whisper-mel-filters-80.f32` + `whisper-multilingual.tiktoken`
+  also `tests/whisper-test.ts` for encoder/decoder parity). Needs `models/whisper-tiny.safetensors`
+  (npz→safetensors), `models/whisper-mel-filters-80.f32` + `models/whisper-multilingual.tiktoken`
   (from mlx_whisper assets) — all git-ignored, see README.
 - **`tests/`** — per-op binding parity (`bun test`): `tests/gen-fixtures.py` runs each
   op through MLX Python and saves inputs+output to `tests/fixtures.json`; `tests/lib.test.ts`

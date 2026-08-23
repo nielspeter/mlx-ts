@@ -7,6 +7,8 @@
 //   shape/data buffers leak (MLX copies shapes synchronously; data buffers are
 //   pinned to the owning MX instance).
 
+import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import { ptr, view as toArrayBuffer } from "../ffi/index.ts";
 import { m, stream } from "../ffi/generated.ts";
 
@@ -189,6 +191,7 @@ export function seed(s: number) { if (m.mlx_random_seed) m.mlx_random_seed(BigIn
 // Keys become tensor names; pass a flattened param tree (e.g. "blocks.0.wq").
 // Used for training checkpoints (pretrain -> SFT/inference handoff).
 export function saveSafetensors(path: string, record: Record<string, MX>) {
+  mkdirSync(dirname(path), { recursive: true });   // checkpoints/ etc. are gitignored
   const vals = Object.values(record); evalAll(...vals);          // materialize before writing
   const map = m.mlx_map_string_to_array_new() as number;
   for (const [k, v] of Object.entries(record)) {

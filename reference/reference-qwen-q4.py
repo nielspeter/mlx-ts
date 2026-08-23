@@ -5,14 +5,14 @@ import sys, json
 import mlx.core as mx
 from tokenizers import Tokenizer
 
-cfg = json.load(open("config-4bit.json"))
+cfg = json.load(open("models/config-4bit.json"))
 D, NL = cfg["hidden_size"], cfg["num_hidden_layers"]
 nH, nKV, Dh = cfg["num_attention_heads"], cfg["num_key_value_heads"], cfg["head_dim"]
 EPS, THETA, SCALE = cfg["rms_norm_eps"], cfg["rope_theta"], cfg["head_dim"] ** -0.5
 GS, BITS, EOS, B = cfg["quantization"]["group_size"], cfg["quantization"]["bits"], cfg["eos_token_id"], 1
 
-w = mx.load("model-q4.safetensors")
-tok = Tokenizer.from_file("tokenizer.json")
+w = mx.load("models/model-q4.safetensors")
+tok = Tokenizer.from_file("models/tokenizer.json")
 cache = [None] * NL
 
 def qmm(x, p):  # x @ dequant(W).T

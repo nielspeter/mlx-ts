@@ -4,7 +4,7 @@ cross_entropy), mirroring lora-train.ts. Loss curve must match. Run: python3 ref
 import json
 import mlx.core as mx
 
-cfg = json.load(open("config-4bit.json"))
+cfg = json.load(open("models/config-4bit.json"))
 D, NL = cfg["hidden_size"], cfg["num_hidden_layers"]
 nH, nKV, Dh = cfg["num_attention_heads"], cfg["num_key_value_heads"], cfg["head_dim"]
 EPS, THETA, SCALE = cfg["rms_norm_eps"], cfg["rope_theta"], cfg["head_dim"] ** -0.5
@@ -17,7 +17,7 @@ SEQ = [785, 6722, 315, 9625, 374, 12095, 13, 576]
 L = len(SEQ)
 ids = mx.array(SEQ, dtype=mx.int32)
 
-w = mx.load("model-q4.safetensors")
+w = mx.load("models/model-q4.safetensors")
 def qmm(x, p): return mx.quantized_matmul(x, w[f"{p}.weight"], w[f"{p}.scales"], w[f"{p}.biases"], transpose=True, group_size=GS, bits=BITS)
 def rms(x, n): return mx.fast.rms_norm(x, w[n], EPS)
 

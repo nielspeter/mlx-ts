@@ -14,17 +14,17 @@ import { treeFlatten, treeUnflattenLike, type Tree } from "../src/core/pytree.ts
 import { loadSafetensors, get } from "../src/io/loader.ts";
 import { Tokenizer, GPT2_SPLIT } from "../src/text/tokenizer.ts";
 
-const cfg = await Bun.file("config-gpt2.json").json();
+const cfg = await Bun.file("models/config-gpt2.json").json();
 const D = cfg.n_embd, NL = cfg.n_layer, NH = cfg.n_head, Dh = D / NH;
 const EPS = cfg.layer_norm_epsilon, ASCALE = Dh ** -0.5, EOS = 50256, VOCAB = cfg.vocab_size;
 const ITERS = +(process.env.ITERS ?? 120), LR0 = +(process.env.LR ?? 3e-5), WARMUP = 10;
 const B1 = 0.9, B2 = 0.95, EPSA = 1e-8, WD = 0, CLIP = 1.0;   // SFT: small LR, grad clip, no weight decay
 
-const tok = await Tokenizer.fromFile("gpt2-tokenizer.json", GPT2_SPLIT);
+const tok = await Tokenizer.fromFile("models/gpt2-tokenizer.json", GPT2_SPLIT);
 
 // --- load GPT-2 weights into a trainable MX params tree (copy out -> independent
 // buffers we own; the fused QKV Conv1D weight is split into q/k/v). ---
-const w = loadSafetensors("gpt2-model.safetensors");
+const w = loadSafetensors("models/gpt2-model.safetensors");
 const cp = (name: string): MX => new MX(get(w, name) as number).copy();   // materialize
 const blocks = Array.from({ length: NL }, (_, i) => {
   const p = `h.${i}`;

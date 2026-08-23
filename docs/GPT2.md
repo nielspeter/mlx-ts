@@ -8,7 +8,7 @@ achievable form: reproducing GPT-2's *outputs* end-to-end from TypeScript over
 `mlx-c`, with every piece (tokenizer, architecture, weights) validated.
 
 ## Source / credit
-- **Model:** <https://huggingface.co/openai-community/gpt2> (`model.safetensors`, `tokenizer.json`, `config.json`)
+- **Model:** <https://huggingface.co/openai-community/gpt2> (`models/model.safetensors`, `models/tokenizer.json`, `models/config.json`)
 - GPT-2 paper "Language Models are Unsupervised Multitask Learners" (Radford et al., 2019)
 
 ## What we built
@@ -35,9 +35,10 @@ digit runs, leading whitespace, unicode, em-dashes).
 ```sh
 # fetch (git-ignored, like the other model weights):
 HF=https://huggingface.co/openai-community/gpt2/resolve/main
-curl -sL $HF/config.json    -o config-gpt2.json
-curl -sL $HF/tokenizer.json -o gpt2-tokenizer.json
-curl -sL $HF/model.safetensors -o gpt2-model.safetensors
+mkdir -p models
+curl -sL $HF/config.json    -o models/config-gpt2.json
+curl -sL $HF/tokenizer.json -o models/gpt2-tokenizer.json
+curl -sL $HF/model.safetensors -o models/gpt2-model.safetensors
 
 bun ../src/models/gpt2.ts "The capital of France is"
 python3 ../reference/reference-gpt2.py "The capital of France is"   # MLX-Python oracle
@@ -87,4 +88,4 @@ There are two senses of reproducing GPT-2-124M:
 - `../reference/reference-gpt2.py` — MLX-Python oracle for the token-exact check
 - `../src/text/tokenizer.ts` — extended with `GPT2_SPLIT` (GPT-2 r50k pretokenization)
 - `../tests/gpt2-tok-test.ts` / `../reference/reference-gpt2-tok.py` — BPE encoder parity vs HF tokenizers
-- `config-gpt2.json`, `gpt2-tokenizer.json`, `gpt2-model.safetensors` — fetched, git-ignored
+- `models/config-gpt2.json`, `models/gpt2-tokenizer.json`, `models/gpt2-model.safetensors` — fetched, git-ignored

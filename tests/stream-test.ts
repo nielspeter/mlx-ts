@@ -7,9 +7,9 @@ import { streamTokens, streamText } from "../src/text/lm.ts";
 import { Tokenizer } from "../src/text/tokenizer.ts";
 import { loadSafetensors } from "../src/io/loader.ts";
 
-const cfg = await Bun.file("config-4bit.json").json();
-const model = new Qwen3(cfg, loadSafetensors("model-q4.safetensors"));
-const tok = await Tokenizer.fromFile("tokenizer.json");
+const cfg = await Bun.file("models/config-4bit.json").json();
+const model = new Qwen3(cfg, loadSafetensors("models/model-q4.safetensors"));
+const tok = await Tokenizer.fromFile("models/tokenizer.json");
 const ids = tok.encode("The capital of France is");
 const OPTS = { max: 48, temp: 0, topP: 0, window: 0 };
 

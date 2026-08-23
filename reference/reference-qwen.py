@@ -6,14 +6,14 @@ import sys, json
 import mlx.core as mx
 from tokenizers import Tokenizer
 
-cfg = json.load(open("config.json"))
+cfg = json.load(open("models/config.json"))
 D, NL = cfg["hidden_size"], cfg["num_hidden_layers"]
 nH, nKV, Dh = cfg["num_attention_heads"], cfg["num_key_value_heads"], cfg["head_dim"]
 EPS, THETA, SCALE, B = cfg["rms_norm_eps"], cfg["rope_theta"], cfg["head_dim"] ** -0.5, 1
 EOS = cfg["eos_token_id"]
 
-w = mx.load("model-qwen.safetensors")
-tok = Tokenizer.from_file("tokenizer.json")
+w = mx.load("models/model-qwen.safetensors")
+tok = Tokenizer.from_file("models/tokenizer.json")
 
 embed = w["model.embed_tokens.weight"]
 def lin(x, name): return mx.matmul(x, w[name].T)   # [out,in] -> x @ W.T

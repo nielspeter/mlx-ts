@@ -2,7 +2,7 @@
 // mlx_whisper/whisper.py exactly. Conv1d stem -> sinusoidal pos -> bidirectional
 // encoder; token+learned-pos -> causal decoder with cross-attention to the audio
 // features -> tied-embedding logits. Runs in fp16 like the reference.
-//   weights: whisper-tiny.safetensors (converted from mlx-community/whisper-tiny)
+//   weights: models/whisper-tiny.safetensors (converted from mlx-community/whisper-tiny)
 
 import { MX, fromF32, fromI32, scalar, sample, tidy, evalAll } from "../core/mx.ts";
 import { loadSafetensors, get } from "../io/loader.ts";
@@ -199,9 +199,9 @@ export class Whisper {
 if (import.meta.main) {
   const file = process.argv[2];
   if (!file) { console.error("usage: bun whisper.ts <audio-file>"); process.exit(1); }
-  const model = await loadWhisper("config-turbo.json", "whisper-turbo.safetensors");
+  const model = await loadWhisper("models/config-turbo.json", "models/whisper-turbo.safetensors");
   const tok = await WhisperTokenizer.fromFile();
-  const filtersT = await loadMelFilters("whisper-mel-filters-128.f32", 128);
+  const filtersT = await loadMelFilters("models/whisper-mel-filters-128.f32", 128);
   const pcm = await decodeAudio(file);
   const t0 = performance.now();
   const ids = model.transcribe(pcm, filtersT);
@@ -210,6 +210,6 @@ if (import.meta.main) {
   console.log(`(${ids.length} tokens in ${secs.toFixed(2)}s)`);
 }
 
-export function loadWhisper(cfgPath = "config-whisper.json", weightsPath = "whisper-tiny.safetensors") {
+export function loadWhisper(cfgPath = "models/config-whisper.json", weightsPath = "models/whisper-tiny.safetensors") {
   return readJson(cfgPath).then((cfg: any) => new Whisper(cfg, loadSafetensors(weightsPath)));
 }

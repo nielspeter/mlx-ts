@@ -2,11 +2,14 @@
 // stream-encode it with the trained BPE tokenizer (pure-TS inference) into binary
 // token shards that base-train.ts memmaps. Streaming so it scales past RAM:
 // read the file in chunks, encode whole lines, append uint16 tokens to disk.
-//   CORPUS=tinystories.txt TOKENS=tokens MAX_BYTES=200000000 bun data-prep.ts
+//   CORPUS=data/tinystories.txt TOKENS=data/tokens MAX_BYTES=200000000 bun training/data-prep.ts
+import { mkdirSync } from "node:fs";
 import { Tokenizer, GPT2_SPLIT } from "../src/text/tokenizer.ts";
 
-const CORPUS = process.env.CORPUS ?? "tinystories.txt";
-const OUT = process.env.TOKENS ?? "tokens";
+mkdirSync("data", { recursive: true });   // gitignored; absent in a fresh clone
+
+const CORPUS = process.env.CORPUS ?? "data/tinystories.txt";
+const OUT = process.env.TOKENS ?? "data/tokens";
 const MAX_BYTES = +(process.env.MAX_BYTES ?? 200_000_000);     // bounded prefix (~200 MB default)
 const URL = process.env.CORPUS_URL ?? "https://huggingface.co/datasets/roneneldan/TinyStories/resolve/main/TinyStoriesV2-GPT4-train.txt";
 
@@ -17,7 +20,7 @@ if (!(await Bun.file(CORPUS).exists())) {
   await Bun.write(CORPUS, await res.arrayBuffer());
 }
 
-const tok = await Tokenizer.fromFile("tokenizer-trained.json", GPT2_SPLIT);
+const tok = await Tokenizer.fromFile("models/tokenizer-trained.json", GPT2_SPLIT);
 if (tok.vocabSize() > 65535) throw new Error("vocab > 65535 doesn't fit uint16 token shards");
 const trainW = Bun.file(`${OUT}-train.bin`).writer(), valW = Bun.file(`${OUT}-val.bin`).writer();
 const dec = new TextDecoder();

@@ -28,5 +28,5 @@ for l in range(LAYERS):
     for k, (name, (n, shape)) in enumerate(zip(names, sizes), start=1):
         w[f"layers.{l}.{name}"] = W(n, shape, s(k))
 
-mx.save_safetensors("model.safetensors", w)
-print(f"wrote model.safetensors with {len(w)} tensors")
+mx.save_safetensors("models/model.safetensors", w)
+print(f"wrote models/model.safetensors with {len(w)} tensors")

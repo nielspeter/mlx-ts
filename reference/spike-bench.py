@@ -4,12 +4,12 @@ spec = importlib.util.spec_from_file_location("ref", "reference-qwen-q4.py")
 # reuse the model/step from the reference by importing its globals
 import mlx.core as mx
 from tokenizers import Tokenizer
-cfg = json.load(open("config-4bit.json"))
+cfg = json.load(open("models/config-4bit.json"))
 D,NL = cfg["hidden_size"], cfg["num_hidden_layers"]
 nH,nKV,Dh = cfg["num_attention_heads"], cfg["num_key_value_heads"], cfg["head_dim"]
 EPS,THETA,SCALE = cfg["rms_norm_eps"], cfg["rope_theta"], cfg["head_dim"]**-0.5
 GS,BITS,B = cfg["quantization"]["group_size"], cfg["quantization"]["bits"], 1
-w = mx.load("model-q4.safetensors"); tk = Tokenizer.from_file("tokenizer.json")
+w = mx.load("models/model-q4.safetensors"); tk = Tokenizer.from_file("models/tokenizer.json")
 def qmm(x,p): return mx.quantized_matmul(x,w[f"{p}.weight"],w[f"{p}.scales"],w[f"{p}.biases"],transpose=True,group_size=GS,bits=BITS)
 def rms(x,n): return mx.fast.rms_norm(x,w[n],EPS)
 def embed(ids):

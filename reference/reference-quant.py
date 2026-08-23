@@ -1,5 +1,5 @@
 """4-bit quantized Qwen3: quantize the Linear projections with mx.quantize,
-save to model-quant.safetensors, and run KV-cache greedy decode using
+save to models/model-quant.safetensors, and run KV-cache greedy decode using
 mx.quantized_matmul as the reference. model-quant.ts must produce the same ids.
 
 Norms + embedding stay full precision (as in real mlx-community models).
@@ -54,8 +54,8 @@ for l in range(LAYERS):
         Wdown=quant(f"layers.{l}.Wdown", D, I, s(11)),
     ))
 
-mx.save_safetensors("model-quant.safetensors", save)
-print(f"wrote model-quant.safetensors with {len(save)} tensors (proj=4bit, norms/embed=fp32)")
+mx.save_safetensors("models/model-quant.safetensors", save)
+print(f"wrote models/model-quant.safetensors with {len(save)} tensors (proj=4bit, norms/embed=fp32)")
 
 cache = [None] * LAYERS
 

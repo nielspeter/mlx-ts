@@ -3,7 +3,7 @@
 A TypeScript MLX SDK over **`mlx-c`** (Apple's official C API) via FFI, with
 **zero custom C/C++** and no build step — running on **Bun, Deno and Node**, and
 **numerically identical** to MLX's Python reference (`scripts/validate-all.sh`:
-32/32).
+35/35).
 
 It is a research artifact carried to a working state, not a released package:
 read `docs/FINDINGS.md` for what was proven and how. Apple Silicon + Metal only.
@@ -11,16 +11,17 @@ read `docs/FINDINGS.md` for what was proven and how. Apple Silicon + Metal only.
 ## End to end: real Qwen3-0.6B generating text
 
 ```sh
-curl -sL https://huggingface.co/Qwen/Qwen3-0.6B/resolve/main/config.json -o config.json
-curl -sL https://huggingface.co/Qwen/Qwen3-0.6B/resolve/main/tokenizer.json -o tokenizer.json
-curl -sL https://huggingface.co/Qwen/Qwen3-0.6B/resolve/main/model.safetensors -o model-qwen.safetensors
+mkdir -p models
+curl -sL https://huggingface.co/Qwen/Qwen3-0.6B/resolve/main/config.json -o models/config.json
+curl -sL https://huggingface.co/Qwen/Qwen3-0.6B/resolve/main/tokenizer.json -o models/tokenizer.json
+curl -sL https://huggingface.co/Qwen/Qwen3-0.6B/resolve/main/model.safetensors -o models/model-qwen.safetensors
 bun src/models/qwen.ts "The capital of France is"
 #  completion: " Paris. The capital of France is also the capital of the French Republic. ..."
 #  (24 tokens, ~190 tok/s)
 python3 reference/reference-qwen.py "The capital of France is"   # identical token ids
 ```
 
-`src/models/qwen.ts` reads all dims from `config.json` (incl. Qwen3's explicit `head_dim`
+`src/models/qwen.ts` reads all dims from `models/config.json` (incl. Qwen3's explicit `head_dim`
 and tied embeddings), loads the real weights, tokenizes with the validated
 `src/text/tokenizer.ts`, and decodes with the KV cache — produced ids match MLX Python
 token-for-token. Everything below is the validated machinery underneath it.
@@ -70,7 +71,15 @@ reference/    MLX-Python / HF oracles every claim is checked against
 benchmarks/   op-level TS vs MLX-Python timings
 scripts/      validate-all.sh (the full suite), run.sh (the pipeline)
 docs/         FINDINGS.md first — the full write-up
+
+models/       downloaded weights, configs, tokenizers   ]
+data/         corpora and tokenized shards              ]  all gitignored,
+checkpoints/  training outputs                          ]  created on demand
 ```
+
+Nothing but source lives at the repo root. The three asset directories are
+gitignored and created by the setup steps below, so a fresh clone is small and
+`git status` stays quiet no matter how many gigabytes you download.
 
 ## What runs
 
@@ -94,10 +103,10 @@ docs/         FINDINGS.md first — the full write-up
   quantizes the Linear projections (`mx.quantize`) and saves `weight`/`scales`/
   `biases`; TS loads them and runs the decode with `quantizedMatmul`.
 - `src/text/tokenizer.ts` — pure-TS byte-level BPE tokenizer (the real Qwen3
-  `tokenizer.json`); `reference/tok-reference.py` / `tests/tok-test.ts` validate it against HF
+  `models/tokenizer.json`); `reference/tok-reference.py` / `tests/tok-test.ts` validate it against HF
   `tokenizers` (encode + decode, 11/11 cases).
 - `src/models/qwen.ts` / `reference/reference-qwen.py` — **config-driven real Qwen3-0.6B** (bf16):
-  reads `config.json`, loads `model-qwen.safetensors` (HF key names), generates
+  reads `models/config.json`, loads `models/model-qwen.safetensors` (HF key names), generates
   text; ids match MLX Python token-for-token.
 
 ### Production runtime (mx + nn)
@@ -185,7 +194,7 @@ python3 reference/reference-decode.py
 ### Loading weights from safetensors
 
 ```sh
-python3 reference/save-model.py     # writes a real model.safetensors (25 tensors)
+python3 reference/save-model.py     # writes a real models/model.safetensors (25 tensors)
 bun spikes/model-load.ts         # loads it via mlx_load_safetensors, decodes
 # -> same ids: [24, 3, 19, 2, 28, 1, 4, 14, 4, 14, 4, 14]
 
@@ -217,12 +226,13 @@ and both the TS and Python paths exhibit it identically.
 ### Tokenizer (pure TS, no deps)
 
 The one piece genuinely outside MLX. `src/text/tokenizer.ts` implements GPT-2-style
-byte-level BPE over the real Qwen3 `tokenizer.json`: NFC normalization, the
+byte-level BPE over the real Qwen3 `models/tokenizer.json`: NFC normalization, the
 special-token split, the GPT-2 pretokenization regex, the byte<->unicode map,
 and rank-based merges.
 
 ```sh
-curl -sL https://huggingface.co/Qwen/Qwen3-0.6B/resolve/main/tokenizer.json -o tokenizer.json
+mkdir -p models
+curl -sL https://huggingface.co/Qwen/Qwen3-0.6B/resolve/main/tokenizer.json -o models/tokenizer.json
 python3 reference/tok-reference.py && bun tests/tok-test.ts
 # -> encode/decode parity vs Python tokenizers: 11/11 cases pass
 ```
@@ -357,12 +367,13 @@ Whisper setup (weights/assets are git-ignored — fetched, like the LLM weights)
 
 ```sh
 W=https://huggingface.co/mlx-community/whisper-large-v3-turbo/resolve/main
-curl -sL $W/config.json -o config-turbo.json
-curl -sL $W/weights.safetensors -o whisper-turbo.safetensors
+mkdir -p models
+curl -sL $W/config.json -o models/config-turbo.json
+curl -sL $W/weights.safetensors -o models/whisper-turbo.safetensors
 pip install mlx-whisper   # validation oracle; ships the mel filterbank + tiktoken vocab (use a venv)
 WA=$(python3 -c 'import mlx_whisper,os;print(os.path.dirname(mlx_whisper.__file__))')/assets
-cp "$WA/multilingual.tiktoken" whisper-multilingual.tiktoken
-python3 -c "import mlx.core as mx,numpy as np;np.array(mx.load('$WA/mel_filters.npz')['mel_128']).astype('float32').tofile('whisper-mel-filters-128.f32')"
+cp "$WA/multilingual.tiktoken" models/whisper-multilingual.tiktoken
+python3 -c "import mlx.core as mx,numpy as np;np.array(mx.load('$WA/mel_filters.npz')['mel_128']).astype('float32').tofile('models/whisper-mel-filters-128.f32')"
 bun src/models/whisper.ts audio.flac          # auto-detects language; any ffmpeg-decodable file
 ```
 
@@ -370,25 +381,27 @@ OLMoE-1B-7B 4-bit setup (the MoE model — weights git-ignored, ~3.9 GB):
 
 ```sh
 O=https://huggingface.co/mlx-community/OLMoE-1B-7B-0125-Instruct-4bit/resolve/main
-curl -sL $O/config.json    -o config-olmoe.json
-curl -sL $O/tokenizer.json -o tokenizer-olmoe.json
-curl -sL $O/model.safetensors -o model-olmoe.safetensors
-python3 reference/split-olmoe.py             # -> model-olmoe-sharded/ (for the sharded-loader test)
+mkdir -p models
+curl -sL $O/config.json    -o models/config-olmoe.json
+curl -sL $O/tokenizer.json -o models/tokenizer-olmoe.json
+curl -sL $O/model.safetensors -o models/model-olmoe.safetensors
+python3 reference/split-olmoe.py             # -> models/model-olmoe-sharded/ (for the sharded-loader test)
 bun src/models/olmoe.ts "The capital of France is"
 ```
 
 Note: the original `0924` checkpoint was replaced upstream by `0125` (identical
 architecture: 16 layers, 64 experts, group_size 64 / 4-bit). The validate-all
 OLMoE checks compare `src/models/olmoe.ts` against `reference/reference-olmoe.py` — both load the same
-`model-olmoe.safetensors` — so any matching 4-bit checkpoint restores parity.
+`models/model-olmoe.safetensors` — so any matching 4-bit checkpoint restores parity.
 
 GPT-2-124M setup (real OpenAI weights — git-ignored, ~550 MB):
 
 ```sh
 G=https://huggingface.co/openai-community/gpt2/resolve/main
-curl -sL $G/config.json    -o config-gpt2.json
-curl -sL $G/tokenizer.json -o gpt2-tokenizer.json
-curl -sL $G/model.safetensors -o gpt2-model.safetensors
+mkdir -p models
+curl -sL $G/config.json    -o models/config-gpt2.json
+curl -sL $G/tokenizer.json -o models/gpt2-tokenizer.json
+curl -sL $G/model.safetensors -o models/gpt2-model.safetensors
 bun src/models/gpt2.ts "The capital of France is"   # greedy; TEMP/TOP_K/TOP_P/REP to sample (see docs/GPT2.md)
 ```
 

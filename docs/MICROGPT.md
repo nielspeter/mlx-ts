@@ -34,7 +34,7 @@ steps, LR `1e-2` decaying linearly to 0.
 
 ## Run it
 ```sh
-bun ../spikes/spike-microgpt.ts          # fetches names.txt on first run; writes /tmp/microgpt-init.f32
+bun ../spikes/spike-microgpt.ts          # fetches data/names.txt on first run; writes /tmp/microgpt-init.f32
 python3 ../reference/reference-microgpt.py  # the MLX-Python oracle (run the TS spike first — it writes the shared init)
 ```
 
@@ -65,7 +65,7 @@ via `/tmp/microgpt-init.f32`, written by the TS spike) on the **same data order*
   diverge over many steps), so the bar is *"identical start, both converge"* — the
   same criterion used for the LoRA check.
 
-Wired into `../scripts/validate-all.sh` (guarded on `names.txt`).
+Wired into `../scripts/validate-all.sh` (guarded on `data/names.txt`).
 
 ## What it re-confirmed about mlx-ts
 The first run hit MLX's buffer limit around step 900 — a live reproduction of
@@ -78,4 +78,4 @@ A good reminder of *why* `tidy()` is the load-bearing memory primitive here.
 ## Files
 - `../spikes/spike-microgpt.ts` — the model, training loop, and sampler
 - `../reference/reference-microgpt.py` — the MLX-Python oracle for the parity check
-- `names.txt` — fetched corpus (git-ignored)
+- `data/names.txt` — fetched corpus (git-ignored)

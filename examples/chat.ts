@@ -7,10 +7,10 @@ import { Tokenizer } from "../src/text/tokenizer.ts";
 import { ChatTemplate } from "../src/text/chat-template.ts";
 import { loadSafetensors } from "../src/io/loader.ts";
 
-const cfg = await Bun.file("config-4bit.json").json();
-const model = new Qwen3(cfg, loadSafetensors("model-q4.safetensors"));
-const tok = await Tokenizer.fromFile("tokenizer.json");
-const ct = await ChatTemplate.fromConfig("tokenizer_config-qwen.json");
+const cfg = await Bun.file("models/config-4bit.json").json();
+const model = new Qwen3(cfg, loadSafetensors("models/model-q4.safetensors"));
+const tok = await Tokenizer.fromFile("models/tokenizer.json");
+const ct = await ChatTemplate.fromConfig("models/tokenizer_config-qwen.json");
 
 const userMsg = process.argv[2] ?? "What is the capital of France? Answer in one sentence.";
 const prompt = ct.render([{ role: "user", content: userMsg }]); // adds the assistant generation prompt

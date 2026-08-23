@@ -18,7 +18,7 @@ TypeScript** plus **~1,900 lines of generated FFI bindings**, and it runs real
 **dense** (Qwen3-0.6B) and **MoE** (OLMoE-1B-7B, 64 experts) models — bf16 and
 4-bit, single-file and sharded — at **~200–300 tok/s** with **bounded memory**,
 producing output **token-for-token identical** to MLX's own Python stack
-(`../scripts/validate-all.sh`: 32/32). It also **trains transformers from scratch** —
+(`../scripts/validate-all.sh`: 35/35). It also **trains transformers from scratch** —
 microGPT → nanoGPT (to the ~1.47 Shakespeare baseline) → real GPT-2-124M — the
 optimizer driven by MLX `value_and_grad` over FFI, at ~parity with Python (§7d).
 
@@ -87,7 +87,7 @@ Each milestone is a runnable file validated against a reference.
 | 14 | **Training** — `value_and_grad` over a multi-param JS closure + SGD | `../spikes/spike-train.ts` / `../reference/reference-train.py` | MLX Python | loss falls 0.237→0.009, final W bit-identical |
 | 15 | **LoRA fine-tune** of real 4-bit Qwen3 — Adam + cross_entropy, frozen base | `../training/lora-train.ts` / `../reference/reference-lora.py` | MLX Python | loss falls 3.16→0.0007; tracks MLX to float tolerance |
 
-All fifteen are re-checked together by `../scripts/validate-all.sh` — **32/32 green**
+All fifteen are re-checked together by `../scripts/validate-all.sh` — **35/35 green**
 (the fifteen above plus the codegen, async-overlap, public-`stream()`, gather_qmm
 op, per-op binding-parity (`bun test tests/`), and cross-runtime checks). The
 count tracks which model files you have fetched; checks whose weights are absent
@@ -560,7 +560,7 @@ from scratch — trains to nanoGPT's Shakespeare baseline). See §7d.
 - `reference*.py` — MLX Python mirrors for every milestone
 - `../reference/tok-reference.py` / `../tests/tok-test.ts` — tokenizer ground truth
 - `../tests/validate-prod.ts` — sampling / batching / bounded-memory checks
-- **`../scripts/validate-all.sh`** — the full suite: every TS path vs its reference (32/32)
+- **`../scripts/validate-all.sh`** — the full suite: every TS path vs its reference (35/35)
 
 ---
 

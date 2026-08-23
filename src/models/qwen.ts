@@ -1,6 +1,6 @@
 // Config-driven Qwen3 inference: load a real downloaded Qwen3-0.6B
-// (config.json + model.safetensors + tokenizer.json) and generate text.
-// All dims come from config.json; weight names follow the HF layout.
+// (models/config.json + models/model.safetensors + models/tokenizer.json) and generate text.
+// All dims come from models/config.json; weight names follow the HF layout.
 //
 //   bun qwen.ts "The capital of France is"
 
@@ -14,14 +14,14 @@ import { loadSafetensors, get } from "../io/loader.ts";
 import { Tokenizer } from "../text/tokenizer.ts";
 import { readJson } from "../io/fs.ts";
 
-const cfg = await readJson("config.json");
+const cfg = await readJson("models/config.json");
 const D = cfg.hidden_size, NL = cfg.num_hidden_layers;
 const nH = cfg.num_attention_heads, nKV = cfg.num_key_value_heads, Dh = cfg.head_dim;
 const I = cfg.intermediate_size, EPS = cfg.rms_norm_eps, THETA = cfg.rope_theta;
 const SCALE = Dh ** -0.5, B = 1, EOS = cfg.eos_token_id;
 
-const w = loadSafetensors("model-qwen.safetensors");
-const tok = await Tokenizer.fromFile("tokenizer.json");
+const w = loadSafetensors("models/model-qwen.safetensors");
+const tok = await Tokenizer.fromFile("models/tokenizer.json");
 
 // HF weights are [out, in] (for x @ W.T). Pre-transpose to [in, out] once so the
 // decode loop is plain matmul(x, Wt); materialize so it isn't recomputed.

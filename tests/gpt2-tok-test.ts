@@ -3,8 +3,8 @@
 //   python3 reference-gpt2-tok.py && bun gpt2-tok-test.ts
 import { Tokenizer, GPT2_SPLIT } from "../src/text/tokenizer.ts";
 
-const fixtures = await Bun.file("gpt2-tok-fixtures.json").json();
-const tok = await Tokenizer.fromFile("gpt2-tokenizer.json", GPT2_SPLIT);
+const fixtures = await Bun.file("tests/gpt2-tok-fixtures.json").json();
+const tok = await Tokenizer.fromFile("models/gpt2-tokenizer.json", GPT2_SPLIT);
 
 let pass = 0, fail = 0;
 for (const f of fixtures) {

@@ -18,10 +18,10 @@ const topK = flag("--topk", 0), repPenalty = flag("--reppenalty", 1);
 const userMsg = argv.filter((a, i) => !a.startsWith("--") && !(i > 0 && argv[i - 1].startsWith("--"))).join(" ")
   || "Write a haiku about the sea";
 
-const cfg = await Bun.file("config-4bit.json").json();
-const model = new Qwen3(cfg, loadSafetensors("model-q4.safetensors"));
-const tok = await Tokenizer.fromFile("tokenizer.json");
-const ct = await ChatTemplate.fromConfig("tokenizer_config-qwen.json");
+const cfg = await Bun.file("models/config-4bit.json").json();
+const model = new Qwen3(cfg, loadSafetensors("models/model-q4.safetensors"));
+const tok = await Tokenizer.fromFile("models/tokenizer.json");
+const ct = await ChatTemplate.fromConfig("models/tokenizer_config-qwen.json");
 const ids = tok.encode(ct.render([{ role: "user", content: userMsg }]));
 
 process.stdout.write(`user:      ${userMsg}\nassistant: `);

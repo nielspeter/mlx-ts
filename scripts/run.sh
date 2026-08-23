@@ -25,10 +25,10 @@ echo "=== [1/5] tok_train (native Rust BPE) ==="
 CORPUS=$CORPUS VOCAB=${VOCAB:-8192} python3 reference/tok-train.py
 
 echo "=== [2/5] data_prep (stream-encode -> memmappable uint16 token shards) ==="
-CORPUS=$CORPUS TOKENS=${TOKENS:-tokens} bun training/data-prep.ts
+CORPUS=$CORPUS TOKENS=${TOKENS:-data/tokens} bun training/data-prep.ts
 
 echo "=== [3/5] base_train (pretrain on the token stream + save checkpoint) ==="
-TOKENS=${TOKENS:-tokens} N_LAYER=${N_LAYER:-6} N_HEAD=${N_HEAD:-6} N_EMBD=${N_EMBD:-384} \
+TOKENS=${TOKENS:-data/tokens} N_LAYER=${N_LAYER:-6} N_HEAD=${N_HEAD:-6} N_EMBD=${N_EMBD:-384} \
   BLOCK=${BLOCK:-256} BATCH=${BATCH:-32} ITERS=${BASE_ITERS:-3000} bun training/base-train.ts
 
 echo "=== [4/5] chat_sft (story-aligned: instruction-tune on the corpus) ==="

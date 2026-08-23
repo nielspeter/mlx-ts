@@ -37,7 +37,7 @@ env-overridable (`N_LAYER`, `N_HEAD`, `N_EMBD`, `BLOCK`, `BATCH`, `ITERS`,
 
 ## Run it
 ```sh
-bun ../spikes/spike-nanogpt.ts           # fetches input.txt; writes shared init + batch-index files to /tmp
+bun ../spikes/spike-nanogpt.ts           # fetches data/input.txt; writes shared init + batch-index files to /tmp
 python3 ../reference/reference-nanogpt.py   # the MLX-Python oracle (run the TS spike first)
 ITERS=300 N_LAYER=6 bun ../spikes/spike-nanogpt.ts   # bigger/shorter, etc.
 ```
@@ -115,7 +115,7 @@ train loss, *and* val loss all match to 4 decimals (4.1783 / 2.6014 / 2.5312) �
 because identical init + identical batches + the same MLX kernels leave nothing to
 diverge. (Over thousands of steps fp-reduction order can drift — FINDINGS §6
 gotcha #8 — so the suite uses the fast, exact 100-iter check.) Wired into
-`../scripts/validate-all.sh` (guarded on `input.txt`).
+`../scripts/validate-all.sh` (guarded on `data/input.txt`).
 
 ## Why this matters for the feasibility study
 microGPT showed the autograd *mechanism* is reachable from TS. nanoGPT shows the
@@ -128,4 +128,4 @@ tiktoken decode-only), **not** any missing capability in the TS↔MLX bridge.
 ## Files
 - `../spikes/spike-nanogpt.ts` — model, mini-batch pipeline, AdamW training loop, sampler
 - `../reference/reference-nanogpt.py` — MLX-Python oracle for the parity check
-- `input.txt` — tiny-shakespeare corpus (fetched, git-ignored)
+- `data/input.txt` — tiny-shakespeare corpus (fetched, git-ignored)

@@ -5,8 +5,8 @@ shard 2 = layers 8-15 + final norm + lm_head. Run: python3 split-olmoe.py
 import os, json
 import mlx.core as mx
 
-os.makedirs("model-olmoe-sharded", exist_ok=True)
-w = mx.load("model-olmoe.safetensors")
+os.makedirs("models/model-olmoe-sharded", exist_ok=True)
+w = mx.load("models/model-olmoe.safetensors")
 SPLIT = 8  # layers [0, SPLIT) -> shard 1, [SPLIT, NL) -> shard 2
 
 def shard_of(name):
@@ -17,10 +17,10 @@ def shard_of(name):
 s1 = {k: v for k, v in w.items() if shard_of(k) == 1}
 s2 = {k: v for k, v in w.items() if shard_of(k) == 2}
 f1, f2 = "model-00001-of-00002.safetensors", "model-00002-of-00002.safetensors"
-mx.save_safetensors(f"model-olmoe-sharded/{f1}", s1)
-mx.save_safetensors(f"model-olmoe-sharded/{f2}", s2)
+mx.save_safetensors(f"models/model-olmoe-sharded/{f1}", s1)
+mx.save_safetensors(f"models/model-olmoe-sharded/{f2}", s2)
 
 weight_map = {**{k: f1 for k in s1}, **{k: f2 for k in s2}}
 json.dump({"metadata": {}, "weight_map": weight_map},
-          open("model-olmoe-sharded/model.safetensors.index.json", "w"))
+          open("models/model-olmoe-sharded/model.safetensors.index.json", "w"))
 print(f"wrote 2 shards: {len(s1)} + {len(s2)} tensors")

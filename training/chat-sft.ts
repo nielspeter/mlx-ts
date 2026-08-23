@@ -2,7 +2,7 @@
 // and supervised-fine-tune it into a chat model on chat-formatted examples with
 // completion-only loss. Saves a chat checkpoint for chat-ckpt.ts. This is the
 // pretrain -> SFT handoff, all on our own weights.
-//   bun chat-sft.ts        (needs base-ckpt.safetensors + tokenizer-trained.json)
+//   bun chat-sft.ts        (needs checkpoints/base-ckpt.safetensors + models/tokenizer-trained.json)
 import { MX, fromI32, fromF32, scalar, evalAll, clearCache, tidy } from "../src/core/mx.ts";
 import { maskedCrossEntropy } from "../src/nn/loss.ts";
 import { valueAndGrad } from "./train.ts";
@@ -10,12 +10,12 @@ import { treeFlatten, treeUnflattenLike, type Tree } from "../src/core/pytree.ts
 import { Tokenizer, GPT2_SPLIT } from "../src/text/tokenizer.ts";
 import { loadCkpt, saveCkpt, forward, generate, freeParams, type Cfg } from "../src/models/nanogpt-model.ts";
 
-const BASE = process.env.BASE_CKPT ?? "base-ckpt.safetensors";
-const OUT = process.env.CHAT_CKPT ?? "chat-ckpt.safetensors";
+const BASE = process.env.BASE_CKPT ?? "checkpoints/base-ckpt.safetensors";
+const OUT = process.env.CHAT_CKPT ?? "checkpoints/chat-ckpt.safetensors";
 const ITERS = +(process.env.ITERS ?? 400), LR0 = +(process.env.LR ?? 1e-3), WARMUP = 20;
 const B1 = 0.9, B2 = 0.95, EPSA = 1e-8, CLIP = 1.0;
 
-const tok = await Tokenizer.fromFile("tokenizer-trained.json", GPT2_SPLIT);
+const tok = await Tokenizer.fromFile("models/tokenizer-trained.json", GPT2_SPLIT);
 const EOS = tok.encode("<|endoftext|>")[0];
 let { params, cfg } = await loadCkpt(BASE);
 const V = cfg.vocab, T = cfg.block_size;

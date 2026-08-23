@@ -6,12 +6,12 @@ import sys, json
 import mlx.core as mx
 from tokenizers import Tokenizer
 
-cfg = json.load(open("config-gpt2.json"))
+cfg = json.load(open("models/config-gpt2.json"))
 D, NL, nH = cfg["n_embd"], cfg["n_layer"], cfg["n_head"]
 Dh, EPS, SCALE, B, EOS = D // nH, cfg["layer_norm_epsilon"], (D // nH) ** -0.5, 1, 50256
 
-w = mx.load("gpt2-model.safetensors")
-tok = Tokenizer.from_file("gpt2-tokenizer.json")
+w = mx.load("models/gpt2-model.safetensors")
+tok = Tokenizer.from_file("models/gpt2-tokenizer.json")
 wte, wpe = w["wte.weight"], w["wpe.weight"]
 
 def gelu_new(x):

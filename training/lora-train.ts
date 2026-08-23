@@ -12,8 +12,8 @@ import { crossEntropy } from "../src/nn/loss.ts";
 import { valueAndGrad } from "./train.ts";
 import { treeFlatten, type Tree } from "../src/core/pytree.ts";
 
-const cfg = await Bun.file("config-4bit.json").json();
-const model = new Qwen3(cfg, loadSafetensors("model-q4.safetensors"));
+const cfg = await Bun.file("models/config-4bit.json").json();
+const model = new Qwen3(cfg, loadSafetensors("models/model-q4.safetensors"));
 const { D, NL, nH, nKV, Dh, theta, scale, vocab } = model;
 const qDim = nH * Dh, kvDim = nKV * Dh;
 

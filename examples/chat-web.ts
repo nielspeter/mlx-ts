@@ -7,12 +7,12 @@ import { MX, fromI32, tidy, sample } from "../src/core/mx.ts";
 import { Tokenizer, GPT2_SPLIT } from "../src/text/tokenizer.ts";
 import { loadCkpt, forward } from "../src/models/nanogpt-model.ts";
 
-const CKPT = process.env.CHAT_CKPT ?? "chat-ckpt.safetensors";
+const CKPT = process.env.CHAT_CKPT ?? "checkpoints/chat-ckpt.safetensors";
 const PORT = Number(process.env.PORT ?? 8080);
 const MODEL_ID = "mlx-ts-nanochat";
 
 console.log(`loading ${CKPT}…`);
-const tok = await Tokenizer.fromFile("tokenizer-trained.json", GPT2_SPLIT);
+const tok = await Tokenizer.fromFile("models/tokenizer-trained.json", GPT2_SPLIT);
 const EOS = tok.encode("<|endoftext|>")[0];
 const { params, cfg } = await loadCkpt(CKPT);
 const CHAT_HTML = await Bun.file(new URL("./chat.html", import.meta.url)).text();

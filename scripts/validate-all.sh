@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Full validation suite: every TS path vs its MLX-Python / HF reference.
 cd "$(dirname "$0")/.." || exit 1   # run from the repo root
+mkdir -p models data checkpoints          # gitignored; absent in a fresh clone
 pass=0; fail=0
 ok(){ printf '  \033[32m✅ %s\033[0m\n' "$1"; pass=$((pass+1)); }
 no(){ printf '  \033[31m❌ %s\033[0m  (%s)\n' "$1" "$2"; fail=$((fail+1)); }
@@ -36,27 +37,27 @@ fi
 echo "=== unit/self checks ==="
 python3 reference/tok-reference.py >/dev/null 2>&1
 bun tests/tok-test.ts 2>&1 | grep -q "11/11" && ok "tokenizer vs HF tokenizers (11/11)" || no "tokenizer" "parity"
-if [ -f gpt2-tokenizer.json ]; then
+if [ -f models/gpt2-tokenizer.json ]; then
   python3 reference/reference-gpt2-tok.py >/dev/null 2>&1
   bun tests/gpt2-tok-test.ts 2>&1 | grep -q "8/8" && ok "GPT-2 BPE encoder vs HF tokenizers (8/8)" || no "gpt2-tok" "parity"
 fi
-if [ -f input.txt ]; then   # tok_train: train BPE in native Rust -> our TS inference round-trips it
+if [ -f data/input.txt ]; then   # tok_train: train BPE in native Rust -> our TS inference round-trips it
   VOCAB=2048 python3 reference/tok-train.py >/dev/null 2>&1
   bun tests/tok-train-test.ts 2>&1 | grep -q "4/4" && ok "BPE tokenizer training (Rust) -> TS inference (4/4)" || no "tok-train" "round-trip"
-  if [ -f tokenizer-trained.json ]; then   # data pipeline: stream-encode -> memmap token shards -> base_train
-    CORPUS=input.txt TOKENS=/tmp/vtok bun training/data-prep.ts >/dev/null 2>&1
+  if [ -f models/tokenizer-trained.json ]; then   # data pipeline: stream-encode -> memmap token shards -> base_train
+    CORPUS=data/input.txt TOKENS=/tmp/vtok bun training/data-prep.ts >/dev/null 2>&1
     TOKENS=/tmp/vtok CKPT=/tmp/vstream.safetensors ITERS=80 N_EMBD=128 bun training/base-train.ts >/tmp/vstream.txt 2>&1
     { grep -q "^mmap " /tmp/vstream.txt && grep -q "CKPT roundtrip: OK" /tmp/vstream.txt; } && ok "streaming dataloader (data-prep -> mmap shards -> base_train)" || no "data-prep/mmap" "streaming"
   fi
   # base_train: pretrain on BPE tokens + save a checkpoint that reloads (safetensors writer)
-  if [ -f tokenizer-trained.json ]; then
+  if [ -f models/tokenizer-trained.json ]; then
     ITERS=200 bun training/base-train.ts >/tmp/vb.txt 2>&1
-    { grep -q "CKPT roundtrip: OK" /tmp/vb.txt && [ -f base-ckpt.safetensors ]; } && ok "base_train + checkpoint save/reload (BPE pretrain)" || no "base-train" "checkpoint"
+    { grep -q "CKPT roundtrip: OK" /tmp/vb.txt && [ -f checkpoints/base-ckpt.safetensors ]; } && ok "base_train + checkpoint save/reload (BPE pretrain)" || no "base-train" "checkpoint"
     # chat_sft handoff: load the base checkpoint, SFT, then a separate CLI answers a trained Q
-    if [ -f base-ckpt.safetensors ]; then
+    if [ -f checkpoints/base-ckpt.safetensors ]; then
       ITERS=300 bun training/chat-sft.ts >/tmp/vc.txt 2>&1
-      { [ -f chat-ckpt.safetensors ] && bun training/chat-ckpt.ts "What is the capital of France?" 2>&1 | grep -qi "paris"; } && ok "chat_sft from checkpoint -> chat CLI (pretrain->SFT->chat)" || no "chat-sft" "handoff"
-      if [ -f chat-ckpt.safetensors ]; then   # chat_web: serve the checkpoint over the OpenAI API
+      { [ -f checkpoints/chat-ckpt.safetensors ] && bun training/chat-ckpt.ts "What is the capital of France?" 2>&1 | grep -qi "paris"; } && ok "chat_sft from checkpoint -> chat CLI (pretrain->SFT->chat)" || no "chat-sft" "handoff"
+      if [ -f checkpoints/chat-ckpt.safetensors ]; then   # chat_web: serve the checkpoint over the OpenAI API
         PORT=8123 bun examples/chat-web.ts >/tmp/vw.log 2>&1 & WPID=$!
         for i in $(seq 1 60); do curl -s localhost:8123/health >/dev/null 2>&1 && break; sleep 0.5; done
         ans=$(curl -s localhost:8123/v1/chat/completions -H 'content-type: application/json' -d '{"messages":[{"role":"user","content":"What is the capital of France?"}]}' 2>/dev/null)
@@ -95,7 +96,7 @@ else no "lora-train" "TS final=$tf PY final=$pf"; fi
 
 # microGPT trained from scratch (real MLX autograd over FFI): identical init +
 # data -> exact step-0 loss; both converge (training drifts, FINDINGS §6 #8).
-if [ -f names.txt ]; then
+if [ -f data/names.txt ]; then
   bun spikes/spike-microgpt.ts >/tmp/v_t.txt 2>&1; python3 reference/reference-microgpt.py >/tmp/v_p.txt 2>&1
   t0=$(grep STEP0 /tmp/v_t.txt | grep -oE '[0-9.]+$'); p0=$(grep STEP0 /tmp/v_p.txt | grep -oE '[0-9.]+$')
   tf=$(grep FINAL /tmp/v_t.txt | grep -oE '[0-9.]+$'); pf=$(grep FINAL /tmp/v_p.txt | grep -oE '[0-9.]+$')
@@ -106,7 +107,7 @@ fi
 
 # nanoGPT: multi-layer char-level GPT, mini-batched, AdamW + cosine LR + grad clip.
 # 100 iters for speed; identical init + batches -> exact match vs MLX-Python.
-if [ -f input.txt ]; then
+if [ -f data/input.txt ]; then
   ITERS=100 bun spikes/spike-nanogpt.ts >/tmp/v_t.txt 2>&1; ITERS=100 python3 reference/reference-nanogpt.py >/tmp/v_p.txt 2>&1
   t0=$(grep STEP0 /tmp/v_t.txt | grep -oE '[0-9.]+$'); p0=$(grep STEP0 /tmp/v_p.txt | grep -oE '[0-9.]+$')
   tv=$(grep '^VAL' /tmp/v_t.txt | grep -oE '[0-9.]+$'); pv=$(grep '^VAL' /tmp/v_p.txt | grep -oE '[0-9.]+$')
@@ -119,7 +120,7 @@ echo "=== real models (TS vs MLX Python) ==="
 python3 reference/reference-qwen.py "The capital of France is" >/tmp/v_p.txt 2>&1; bun src/models/qwen.ts "The capital of France is" >/tmp/v_t.txt 2>&1;          cmp_pair "real Qwen3-0.6B bf16" /tmp/v_t.txt /tmp/v_p.txt genids
 python3 reference/reference-qwen-q4.py "The capital of France is" >/tmp/v_p.txt 2>&1; bun src/models/qwen-nn.ts "The capital of France is" >/tmp/v_t.txt 2>&1;     cmp_pair "real Qwen3-0.6B 4-bit (nn)" /tmp/v_t.txt /tmp/v_p.txt genids
 python3 reference/reference-olmoe.py "The capital of France is" >/tmp/v_p.txt 2>&1; bun src/models/olmoe.ts "The capital of France is" >/tmp/v_t.txt 2>&1;        cmp_pair "real OLMoE-1B-7B 4-bit (MoE)" /tmp/v_t.txt /tmp/v_p.txt genids
-if [ -f gpt2-model.safetensors ]; then  # own temp files: the sharded-OLMoE check below reuses /tmp/v_p.txt
+if [ -f models/gpt2-model.safetensors ]; then  # own temp files: the sharded-OLMoE check below reuses /tmp/v_p.txt
   python3 reference/reference-gpt2.py "The capital of France is" >/tmp/vg_p.txt 2>&1; bun src/models/gpt2.ts "The capital of France is" >/tmp/vg_t.txt 2>&1; cmp_pair "real GPT-2-124M (BPE + tied head)" /tmp/vg_t.txt /tmp/vg_p.txt genids
   # SFT: full fine-tune of GPT-2-124M, completion-masked loss -> step0 matches, both converge
   ITERS=120 bun training/sft.ts >/tmp/vs_t.txt 2>&1; ITERS=120 python3 reference/reference-sft.py >/tmp/vs_p.txt 2>&1
@@ -136,17 +137,17 @@ fi
 # Whisper needs mlx_whisper for the oracle + the converted weights; run it only
 # when both are present (skipped gracefully otherwise — not a hard failure).
 PYW=""; for c in /tmp/wvenv/bin/python python3; do "$c" -c "import mlx_whisper" >/dev/null 2>&1 && { PYW=$c; break; }; done
-if [ -n "$PYW" ] && [ -f whisper-tiny.safetensors ]; then
+if [ -n "$PYW" ] && [ -f models/whisper-tiny.safetensors ]; then
   "$PYW" reference-whisper.py >/dev/null 2>&1
   bun tests/whisper-test.ts 2>&1 | grep -q "WHISPER OK" && ok "Whisper-tiny encoder+decoder vs mlx_whisper" || no "whisper" "parity"
-  if [ -f whisper-mel-filters-80.f32 ] && [ -f whisper-multilingual.tiktoken ] && [ -f /tmp/jfk.flac ]; then
+  if [ -f models/whisper-mel-filters-80.f32 ] && [ -f models/whisper-multilingual.tiktoken ] && [ -f /tmp/jfk.flac ]; then
     "$PYW" reference-whisper-transcribe.py >/dev/null 2>&1
     bun tests/whisper-transcribe-test.ts 2>&1 | grep -q "TRANSCRIBE OK" && ok "Whisper transcription token-exact vs mlx_whisper" || no "whisper-transcribe" "tokens"
   fi
 fi
 
-if [ -f model-olmoe-sharded/model.safetensors.index.json ]; then
-  MX_SHARDED=model-olmoe-sharded/model.safetensors.index.json bun src/models/olmoe.ts "The capital of France is" >/tmp/v_t.txt 2>&1
+if [ -f models/model-olmoe-sharded/model.safetensors.index.json ]; then
+  MX_SHARDED=models/model-olmoe-sharded/model.safetensors.index.json bun src/models/olmoe.ts "The capital of France is" >/tmp/v_t.txt 2>&1
   cmp_pair "OLMoE sharded streaming load" /tmp/v_t.txt /tmp/v_p.txt genids
 fi
 

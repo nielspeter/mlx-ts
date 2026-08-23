@@ -1,11 +1,11 @@
 // Verify our pure-TS BPE inference (tokenizer.ts) correctly consumes a FRESHLY
-// TRAINED tokenizer.json (from tok-train.py / Rust BpeTrainer): token-exact encode
+// TRAINED models/tokenizer.json (from tok-train.py / Rust BpeTrainer): token-exact encode
 // vs the Rust tokenizer + clean decode round-trip.
 //   VOCAB=2048 python3 tok-train.py && bun tok-train-test.ts
 import { Tokenizer, GPT2_SPLIT } from "../src/text/tokenizer.ts";
 
-const fx = await Bun.file("tok-trained-fixtures.json").json();
-const tok = await Tokenizer.fromFile("tokenizer-trained.json", GPT2_SPLIT);
+const fx = await Bun.file("tests/tok-trained-fixtures.json").json();
+const tok = await Tokenizer.fromFile("models/tokenizer-trained.json", GPT2_SPLIT);
 
 let pass = 0, fail = 0;
 for (const f of fx) {

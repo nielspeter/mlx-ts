@@ -1,4 +1,4 @@
-// Pure-TS byte-level BPE tokenizer for Qwen3 (loads the real tokenizer.json).
+// Pure-TS byte-level BPE tokenizer for Qwen3 (loads the real models/tokenizer.json).
 // The one piece genuinely outside MLX — HF-style GPT-2 byte-level BPE.
 // Validated bit-exactly against Python `tokenizers` in tok-test.ts.
 

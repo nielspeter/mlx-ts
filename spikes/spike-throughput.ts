@@ -11,9 +11,9 @@ import { Qwen3, generate, type KV } from "../src/models/qwen-nn.ts";
 import { loadSafetensors } from "../src/io/loader.ts";
 import { Tokenizer } from "../src/text/tokenizer.ts";
 
-const cfg = await Bun.file("config-4bit.json").json();
-const model = new Qwen3(cfg, loadSafetensors("model-q4.safetensors"));
-const tok = await Tokenizer.fromFile("tokenizer.json");
+const cfg = await Bun.file("models/config-4bit.json").json();
+const model = new Qwen3(cfg, loadSafetensors("models/model-q4.safetensors"));
+const tok = await Tokenizer.fromFile("models/tokenizer.json");
 const prompt = tok.encode("Tell me a story about a brave robot exploring the deep ocean.");
 const N = 128;
 

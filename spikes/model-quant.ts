@@ -1,5 +1,5 @@
 // 4-bit quantized Qwen3 decode in TS: loads quantized weights from
-// model-quant.safetensors and uses quantizedMatmul for the Linear projections.
+// models/model-quant.safetensors and uses quantizedMatmul for the Linear projections.
 // Token ids must match reference-quant.py exactly.
 //
 //   python3 reference-quant.py && bun codegen.ts && bun model-quant.ts
@@ -16,8 +16,8 @@ const VOCAB = 32, D = 64, nH = 4, nKV = 2, Dh = 16, I = 128, LAYERS = 2;
 const EPS = 1e-6, THETA = 1_000_000, SCALE = Dh ** -0.5, B = 1;
 const GS = 64, BITS = 4;
 
-const w = loadSafetensors("model-quant.safetensors");
-console.log(`loaded model-quant.safetensors — ${entries(w).length} tensors`);
+const w = loadSafetensors("models/model-quant.safetensors");
+console.log(`loaded models/model-quant.safetensors — ${entries(w).length} tensors`);
 
 // a quantized projection = (packed weight, scales, biases)
 type Q = { wq: Arr; scales: Arr; biases: Arr };

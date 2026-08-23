@@ -3,8 +3,8 @@
 
 import { ChatTemplate } from "../src/text/chat-template.ts";
 
-const fixtures = await Bun.file("chat-fixtures.json").json();
-const ct = await ChatTemplate.fromConfig("tokenizer_config-qwen.json");
+const fixtures = await Bun.file("tests/chat-fixtures.json").json();
+const ct = await ChatTemplate.fromConfig("models/tokenizer_config-qwen.json");
 
 let pass = 0, fail = 0;
 for (const f of fixtures) {

@@ -8,14 +8,14 @@ import os, math, json
 import mlx.core as mx
 from tokenizers import Tokenizer
 
-cfg = json.load(open("config-gpt2.json"))
+cfg = json.load(open("models/config-gpt2.json"))
 D, NL, nH = cfg["n_embd"], cfg["n_layer"], cfg["n_head"]
 Dh, EPS, SCALE, EOS, VOCAB = D // nH, cfg["layer_norm_epsilon"], (D // nH) ** -0.5, 50256, cfg["vocab_size"]
 ITERS = int(os.environ.get("ITERS", 120)); LR0 = float(os.environ.get("LR", 3e-5)); WARMUP = 10
 B1, B2, EPSA, WD, CLIP = 0.9, 0.95, 1e-8, 0.0, 1.0
 
-tok = Tokenizer.from_file("gpt2-tokenizer.json")
-w = mx.load("gpt2-model.safetensors")
+tok = Tokenizer.from_file("models/gpt2-tokenizer.json")
+w = mx.load("models/gpt2-model.safetensors")
 
 # params tree (same structure/order as sft.ts treeFlatten); split fused QKV
 def block(i):

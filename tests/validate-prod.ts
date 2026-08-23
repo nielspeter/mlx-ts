@@ -8,9 +8,9 @@ import { Qwen3, generate, generateBatch, stepTidy, type KV } from "../src/models
 import { loadSafetensors } from "../src/io/loader.ts";
 import { Tokenizer } from "../src/text/tokenizer.ts";
 
-const cfg = await Bun.file("config-4bit.json").json();
-const model = new Qwen3(cfg, loadSafetensors("model-q4.safetensors"));
-const tok = await Tokenizer.fromFile("tokenizer.json");
+const cfg = await Bun.file("models/config-4bit.json").json();
+const model = new Qwen3(cfg, loadSafetensors("models/model-q4.safetensors"));
+const tok = await Tokenizer.fromFile("models/tokenizer.json");
 const enc = (s: string) => tok.encode(s);
 
 // --- A) sampling: temperature + top-p, reproducible under a fixed seed ---

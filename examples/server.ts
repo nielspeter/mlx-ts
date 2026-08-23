@@ -26,10 +26,10 @@ const MODEL_ID = "qwen3-0.6b-4bit";
 const PORT = Number(process.env.PORT ?? 8080);
 
 console.log("loading model…");
-const cfg = await Bun.file("config-4bit.json").json();
-const model = new Qwen3(cfg, loadSafetensors("model-q4.safetensors"));
-const tok = await Tokenizer.fromFile("tokenizer.json");
-const ct = await ChatTemplate.fromConfig("tokenizer_config-qwen.json");
+const cfg = await Bun.file("models/config-4bit.json").json();
+const model = new Qwen3(cfg, loadSafetensors("models/model-q4.safetensors"));
+const tok = await Tokenizer.fromFile("models/tokenizer.json");
+const ct = await ChatTemplate.fromConfig("models/tokenizer_config-qwen.json");
 const CHAT_HTML = await Bun.file(new URL("./chat.html", import.meta.url)).text();
 console.log("model ready");
 
@@ -39,9 +39,9 @@ const WHISPER_ID = "whisper-large-v3-turbo";
 let whisper: { model: Whisper; tok: WhisperTokenizer; filtersT: MX } | null = null;
 try {
   const [model, tok, filtersT] = await Promise.all([
-    loadWhisper("config-turbo.json", "whisper-turbo.safetensors"),
+    loadWhisper("models/config-turbo.json", "models/whisper-turbo.safetensors"),
     WhisperTokenizer.fromFile(),
-    loadMelFilters("whisper-mel-filters-128.f32", 128),
+    loadMelFilters("models/whisper-mel-filters-128.f32", 128),
   ]);
   whisper = { model, tok, filtersT };
   console.log("whisper ready (/v1/audio/transcriptions)");

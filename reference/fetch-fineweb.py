@@ -8,8 +8,9 @@ tokenizer / ffmpeg). Run with a venv that has it:
 """
 import os
 from datasets import load_dataset
+os.makedirs("data", exist_ok=True)
 
-OUT = os.environ.get("CORPUS", "fineweb.txt")
+OUT = os.environ.get("CORPUS", "data/fineweb.txt")
 MAX_BYTES = int(os.environ.get("MAX_BYTES", 100_000_000))
 
 ds = load_dataset("HuggingFaceFW/fineweb", name="sample-10BT", split="train", streaming=True)

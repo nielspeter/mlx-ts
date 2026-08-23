@@ -2,7 +2,7 @@
 // transcription needs: the prompt is fixed special-token ids and we never encode
 // text. The .tiktoken file is `base64(bytes) rank` per line; tiktoken stores raw
 // bytes (no GPT-2 byte<->unicode remap), so decode is concat-bytes + UTF-8.
-//   vocab: whisper-multilingual.tiktoken (from mlx_whisper assets)
+//   vocab: models/whisper-multilingual.tiktoken (from mlx_whisper assets)
 
 // Special-token ids for the multilingual vocab (base ranks = 50257):
 import { readText } from "../io/fs.ts";
@@ -29,7 +29,7 @@ export class WhisperTokenizer {
     }
   }
 
-  static async fromFile(path = "whisper-multilingual.tiktoken"): Promise<WhisperTokenizer> {
+  static async fromFile(path = "models/whisper-multilingual.tiktoken"): Promise<WhisperTokenizer> {
     return new WhisperTokenizer(await readText(path));
   }
 

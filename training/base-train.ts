@@ -15,11 +15,11 @@ const T = +(process.env.BLOCK ?? 64), B = +(process.env.BATCH ?? 16), DH = D / N
 const ITERS = +(process.env.ITERS ?? 600), WARMUP = 50, EVAL_ITERS = 20;
 const LR0 = 3e-3, MIN_LR = 3e-4, WD = 0.1, CLIP = 1.0, B1 = 0.9, B2 = 0.95, EPSA = 1e-8;
 const EPS = 1e-5, ASCALE = 1 / Math.sqrt(DH), SEED = 1337;
-const CKPT = process.env.CKPT ?? "base-ckpt.safetensors";
+const CKPT = process.env.CKPT ?? "checkpoints/base-ckpt.safetensors";
 
 // --- data: either a memmapped token stream (TOKENS, from data-prep.ts — scales
 // to corpora larger than RAM) or encode a small corpus in-memory (CORPUS). ---
-const tok = await Tokenizer.fromFile("tokenizer-trained.json", GPT2_SPLIT);
+const tok = await Tokenizer.fromFile("models/tokenizer-trained.json", GPT2_SPLIT);
 const V = tok.vocabSize();
 let train: Int32Array | Uint16Array, val: Int32Array | Uint16Array;
 if (process.env.TOKENS) {
@@ -28,7 +28,7 @@ if (process.env.TOKENS) {
   train = mm(`${pre}-train.bin`); val = mm(`${pre}-val.bin`);
   console.log(`mmap ${pre}-{train,val}.bin -> ${train.length} train + ${val.length} val tokens (vocab ${V})`);
 } else {
-  const text = await Bun.file(process.env.CORPUS ?? "input.txt").text();
+  const text = await Bun.file(process.env.CORPUS ?? "data/input.txt").text();
   const t0 = performance.now();
   const data = Int32Array.from(tok.encode(text));
   console.log(`encoded ${text.length} chars -> ${data.length} BPE tokens (vocab ${V}) in ${((performance.now() - t0) / 1000).toFixed(1)}s`);

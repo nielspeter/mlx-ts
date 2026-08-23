@@ -1,11 +1,11 @@
 """Ground-truth tokenizer fixtures from the real Qwen3 tokenizer via HF
 `tokenizers`. tokenizer.ts must reproduce these ids and decoded text exactly.
-Run: python3 tok-reference.py  ->  writes tok-fixtures.json
+Run: python3 tok-reference.py  ->  writes tests/tok-fixtures.json
 """
 import json
 from tokenizers import Tokenizer
 
-tok = Tokenizer.from_file("tokenizer.json")
+tok = Tokenizer.from_file("models/tokenizer.json")
 
 tests = [
     "Hello world",
@@ -30,5 +30,5 @@ for s in tests:
         "decoded": tok.decode(enc.ids),            # skip_special_tokens=True (default)
     })
 
-json.dump(fixtures, open("tok-fixtures.json", "w"), ensure_ascii=False, indent=1)
-print(f"wrote tok-fixtures.json with {len(fixtures)} cases")
+json.dump(fixtures, open("tests/tok-fixtures.json", "w"), ensure_ascii=False, indent=1)
+print(f"wrote tests/tok-fixtures.json with {len(fixtures)} cases")

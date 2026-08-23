@@ -23,10 +23,10 @@ work (raw web text needs far more params/compute to be coherent).
 | # | stage | script | engine |
 |---|---|---|---|
 | 0 | dataset | `../scripts/run.sh` (curl) | bounded prefix of TinyStories (HTTP range request) |
-| 1 | `tok_train` | `../reference/tok-train.py` | byte-level BPE in **native Rust** (HF tokenizers) → `tokenizer.json` |
+| 1 | `tok_train` | `../reference/tok-train.py` | byte-level BPE in **native Rust** (HF tokenizers) → `models/tokenizer.json` |
 | 2 | `data_prep` | `../training/data-prep.ts` | **stream-encode** the corpus (pure-TS BPE) → uint16 token shards (`tokens-{train,val}.bin`) |
-| 3 | `base_train` | `../training/base-train.ts` | pretrain a GPT on the **memmapped** token stream, **save `base-ckpt.safetensors`** — real MLX over FFI |
-| 4 | `chat_sft` | `../training/chat-sft.ts` | load the base checkpoint, **batched** SFT (BS examples/step, padded, masked loss on completion tokens only), save `chat-ckpt.safetensors`. **Story-aligned** (`STORIES=<corpus>`): instruction-tunes on *"Tell me a story about {topic}." → {a real story}* so the chat matches a TinyStories base's competence |
+| 3 | `base_train` | `../training/base-train.ts` | pretrain a GPT on the **memmapped** token stream, **save `checkpoints/base-ckpt.safetensors`** — real MLX over FFI |
+| 4 | `chat_sft` | `../training/chat-sft.ts` | load the base checkpoint, **batched** SFT (BS examples/step, padded, masked loss on completion tokens only), save `checkpoints/chat-ckpt.safetensors`. **Story-aligned** (`STORIES=<corpus>`): instruction-tunes on *"Tell me a story about {topic}." → {a real story}* so the chat matches a TinyStories base's competence |
 | 5 | `chat_cli` | `../training/chat-ckpt.ts` | load the chat checkpoint and generate replies (CLI) |
 | 5b | `chat_web` | `../examples/chat-web.ts` | serve the checkpoint behind the OpenAI API + `../examples/chat.html` UI (`bun ../examples/chat-web.ts` → http://localhost:8080) |
 
@@ -40,9 +40,9 @@ verified).
 
 ## What it looks like
 ```
-=== [1/4] tok_train ===   trained byte-level BPE: vocab=2048 -> tokenizer-trained.json
-=== [2/4] base_train ===  ... FINAL train 4.1  val 4.6 ; saved base-ckpt.safetensors ; CKPT roundtrip: OK
-=== [3/4] chat_sft ===    STEP0 5.91 -> FINAL 0.0001 ; saved chat-ckpt.safetensors
+=== [1/4] tok_train ===   trained byte-level BPE: vocab=2048 -> models/tokenizer-trained.json
+=== [2/4] base_train ===  ... FINAL train 4.1  val 4.6 ; saved checkpoints/base-ckpt.safetensors ; CKPT roundtrip: OK
+=== [3/4] chat_sft ===    STEP0 5.91 -> FINAL 0.0001 ; saved checkpoints/chat-ckpt.safetensors
 === [4/4] chat ===
 Q: What is the capital of France?
 A: The capital of France is Paris.

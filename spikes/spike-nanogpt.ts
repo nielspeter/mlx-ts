@@ -4,7 +4,7 @@
 // on tiny-shakespeare, with the autograd being real MLX over FFI. Proves you can
 // train a genuine small GPT — not a toy — in TypeScript driving mlx-c.
 //
-//   bun spike-nanogpt.ts                  # ~defaults below; fetches input.txt
+//   bun spike-nanogpt.ts                  # ~defaults below; fetches data/input.txt
 //   ITERS=300 N_LAYER=4 bun spike-nanogpt.ts
 //
 // Validated vs reference-nanogpt.py: identical init + identical mini-batches
@@ -26,12 +26,12 @@ const DROP = +(process.env.DROPOUT ?? 0);   // dropout prob (train only); 0 keep
 const EPS = 1e-5, ASCALE = 1 / Math.sqrt(DH), SEED = 1337;
 
 // --- data: tiny-shakespeare, char-level (fetched once) ---
-if (!(await Bun.file("input.txt").exists())) {
-  console.log("fetching input.txt (tiny-shakespeare)...");
+if (!(await Bun.file("data/input.txt").exists())) {
+  console.log("fetching data/input.txt (tiny-shakespeare)...");
   const r = await fetch("https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt");
-  await Bun.write("input.txt", await r.text());
+  await Bun.write("data/input.txt", await r.text());
 }
-const text = await Bun.file("input.txt").text();
+const text = await Bun.file("data/input.txt").text();
 const chars = [...new Set(text)].sort();                 // deterministic vocab (sorted)
 const V = chars.length;
 const stoi = new Map(chars.map((c, i) => [c, i] as const));

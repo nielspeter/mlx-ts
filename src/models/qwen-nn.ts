@@ -155,9 +155,9 @@ if (import.meta.main) {
   const prompt = argv.filter((a, i) => !a.startsWith("--") && !(i > 0 && argv[i - 1].startsWith("--"))).join(" ") || "The capital of France is";
   if (sd) seed(sd);
 
-  const cfg = await readJson("config-4bit.json");
-  const model = new Qwen3(cfg, loadSafetensors("model-q4.safetensors"));
-  const tok = await Tokenizer.fromFile("tokenizer.json");
+  const cfg = await readJson("models/config-4bit.json");
+  const model = new Qwen3(cfg, loadSafetensors("models/model-q4.safetensors"));
+  const tok = await Tokenizer.fromFile("models/tokenizer.json");
   const memLoad = activeMemoryMB();
 
   const ids = tok.encode(prompt);

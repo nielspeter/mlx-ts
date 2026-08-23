@@ -7,11 +7,11 @@ import json
 import mlx.core as mx
 from tokenizers import Tokenizer
 
-cfg = json.load(open("config-gpt2.json"))
+cfg = json.load(open("models/config-gpt2.json"))
 D, NL, nH = cfg["n_embd"], cfg["n_layer"], cfg["n_head"]
 Dh, EPS, SCALE, VOCAB = D // nH, cfg["layer_norm_epsilon"], (D // nH) ** -0.5, cfg["vocab_size"]
-tok = Tokenizer.from_file("gpt2-tokenizer.json")
-w = mx.load("gpt2-model.safetensors")
+tok = Tokenizer.from_file("models/gpt2-tokenizer.json")
+w = mx.load("models/gpt2-model.safetensors")
 
 def gelu_new(x):
     return 0.5 * x * (1 + mx.tanh(0.7978845608028654 * (x + 0.044715 * x ** 3)))

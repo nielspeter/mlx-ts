@@ -54,12 +54,12 @@ let params: Tree = p;
 const nParams = blob.length;
 
 // --- data: makemore names (32k), fetched once if absent; '\n'=0, a..z=1..26 ---
-if (!(await Bun.file("names.txt").exists())) {
-  console.log("fetching names.txt (makemore corpus)...");
+if (!(await Bun.file("data/names.txt").exists())) {
+  console.log("fetching data/names.txt (makemore corpus)...");
   const r = await fetch("https://raw.githubusercontent.com/karpathy/makemore/master/names.txt");
-  await Bun.write("names.txt", await r.text());
+  await Bun.write("data/names.txt", await r.text());
 }
-const names = (await Bun.file("names.txt").text()).split("\n").map((s) => s.trim().toLowerCase()).filter((s) => /^[a-z]+$/.test(s));
+const names = (await Bun.file("data/names.txt").text()).split("\n").map((s) => s.trim().toLowerCase()).filter((s) => /^[a-z]+$/.test(s));
 const enc = (name: string) => [0, ...[...name].map((c) => c.charCodeAt(0) - 96)]; // [BOS, chars]
 
 // --- forward: single GPT-2 block, pre-LN, GELU MLP, tied lm_head. ids:[L] -> logits:[L,V] ---

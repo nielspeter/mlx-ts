@@ -3,8 +3,8 @@
 import { Tokenizer, GPT2_SPLIT } from "../src/text/tokenizer.ts";
 import { loadCkpt, generate } from "../src/models/nanogpt-model.ts";
 
-const CKPT = process.env.CHAT_CKPT ?? "chat-ckpt.safetensors";
-const tok = await Tokenizer.fromFile("tokenizer-trained.json", GPT2_SPLIT);
+const CKPT = process.env.CHAT_CKPT ?? "checkpoints/chat-ckpt.safetensors";
+const tok = await Tokenizer.fromFile("models/tokenizer-trained.json", GPT2_SPLIT);
 const EOS = tok.encode("<|endoftext|>")[0];
 const { params, cfg } = await loadCkpt(CKPT);
 

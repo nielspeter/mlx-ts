@@ -1,5 +1,5 @@
 // Real OpenAI GPT-2-124M inference: load the actual openai-community/gpt2 weights
-// (gpt2-model.safetensors + config-gpt2.json + gpt2-tokenizer.json) and generate.
+// (models/gpt2-model.safetensors + models/config-gpt2.json + models/gpt2-tokenizer.json) and generate.
 // Architecture is GPT-2 exactly: learned positional embeddings, LayerNorm WITH
 // bias, fused QKV (Conv1D), gelu_new (tanh approx), tied lm_head. KV-cached greedy
 // decode. Token-exact vs reference-gpt2.py (same weights, MLX Python).
@@ -15,7 +15,7 @@ import { Tokenizer, GPT2_SPLIT } from "../text/tokenizer.ts";
 import { MX, sample as mxSample, applyRepetitionPenalty, seed as mxSeed } from "../core/mx.ts";
 import { readJson } from "../io/fs.ts";
 
-const cfg = await readJson("config-gpt2.json");
+const cfg = await readJson("models/config-gpt2.json");
 const D = cfg.n_embd, NL = cfg.n_layer, nH = cfg.n_head, Dh = D / nH;
 const EPS = cfg.layer_norm_epsilon, SCALE = Dh ** -0.5, B = 1;
 const EOS = 50256, VOCAB = cfg.vocab_size;
@@ -29,8 +29,8 @@ if (process.env.SEED) mxSeed(+process.env.SEED);
 const SAMPLING = TEMP > 0 || TOP_K > 0 || TOP_P > 0 || REP !== 1;
 let histIds: number[] = [];   // full context, for the repetition penalty
 
-const w = loadSafetensors("gpt2-model.safetensors");
-const tok = await Tokenizer.fromFile("gpt2-tokenizer.json", GPT2_SPLIT);
+const w = loadSafetensors("models/gpt2-model.safetensors");
+const tok = await Tokenizer.fromFile("models/gpt2-tokenizer.json", GPT2_SPLIT);
 const g = (n: string): Arr => get(w, n);
 
 // GPT-2 stores Linear as Conv1D weight [in, out] -> matmul(x, W) directly (no

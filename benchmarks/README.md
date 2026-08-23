@@ -60,3 +60,14 @@ which is the comparison that matters here.
 `mlx-ts` always runs on the default stream (Metal/GPU on Apple silicon). For the
 two Python benches that gate the GPU behind a flag (`single_ops`, `batch_matmul`),
 pass `--gpu`; the runner does this automatically.
+
+## Model-level throughput
+
+The op benchmarks above answer "is a single op competitive". This one answers
+the same question for a whole model, and is the Python bar that
+`../validation/spike-throughput.ts` is measured against:
+
+```sh
+python3 benchmarks/qwen_q4_throughput_bench.py   # tok/s, 4-bit Qwen3, 128 tokens
+bun validation/spike-throughput.ts               # the TypeScript side
+```

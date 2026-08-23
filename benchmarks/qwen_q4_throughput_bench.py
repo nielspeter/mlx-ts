@@ -1,7 +1,10 @@
-# Python tok/s on the same 4-bit model, 128 tokens — the "Apple's own stack" bar.
-import time, json, importlib.util
-spec = importlib.util.spec_from_file_location("ref", "reference-qwen-q4.py")
-# reuse the model/step from the reference by importing its globals
+# Python tok/s on the same 4-bit Qwen3 model, 128 tokens — the "Apple's own
+# stack" bar that validation/spike-throughput.ts is compared against.
+# Run from the repo root: python3 benchmarks/qwen_q4_throughput_bench.py
+#
+# Unlike everything in reference/, this produces a *speed*, not a value to diff,
+# which is why it lives here rather than there.
+import time, json
 import mlx.core as mx
 from tokenizers import Tokenizer
 cfg = json.load(open("models/config-4bit.json"))

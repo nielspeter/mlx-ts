@@ -292,7 +292,7 @@ The one piece genuinely outside MLX — the **tokenizer** — is done and valida
 
 Before committing to a production `@mlx-ts/lm`, we spiked the unknowns that could
 *kill* the project or limit it to a partial (correctness-only) toy. Both came
-back green. (`../validation/spike-throughput.ts`, `../reference/spike-bench.py`, `../validation/spike-moe.ts`.)
+back green. (`../validation/spike-throughput.ts`, `../benchmarks/qwen_q4_throughput_bench.py`, `../validation/spike-moe.ts`.)
 
 **Spike A — serving viability (is JS/FFI overhead a wall?).** Measured tok/s on
 the same 4-bit Qwen3-0.6B, 128 tokens:
@@ -549,7 +549,7 @@ Deep-dive notes: `MICROGPT.md`, `NANOGPT.md`, `GPT2.md`.
 - `../reference/split-olmoe.py` — split a single file into shards (to exercise the sharded loader)
 
 **Spikes** — `../validation/spike-throughput.ts` (async overlap / serving viability),
-`../reference/spike-bench.py` (Python tok/s bar), `../validation/spike-moe.ts` (gather_qmm op),
+`../benchmarks/qwen_q4_throughput_bench.py` (Python tok/s bar), `../validation/spike-moe.ts` (gather_qmm op),
 `../validation/spike-moe-layer.ts` (full MoE layer), `../validation/spike-train.ts` (training: value_and_grad
 + SGD), `../spikes/spike-istft.ts` (iSTFT vocoder synthesis — TTS de-risk),
 `../spikes/spike-vmap.ts` (`vmap` recovered from the detail trace/replace primitives),

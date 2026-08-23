@@ -2,7 +2,7 @@
 // Hand-written layer_norm vs fused mx.fast.layer_norm, looped 32x, across dtypes/sizes.
 //   bun benchmarks/layer-norm.ts
 
-import { MX, scalar } from "../mx.ts";
+import { MX, scalar } from "../src/core/mx.ts";
 import { randomUniform, astype, rsqrt, meanAxis, varAxis, layerNorm, FLOAT32, FLOAT16, BFLOAT16, timeFn, loop } from "./time-utils.ts";
 
 const EPS = 1e-5, L = 1024, LOOP = 32;

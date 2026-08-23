@@ -1,7 +1,7 @@
 // TS port of benchmarks/python/single_ops.py (forward ops only).
 //   bun benchmarks/single-ops.ts
 
-import { fromI32, MX } from "../mx.ts";
+import { fromI32, MX } from "../src/core/mx.ts";
 import { randomUniform, maximum, maxAxis, minAxis, exp, negative, logsumexpAxis, timeFn } from "./time-utils.ts";
 
 function timeAdd() {

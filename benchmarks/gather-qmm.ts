@@ -4,7 +4,7 @@
 // representative kernel; mirrors nn.MoE's dispatch).
 //   bun benchmarks/gather-qmm.ts
 
-import { fromI32 } from "../mx.ts";
+import { fromI32 } from "../src/core/mx.ts";
 import { randomNormal, quantize, astype, UINT32, timeFn } from "./time-utils.ts";
 
 const N = 1024, D = 1024, M = 1024, E = 32, I = 4, GS = 64, BITS = 4;

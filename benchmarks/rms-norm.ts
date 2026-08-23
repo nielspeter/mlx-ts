@@ -3,7 +3,7 @@
 // like the Python bench's inner loop.
 //   bun benchmarks/rms-norm.ts
 
-import { MX, scalar } from "../mx.ts";
+import { MX, scalar } from "../src/core/mx.ts";
 import { randomUniform, astype, square, rsqrt, meanAxis, FLOAT16, timeFn, loop } from "./time-utils.ts";
 
 const EPS = 1e-5;

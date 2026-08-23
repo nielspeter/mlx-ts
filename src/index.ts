@@ -40,10 +40,12 @@ export {
 } from "./io/loader.ts";
 
 // --- models --------------------------------------------------------------
-// Assembled models that are importable as modules. qwen.ts, gpt2.ts and
-// olmoe.ts are CLI scripts rather than modules and are deliberately absent —
-// run them with `bun src/models/<name>.ts "prompt"`.
+// Assembled models that are importable as modules. qwen.ts and gpt2.ts are
+// absent because they are CLI scripts, not modules: they build a model with
+// top-level await and generate on import. Run those with
+// `bun src/models/<name>.ts "prompt"`.
 export { Whisper, loadWhisper } from "./models/whisper.ts";
+export { OLMoE } from "./models/olmoe.ts";
 export { WhisperTokenizer, langToken } from "./text/whisper-tokenizer.ts";
 export { generateBatch } from "./models/qwen-nn.ts";
 // Namespaced: its `generate`/`forward` would collide with the ones above.

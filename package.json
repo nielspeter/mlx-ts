@@ -1,5 +1,5 @@
 {
-  "name": "@npstrandberg/mlx-ts",
+  "name": "@nielspeter/mlx-ts",
   "version": "0.1.0",
   "description": "A TypeScript MLX SDK over Apple's mlx-c via FFI \u2014 Bun, Deno and Node. Apple Silicon only.",
   "license": "MIT",
@@ -30,13 +30,19 @@
   },
   "keywords": [
     "mlx",
+    "mlx-lm",
+    "mlx-whisper",
     "apple-silicon",
     "metal",
     "llm",
     "inference",
+    "training",
+    "lora",
     "ffi",
+    "typescript",
     "bun",
-    "deno"
+    "deno",
+    "node"
   ],
   "scripts": {
     "typecheck": "tsc --noEmit",

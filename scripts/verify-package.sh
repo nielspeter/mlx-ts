@@ -19,7 +19,7 @@ printf '{ "nodeModulesDir": "manual" }\n' > deno.json
 npm install --silent "$TARBALL" >/dev/null 2>&1
 
 cat > use.ts <<'TS'
-import { fromF32, tidy, Module, Linear, backend, type MX } from "@npstrandberg/mlx-ts";
+import { fromF32, tidy, Module, Linear, backend, type MX } from "@nielspeter/mlx-ts";
 const a = fromF32(new Float32Array([1, 2, 3, 4, 5, 6]), [2, 3]);
 const b = fromF32(new Float32Array([0.5, -1, 2, 0.25, -0.75, 1.5]), [3, 2]);
 const sum = a.matmul(b).toF32().reduce((s, v) => s + v, 0);

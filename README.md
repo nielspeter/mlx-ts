@@ -41,6 +41,21 @@ Being honest about it is cheaper than you finding out later:
 The narrow version: **if a generation API is enough, something else will get you
 there faster. This is for when it isn't.**
 
+### Coming from Python?
+
+Apple's stack is four packages. This repo is the analogue of all four, which is
+why it is named after `mlx` rather than after `mlx-lm`:
+
+| Python | here |
+|---|---|
+| `mlx` (`mlx.core`) — arrays, ops, memory | `src/ffi` + `src/core` |
+| `mlx.nn` / `mlx.optimizers` | `src/nn` — Modules, Adam, `valueAndGrad` |
+| `mlx-lm` — architectures, generation, tokenizers | `src/models` + `src/text` |
+| `mlx-whisper` — speech-to-text | `src/models/whisper.ts` + `src/audio` |
+
+If you only want the `mlx-lm` layer, that is `generate` / `streamText` plus a
+model from `src/models`; the rest is underneath it, not in your way.
+
 ## End to end: real Qwen3-0.6B generating text
 
 ```sh
@@ -63,11 +78,11 @@ token-for-token. Everything below is the validated machinery underneath it.
 
 ```sh
 brew install mlx-c                      # the native dependency
-npm i @npstrandberg/mlx-ts              # or: bun add / deno add npm:
+npm i @nielspeter/mlx-ts              # or: bun add / deno add npm:
 ```
 
 ```ts
-import { MX, fromF32, tidy, generate, Tokenizer } from "@npstrandberg/mlx-ts";
+import { MX, fromF32, tidy, generate, Tokenizer } from "@nielspeter/mlx-ts";
 ```
 
 macOS on Apple Silicon only. Bun and Deno work as-is; Node needs 24+ (the
@@ -370,7 +385,7 @@ base, packed into a u64), `mlx_fast_scaled_dot_product_attention` with
 
 mlx-ts today is a **local inference runtime for text LLMs *and* Whisper
 speech-to-text** (plus LoRA training) — Apple-Silicon-only, published as
-`@npstrandberg/mlx-ts` and also runnable as scripts in this repo. The library
+`@nielspeter/mlx-ts` and also runnable as scripts in this repo. The library
 under `src/` runs on Bun, Deno and Node, as do all of `examples/`; only
 `training/` is still Bun-only. Sampling supports greedy,
 temperature, top-p, **top-k**, and **repetition penalty**
@@ -488,7 +503,7 @@ bun src/models/gpt2.ts "The capital of France is"   # greedy; TEMP/TOP_K/TOP_P/R
   `brew install mlx-c` and ships no binaries. Bundling one would drop that
   prerequisite, but `prebuilds/` is a *different* MLX build that does not agree
   with MLX-Python numerically, so it is not shippable until that is diagnosed.
-  (Packaging itself is done: `@npstrandberg/mlx-ts`, dylib resolved at runtime.)
+  (Packaging itself is done: `@nielspeter/mlx-ts`, dylib resolved at runtime.)
 
 ### ❌ Not yet (substantial new code or a real gap)
 - **Text-to-speech** — **de-risked, not built**: the novel vocoder step (iSTFT,

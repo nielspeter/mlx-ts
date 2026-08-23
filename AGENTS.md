@@ -173,7 +173,7 @@ generalizes this: any opaque `mlx_*` type → `ptr`.
   backward-memory regime at scale (`tidy()` *after* the step).
 - **Coverage**: more architectures (key-mapping), quant formats (AWQ/GPTQ, bit-
   widths), sampling (top-k, penalties). Packaging is done
-  (`@npstrandberg/mlx-ts`); **bundling a prebuilt `libmlxc`** is not — that
+  (`@nielspeter/mlx-ts`); **bundling a prebuilt `libmlxc`** is not — that
   build disagrees with MLX-Python numerically.
 
 ## Working norms

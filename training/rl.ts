@@ -11,7 +11,7 @@
 //   bun rl.ts
 import { MX, fromI32, scalar, evalAll, seed, sample, clearCache, tidy } from "../src/core/mx.ts";
 import { crossEntropy } from "../src/nn/loss.ts";
-import { valueAndGrad } from "./train.ts";
+import { valueAndGrad } from "../src/nn/autograd.ts";
 import { treeFlatten, treeUnflattenLike, type Tree } from "../src/core/pytree.ts";
 import { loadSafetensors, get } from "../src/io/loader.ts";
 import { Tokenizer, GPT2_SPLIT } from "../src/text/tokenizer.ts";

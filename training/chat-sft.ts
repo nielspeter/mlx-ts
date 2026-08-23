@@ -5,7 +5,7 @@
 //   bun chat-sft.ts        (needs checkpoints/base-ckpt.safetensors + models/tokenizer-trained.json)
 import { MX, fromI32, fromF32, scalar, evalAll, clearCache, tidy } from "../src/core/mx.ts";
 import { maskedCrossEntropy } from "../src/nn/loss.ts";
-import { valueAndGrad } from "./train.ts";
+import { valueAndGrad } from "../src/nn/autograd.ts";
 import { treeFlatten, treeUnflattenLike, type Tree } from "../src/core/pytree.ts";
 import { Tokenizer, GPT2_SPLIT } from "../src/text/tokenizer.ts";
 import { loadCkpt, saveCkpt, forward, generate, freeParams, type Cfg } from "../src/models/nanogpt-model.ts";

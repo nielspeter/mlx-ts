@@ -13,7 +13,7 @@
 // bar is "same start, both converge" — as for lora-train / microGPT.
 import { MX, fromI32, fromF32, scalar, evalAll, seed, sample, clearCache, tidy, dropout } from "../src/core/mx.ts";
 import { crossEntropy } from "../src/nn/loss.ts";
-import { valueAndGrad } from "../training/train.ts";
+import { valueAndGrad } from "../src/nn/autograd.ts";
 import { treeFlatten, treeUnflattenLike, type Tree } from "../src/core/pytree.ts";
 
 // --- config (nanoGPT's shakespeare-char, scaled to run on one Mac in a spike) ---

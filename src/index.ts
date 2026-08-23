@@ -21,6 +21,8 @@ export {
   MoE, type Experts,
 } from "./nn/nn.ts";
 export { Adam } from "./nn/optim.ts";
+// The training entry point: differentiate a scalar loss w.r.t. a pytree of params.
+export { valueAndGrad } from "./nn/autograd.ts";
 export { crossEntropy, maskedCrossEntropy } from "./nn/loss.ts";
 
 // --- text: tokenizing, chat templates, generation ------------------------

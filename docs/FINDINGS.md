@@ -262,7 +262,7 @@ decode is compute-bound).
   the keystone (SGD over a multi-param JS closure, bit-identical to MLX) *and* the
   mechanical tail — **Adam** (`../src/nn/optim.ts`), **cross_entropy** (`../src/nn/loss.ts`), **pytree
   utilities** (`../src/core/pytree.ts`), **`Module.parameters()`** (`../src/nn/nn.ts`), and a tree-based
-  **`valueAndGrad`** (`../training/train.ts`). The real **LoRA fine-tune** of the 4-bit Qwen3
+  **`valueAndGrad`** (`../src/nn/autograd.ts`). The real **LoRA fine-tune** of the 4-bit Qwen3
   (`../training/lora-train.ts`: frozen quantized base, rank-8 adapters on q/v) now reads like
   mlx.nn — parameters come from `Module.parameters()`, gradients come back as a
   matching tree, and `Adam.update(params, grads)` flattens/unflattens internally;
@@ -347,7 +347,7 @@ primitives its own `vmap` composes from. `../spikes/spike-vmap.ts` `dlopen`s tho
 replicates the composition (trace the function once, then replace with the real
 batched inputs) — the per-op batching rules live in the C++ core and run inside
 `vmap_replace`, so we only orchestrate; the closure plumbing is the same
-`mlx_closure_new_func` + `JSCallback` trick as `../training/train.ts`. Validated three ways:
+`mlx_closure_new_func` + `JSCallback` trick as `../src/nn/autograd.ts`. Validated three ways:
 single-input `vmap` (sum-of-squares), a **shared (non-mapped) input** via the
 `-1` axis sentinel (`A @ x`), and **per-sample gradients** `vmap(grad(f))` — `grad
 of sum(x²)` per example equals `2x` exactly. So the one capability previously
@@ -523,7 +523,7 @@ Deep-dive notes: `MICROGPT.md`, `NANOGPT.md`, `GPT2.md`.
   `QuantizedEmbedding`, **`MoE`** (router + top-K + quantized expert dispatch)
 - `../src/nn/optim.ts` — `Adam` (pytree-aware); `../src/nn/loss.ts` — `crossEntropy`
 - `../src/core/pytree.ts` — `treeFlatten` / `treeUnflattenLike` / `treeMap`;
-  `../training/train.ts` — tree-based `valueAndGrad` (the ergonomic training layer)
+  `../src/nn/autograd.ts` — tree-based `valueAndGrad` (the ergonomic training layer)
 - `../src/text/lm.ts` — public generation surface: `Decoder` interface + async-generator
   `streamTokens` / `streamText` / `generate` (auto KV-cache cleanup, no manual `tidy`)
 - `../src/io/loader.ts` — safetensors loading; `singleFileWeights` / **`shardedWeights`**

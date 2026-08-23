@@ -18,7 +18,7 @@ TS, validated against an MLX-Python oracle.
 ## What we built
 | | Karpathy's microGPT | this spike (`../validation/spike-microgpt.ts`) |
 |---|---|---|
-| Autograd | hand-rolled `Value` class | **real MLX `value_and_grad`** over FFI (`../training/train.ts`) |
+| Autograd | hand-rolled `Value` class | **real MLX `value_and_grad`** over FFI (`../src/nn/autograd.ts`) |
 | Language | pure Python, no deps | TypeScript + Bun FFI → `libmlxc.dylib` |
 | Compute | scalar, CPU | MLX kernels on Apple GPU (Metal) |
 | Model | 1 block, 4 heads, ~4k params | **identical**: 1 block, 4 heads, **4000 params** |

@@ -17,7 +17,7 @@
 // "same start, both converge", as for lora-train).
 import { MX, fromI32, fromF32, scalar, evalAll, seed, sample, clearCache, tidy } from "../src/core/mx.ts";
 import { crossEntropy } from "../src/nn/loss.ts";
-import { valueAndGrad } from "../training/train.ts";
+import { valueAndGrad } from "../src/nn/autograd.ts";
 import { treeFlatten, treeUnflattenLike, type Tree } from "../src/core/pytree.ts";
 
 // --- config (his numbers: d=16, 4 heads, 1 layer, block 16 -> ~4k params) ---

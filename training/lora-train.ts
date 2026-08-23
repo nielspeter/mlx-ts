@@ -9,7 +9,7 @@ import { loadSafetensors } from "../src/io/loader.ts";
 import { Module, LoraDelta } from "../src/nn/nn.ts";
 import { Adam } from "../src/nn/optim.ts";
 import { crossEntropy } from "../src/nn/loss.ts";
-import { valueAndGrad } from "./train.ts";
+import { valueAndGrad } from "../src/nn/autograd.ts";
 import { treeFlatten, type Tree } from "../src/core/pytree.ts";
 
 const cfg = await Bun.file("models/config-4bit.json").json();

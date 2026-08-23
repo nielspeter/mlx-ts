@@ -26,7 +26,7 @@ Faithful to nanoGPT's `shakespeare-char` recipe, scaled to run on a single Mac:
 | Char-level tokenizer | ✅ sorted-unique vocab (65 chars) |
 | train/val split + best-val eval | ✅ 90/10, periodic eval, tracks best checkpoint |
 | **Dropout** | ✅ device-side `mx.dropout` (`mlx_random_bernoulli`), train-only |
-| Autograd | **real MLX `value_and_grad`** over FFI (`../training/train.ts`) |
+| Autograd | **real MLX `value_and_grad`** over FFI (`../src/nn/autograd.ts`) |
 | DDP / `torch.compile` | N/A — single device; MLX has its own lazy graph |
 
 Default config: 4 layers, 4 heads, `n_embd=128`, `block_size=64`, batch 32,

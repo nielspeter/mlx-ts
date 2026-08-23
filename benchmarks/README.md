@@ -53,7 +53,7 @@ active memory exceeds 6 GB** — a harness bug can no longer OOM the machine.
 
 **Forward-pass only.** The Python benches also time `mx.grad` / `mx.compile` /
 `mx.vjp` / `mx.vmap` variants; those aren't part of this SDK's surface (training
-uses the closure-based `value_and_grad` in `../training/train.ts`; `vmap` is the one genuine
+uses the closure-based `value_and_grad` in `../src/nn/autograd.ts`; `vmap` is the one genuine
 mlx-c gap — `../docs/FINDINGS.md` §6/§7). The forward kernels are what govern inference,
 which is the comparison that matters here.
 

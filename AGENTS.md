@@ -69,7 +69,7 @@ generalizes this: any opaque `mlx_*` type → `ptr`.
   → `training/chat-sft.ts` (SFT from ckpt) → `training/chat-ckpt.ts` (CLI) / `examples/chat-web.ts` (web UI).
   Shared GPT + ckpt load/save in `src/models/nanogpt-model.ts`; handoff via safetensors.
 - **Training**: `src/nn/optim.ts` (Adam), `src/nn/loss.ts` (cross_entropy), `src/core/pytree.ts`,
-  `training/train.ts` (tree-based `valueAndGrad`).
+  `src/nn/autograd.ts` (tree-based `valueAndGrad`).
 - **`src/text/lm.ts`** — public generation surface: `Decoder` interface +
   `streamTokens` / `streamText` / `generate` (async generators, KV cache
   auto-freed; no caller-side `tidy()`). `MX` is `Disposable`.
@@ -124,7 +124,7 @@ generalizes this: any opaque `mlx_*` type → `ptr`.
 8. **Training is not bit-reproducible** over a 4-bit base (bf16 rounding + chaos
    near instabilities). Validation criterion: identical start + both converge.
 9. The codegen **skips function-pointer params** (closures) → `dlopen`
-   `mlx_closure_new_func` by hand (see `training/train.ts` / `validation/spike-train.ts`).
+   `mlx_closure_new_func` by hand (see `src/nn/autograd.ts` / `validation/spike-train.ts`).
 10. **`vmap` has no public mlx-c symbol**, but is **recoverable** over FFI from
     the internal `mlx_detail_vmap_trace`/`_replace` primitives (`spikes/spike-vmap.ts`:
     single-input, shared-input `-1` axis, and per-sample gradients `vmap(grad)` all

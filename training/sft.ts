@@ -9,7 +9,7 @@
 // "same start, both converge", as for lora-train / nanoGPT.)
 import { MX, fromI32, scalar, evalAll, clearCache, tidy } from "../src/core/mx.ts";
 import { crossEntropy } from "../src/nn/loss.ts";
-import { valueAndGrad } from "./train.ts";
+import { valueAndGrad } from "../src/nn/autograd.ts";
 import { treeFlatten, treeUnflattenLike, type Tree } from "../src/core/pytree.ts";
 import { loadSafetensors, get } from "../src/io/loader.ts";
 import { Tokenizer, GPT2_SPLIT } from "../src/text/tokenizer.ts";

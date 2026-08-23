@@ -415,7 +415,7 @@ is the same with the inverse-DFT basis (Hermitian 2× weighting). Both run on op
 we already have, validated to ~1e-6/1e-7 against numpy / mlx-audio.
 
 **Speech-to-text — done, validated.**
-- `../examples/audio.ts`: ffmpeg-decode → 16 kHz mono → Whisper log-Mel (rfft-as-matmul + the
+- `../src/audio/mel.ts`: ffmpeg-decode → 16 kHz mono → Whisper log-Mel (rfft-as-matmul + the
   shipped librosa filterbank). Matches numpy FFT to ~1e-6.
 - `../src/models/whisper.ts`: the full Whisper architecture over mlx-c — Conv1d stem,
   bidirectional encoder, causal decoder with **cross-attention** + a KV cache
@@ -530,7 +530,7 @@ Deep-dive notes: `MICROGPT.md`, `NANOGPT.md`, `GPT2.md`.
   (multi-file, mmap-evictable) + `freeMap`
 - `../src/text/tokenizer.ts` — pure-TS byte-level BPE (Qwen + **GPT-2 `GPT2_SPLIT`**, 8/8 vs HF)
 - `../src/text/chat-template.ts` — HF chat template via `@huggingface/jinja`
-- `../examples/audio.ts` — speech front-end: ffmpeg decode + log-Mel (rfft-as-matmul)
+- `../src/audio/mel.ts` — speech front-end: ffmpeg decode + log-Mel (rfft-as-matmul)
 - `../src/models/whisper.ts` / `../src/text/whisper-tokenizer.ts` — Whisper STT (encoder + cross-attn decoder
   + KV cache, multilingual, auto language detect); tiktoken decode
 

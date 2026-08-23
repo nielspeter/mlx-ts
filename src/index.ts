@@ -30,6 +30,9 @@ export { Tokenizer, GPT2_SPLIT } from "./text/tokenizer.ts";
 export { ChatTemplate, type Message } from "./text/chat-template.ts";
 export { generate, streamTokens, streamText, type Decoder, type GenOptions, type KV } from "./text/lm.ts";
 
+// --- audio: the Whisper front-end (ffmpeg decode -> log-Mel) ----------------
+export { SR, decodeAudio, padOrTrim, loadMelFilters, logMel } from "./audio/mel.ts";
+
 // --- weights -------------------------------------------------------------
 export {
   loadSafetensors, singleFileWeights, shardedWeights, shapeOf, freeMap,

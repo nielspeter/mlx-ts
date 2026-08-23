@@ -65,7 +65,7 @@ which one it resolved. Set `MLXTS_LIB` to choose.
 ## Repo layout
 
 ```
-src/          the SDK — ffi/ core/ nn/ text/ io/ models/, public API in index.ts
+src/          the SDK — ffi/ core/ nn/ text/ audio/ io/ models/, public API in index.ts
 tools/        codegen.ts (headers -> src/ffi/generated.ts), inspect-real.ts
 examples/     server (OpenAI-compatible), chat UI, streaming CLI
 training/     pretrain, SFT, LoRA, RL, data prep                   [Bun-only]
@@ -315,7 +315,7 @@ temperature, top-p, **top-k**, and **repetition penalty**
   `/v1/chat/completions` (SSE/JSON), `/v1/embeddings`, `/v1/audio/transcriptions`,
   and a self-contained chat page at `/` with a **live mic** (record → transcribe →
   edit → send). Single-process / low-concurrency, not multi-tenant.
-- **Speech-to-text (Whisper), multilingual** — `examples/audio.ts` (log-Mel, ~1e-6 vs numpy
+- **Speech-to-text (Whisper), multilingual** — `src/audio/mel.ts` (log-Mel, ~1e-6 vs numpy
   FFT) + `src/models/whisper.ts` (Conv1d stem, bidirectional encoder, cross-attention decoder,
   KV cache) + `src/text/whisper-tokenizer.ts`. **Token-for-token identical to `mlx_whisper`**
   (`tests/whisper-transcribe-test.ts`). Runs `large-v3-turbo` with **auto language

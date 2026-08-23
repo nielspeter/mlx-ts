@@ -6,7 +6,7 @@
 
 import { MX, fromF32, fromI32, scalar, sample, tidy, evalAll } from "../core/mx.ts";
 import { loadSafetensors, get } from "../io/loader.ts";
-import { decodeAudio, padOrTrim, loadMelFilters, logMel } from "../../examples/audio.ts";
+import { decodeAudio, padOrTrim, loadMelFilters, logMel } from "../audio/mel.ts";
 import { WhisperTokenizer } from "../text/whisper-tokenizer.ts";
 import { readJson } from "../io/fs.ts";
 

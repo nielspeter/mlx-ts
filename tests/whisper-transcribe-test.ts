@@ -2,7 +2,7 @@
 //   /tmp/wvenv/bin/python reference-whisper-transcribe.py && bun whisper-transcribe-test.ts
 import { loadWhisper } from "../src/models/whisper.ts";
 import { WhisperTokenizer } from "../src/text/whisper-tokenizer.ts";
-import { decodeAudio, loadMelFilters } from "../examples/audio.ts";
+import { decodeAudio, loadMelFilters } from "../src/audio/mel.ts";
 
 const AUDIO = process.argv[2] ?? "/tmp/jfk.flac";
 const model = await loadWhisper();

@@ -73,7 +73,7 @@ generalizes this: any opaque `mlx_*` type → `ptr`.
 - **`src/text/lm.ts`** — public generation surface: `Decoder` interface +
   `streamTokens` / `streamText` / `generate` (async generators, KV cache
   auto-freed; no caller-side `tidy()`). `MX` is `Disposable`.
-- **`examples/audio.ts`** — speech front-end: ffmpeg decode → 16 kHz mono PCM →
+- **`src/audio/mel.ts`** — speech front-end: ffmpeg decode → 16 kHz mono PCM →
   Whisper-style log-Mel (rfft computed as a DFT matmul, no FFT binding needed).
   Validated vs numpy FFT (`reference/reference-mel.py` / `tests/audio-test.ts`).
 - **`src/models/whisper.ts`** — Whisper STT, end to end: encoder + decoder (cross-attention)

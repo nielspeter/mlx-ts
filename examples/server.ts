@@ -19,7 +19,7 @@ import { ChatTemplate } from "../src/text/chat-template.ts";
 import { loadSafetensors } from "../src/io/loader.ts";
 import { Whisper, loadWhisper } from "../src/models/whisper.ts";
 import { WhisperTokenizer } from "../src/text/whisper-tokenizer.ts";
-import { decodeAudio, loadMelFilters } from "./audio.ts";
+import { decodeAudio, loadMelFilters } from "../src/audio/mel.ts";
 import { unlink } from "node:fs/promises";
 import { readJson, readText } from "../src/io/fs.ts";
 import { serve } from "./serve.ts";

@@ -2,7 +2,7 @@
 // reference-mel.py writes the PCM it used + its reference log-mel; here we feed
 // the identical PCM through logMel() (rfft as a DFT matmul) and assert allclose.
 //   python3 reference-mel.py && bun audio-test.ts
-import { logMel } from "../examples/audio.ts";
+import { logMel } from "../src/audio/mel.ts";
 
 const readF32 = async (p: string) => {
   const b = new Uint8Array(await Bun.file(p).arrayBuffer());

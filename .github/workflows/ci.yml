@@ -23,6 +23,17 @@ jobs:
       - run: brew install mlx-c
       - run: bun install --frozen-lockfile
 
+      # publish.yml runs `npm ci`, but CI installs with bun and reads bun.lock,
+      # so package-lock.json can drift unnoticed until a release fails. It did:
+      # Biome was added to package.json in #1 and never reached the npm lock,
+      # which only surfaced when the v0.2.0 publish aborted at `npm ci`.
+      # Regenerating the lock metadata must be a no-op. (`npm ci --dry-run`
+      # does not catch this — it exits 0 either way.)
+      - name: package-lock.json is in sync with package.json
+        run: |
+          npm install --package-lock-only
+          git diff --exit-code package-lock.json
+
       - name: codegen (required before anything type-checks)
         run: bun tools/codegen.ts
 

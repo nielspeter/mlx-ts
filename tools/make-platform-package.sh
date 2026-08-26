@@ -30,6 +30,9 @@ cat > "$OUT/package.json" <<JSON
   "version": "$VERSION",
   "description": "Native MLX runtime for @nielspeter/mlx-ts (macOS, Apple Silicon).",
   "license": "MIT",
+  "homepage": "https://github.com/nielspeter/mlx-ts#readme",
+  "repository": { "type": "git", "url": "git+https://github.com/nielspeter/mlx-ts.git", "directory": "platform/darwin-arm64" },
+  "bugs": { "url": "https://github.com/nielspeter/mlx-ts/issues" },
   "os": ["darwin"],
   "cpu": ["arm64"],
   "files": ["*.dylib", "*.metallib", "README.md", "NOTICE"]

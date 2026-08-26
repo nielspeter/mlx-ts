@@ -3,13 +3,21 @@
   "version": "0.1.0",
   "description": "A TypeScript MLX SDK over Apple's mlx-c via FFI \u2014 Bun, Deno and Node. Apple Silicon only.",
   "license": "MIT",
+  "homepage": "https://github.com/nielspeter/mlx-ts#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nielspeter/mlx-ts.git"
+  },
+  "bugs": {
+    "url": "https://github.com/nielspeter/mlx-ts/issues"
+  },
   "author": "Niels Peter Strandberg",
   "type": "module",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
+      "import": "./dist/index.js"
     },
     "./package.json": "./package.json"
   },
@@ -17,7 +25,8 @@
     "dist",
     "README.md",
     "LICENSE",
-    "NOTICE"
+    "NOTICE",
+    "CHANGELOG.md"
   ],
   "os": [
     "darwin"
@@ -26,7 +35,7 @@
     "arm64"
   ],
   "engines": {
-    "node": ">=24"
+    "node": ">=24.0.0"
   },
   "keywords": [
     "mlx",

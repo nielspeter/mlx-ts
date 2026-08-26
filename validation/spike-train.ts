@@ -4,9 +4,9 @@
 // fit to a known target; loss must fall and final W must match MLX Python.
 //   bun spike-train.ts   (then: python3 reference-train.py)
 
-import { open, callback, ptr } from "../src/ffi/index.ts";
-import { MX, fromF32, scalar } from "../src/core/mx.ts";
+import { fromF32, MX, scalar } from "../src/core/mx.ts";
 import { m } from "../src/ffi/generated.ts";
+import { callback, open, ptr } from "../src/ffi/index.ts";
 import { LIBMLXC } from "../src/ffi/native-lib.ts";
 
 // mlx_closure_new_func takes a C function pointer -> not in the generated table; dlopen it.

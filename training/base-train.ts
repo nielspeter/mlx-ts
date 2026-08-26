@@ -3,12 +3,12 @@
 // chain. Same engine as spike-nanogpt.ts (multi-layer GPT, AdamW + cosine +
 // warmup + grad clip) but over the trained BPE vocab, with a safetensors save.
 //   VOCAB-trained first: python3 tok-train.py ; then: bun base-train.ts
-import { MX, fromI32, fromF32, scalar, evalAll, seed, sample, clearCache, tidy, saveSafetensors } from "../src/core/mx.ts";
-import { crossEntropy } from "../src/nn/loss.ts";
+import { clearCache, evalAll, fromF32, fromI32, MX, sample, saveSafetensors, scalar, seed, tidy } from "../src/core/mx.ts";
+import { type Tree, treeFlatten, treeUnflattenLike } from "../src/core/pytree.ts";
+import { get, loadSafetensors } from "../src/io/loader.ts";
 import { valueAndGrad } from "../src/nn/autograd.ts";
-import { treeFlatten, treeUnflattenLike, type Tree } from "../src/core/pytree.ts";
-import { loadSafetensors, get } from "../src/io/loader.ts";
-import { Tokenizer, GPT2_SPLIT } from "../src/text/tokenizer.ts";
+import { crossEntropy } from "../src/nn/loss.ts";
+import { GPT2_SPLIT, Tokenizer } from "../src/text/tokenizer.ts";
 
 const NL = +(process.env.N_LAYER ?? 4), NH = +(process.env.N_HEAD ?? 4), D = +(process.env.N_EMBD ?? 128);
 const T = +(process.env.BLOCK ?? 64), B = +(process.env.BATCH ?? 16), DH = D / NH, FF = 4 * D;
@@ -127,7 +127,7 @@ console.log(`CKPT roundtrip: ${maxErr === 0 ? "OK" : "maxErr " + maxErr.toExpone
 // --- sample (greedy from BOS-ish) to show it learned BPE-level structure ---
 seed(42);
 const gen = tidy(() => {
-  let ids = tok.encode("\n"); const out: number[] = [];
+  const ids = tok.encode("\n"); const out: number[] = [];
   for (let i = 0; i < 80 && ids.length < T; i++) {
     const L = ids.length, row = Int32Array.from([...ids, ...new Array(T - L).fill(0)]); // right-pad to T
     const lg = forward(params, fromI32(row, [1, T])).reshape([T, V]);

@@ -15,10 +15,10 @@
 // (written to /tmp/microgpt-init.f32) + identical data order -> matching loss
 // curve (training isn't bit-reproducible — FINDINGS §6 gotcha #8 — so the bar is
 // "same start, both converge", as for lora-train).
-import { MX, fromI32, fromF32, scalar, evalAll, seed, sample, clearCache, tidy } from "../src/core/mx.ts";
-import { crossEntropy } from "../src/nn/loss.ts";
+import { clearCache, evalAll, fromF32, fromI32, MX, sample, scalar, seed, tidy } from "../src/core/mx.ts";
+import { type Tree, treeFlatten, treeUnflattenLike } from "../src/core/pytree.ts";
 import { valueAndGrad } from "../src/nn/autograd.ts";
-import { treeFlatten, treeUnflattenLike, type Tree } from "../src/core/pytree.ts";
+import { crossEntropy } from "../src/nn/loss.ts";
 
 // --- config (his numbers: d=16, 4 heads, 1 layer, block 16 -> ~4k params) ---
 const V = 27, D = 16, NH = 4, DH = D / NH, BLOCK = 16, FF = 4 * D;
@@ -131,7 +131,7 @@ console.log(`FINAL loss=${loss.toFixed(4)}`);
 seed(42);
 function gen(w: any, temp = 0.85): string {
   return tidy(() => {
-    let ids = [0];
+    const ids = [0];
     for (let t = 0; t < BLOCK && ids.length <= BLOCK; t++) {
       const logits = forward(w, fromI32(Int32Array.from(ids), [ids.length]), ids.length);
       const last = logits.takeAxis(fromI32(Int32Array.from([ids.length - 1]), [1]), 0); // [1,V]

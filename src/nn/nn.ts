@@ -1,7 +1,7 @@
 // Minimal nn.Module layer over MX — the ergonomic surface a TS SDK would expose.
 // Mirrors mlx.nn: modules own their weights (as MX) and have a forward/call.
 
-import { MX, fromI32, scalar } from "../core/mx.ts";
+import { fromI32, MX, scalar } from "../core/mx.ts";
 import type { Tree } from "../core/pytree.ts";
 
 export abstract class Module {

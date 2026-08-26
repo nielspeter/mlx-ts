@@ -2,11 +2,12 @@
 // Same weights, same deterministic codes. This is the half of MusicGen that
 // turns tokens into audio, and it exercises the custom Metal LSTM kernel.
 //   bun validation/encodec-decode.ts
-import { EncodecDecoder, type EncodecConfig } from "../src/models/encodec.ts";
-import { singleFileWeights } from "../src/io/loader.ts";
+
 import { fromU32 } from "../src/core/mx.ts";
-import { hubFile } from "../src/io/hub.ts";
 import { readJson } from "../src/io/fs.ts";
+import { hubFile } from "../src/io/hub.ts";
+import { singleFileWeights } from "../src/io/loader.ts";
+import { type EncodecConfig, EncodecDecoder } from "../src/models/encodec.ts";
 
 const REPO = "mlx-community/encodec-32khz-float32";
 const cfg = await readJson<EncodecConfig>(await hubFile(REPO, "config.json"));

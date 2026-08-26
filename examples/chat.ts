@@ -2,11 +2,11 @@
 // -> text. Turns the instruct model from a text-completer into a chat assistant.
 //   bun chat.ts "What is the capital of France? Answer in one sentence."
 
-import { Qwen3, generate } from "../src/models/qwen-nn.ts";
-import { Tokenizer } from "../src/text/tokenizer.ts";
-import { ChatTemplate } from "../src/text/chat-template.ts";
-import { loadSafetensors } from "../src/io/loader.ts";
 import { readJson } from "../src/io/fs.ts";
+import { loadSafetensors } from "../src/io/loader.ts";
+import { generate, Qwen3 } from "../src/models/qwen-nn.ts";
+import { ChatTemplate } from "../src/text/chat-template.ts";
+import { Tokenizer } from "../src/text/tokenizer.ts";
 
 const cfg = await readJson("models/config-4bit.json");
 const model = new Qwen3(cfg, loadSafetensors("models/model-q4.safetensors"));

@@ -10,7 +10,7 @@
 // decode is compute-bound — overlap measured only ~1.01x at 0.6B). The async
 // overlap path stays available in spike-throughput.ts as a future option.
 
-import { MX, fromI32, sample, seed, evalAll, tidy, applyRepetitionPenalty } from "../core/mx.ts";
+import { applyRepetitionPenalty, evalAll, fromI32, MX, sample, seed, tidy } from "../core/mx.ts";
 import type { Tokenizer } from "./tokenizer.ts";
 
 export type KV = { k: MX; v: MX } | null;

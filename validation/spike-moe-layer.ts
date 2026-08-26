@@ -4,10 +4,10 @@
 //   (python prototype saved models/moe-layer.safetensors) ; bun spike-moe-layer.ts
 
 import { MX } from "../src/core/mx.ts";
-import { MoE, Linear } from "../src/nn/nn.ts";
 import { m, stream } from "../src/ffi/generated.ts";
 import { ptr } from "../src/ffi/index.ts";
-import { loadSafetensors, get } from "../src/io/loader.ts";
+import { get, loadSafetensors } from "../src/io/loader.ts";
+import { Linear, MoE } from "../src/nn/nn.ts";
 
 const E = 8, K = 2, D = 64, I = 128, T = 5, GS = 64, BITS = 4;
 const w = loadSafetensors("models/moe-layer.safetensors");

@@ -81,4 +81,4 @@ console.log(`matmul [2,2]   : [${[...out].join(", ")}]  sum=${sum}  ${sum === 20
 console.log(`readback       : ${aliases ? "zero-copy view" : "COPY"}  (${(N * 4 / 1e6).toFixed(1)} MB in ${viewMs.toFixed(3)} ms)`);
 console.log(`ffi overhead   : ${nsPerCall.toFixed(1)} ns/call (u32 return), ${nsBigInt.toFixed(1)} ns/call (size_t return)`);
 
-[a, b, c, big].forEach((h) => mlx_array_free(h));
+for (const h of [a, b, c, big]) mlx_array_free(h);

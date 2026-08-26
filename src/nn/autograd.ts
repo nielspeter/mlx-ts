@@ -3,13 +3,14 @@
 // mlx-c autograd closure needs and unflattens the gradients back into the same
 // tree shape — so callers never thread parameters by hand.
 
-import { open, callback, ptr } from "../ffi/index.ts";
 import { MX } from "../core/mx.ts";
+import { type Tree, treeFlatten, treeUnflattenLike } from "../core/pytree.ts";
 import { m } from "../ffi/generated.ts";
-import { treeFlatten, treeUnflattenLike, type Tree } from "../core/pytree.ts";
+import { callback, open, ptr } from "../ffi/index.ts";
 
 // mlx_closure_new_func takes a C function pointer -> not in the generated table.
 import { LIBMLXC } from "../ffi/native-lib.ts";
+
 const clib = open(LIBMLXC, {
   mlx_closure_new_func: { args: ["ptr"], returns: "ptr" },
 });

@@ -26,6 +26,7 @@ jobs:
       - name: codegen (required before anything type-checks)
         run: bun tools/codegen.ts
 
+      - run: bun run lint
       - run: bun run typecheck
       - run: bun tools/audit.ts
       - run: bun tools/check-api.ts

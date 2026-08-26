@@ -4,8 +4,8 @@
 //   bun validate-prod.ts
 
 import { activeMemoryMB, seed } from "../src/core/mx.ts";
-import { Qwen3, generate, generateBatch, stepTidy, type KV } from "../src/models/qwen-nn.ts";
 import { loadSafetensors } from "../src/io/loader.ts";
+import { generate, generateBatch, type KV, Qwen3, stepTidy } from "../src/models/qwen-nn.ts";
 import { Tokenizer } from "../src/text/tokenizer.ts";
 
 const cfg = await Bun.file("models/config-4bit.json").json();

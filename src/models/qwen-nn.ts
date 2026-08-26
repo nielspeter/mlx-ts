@@ -5,12 +5,12 @@
 //   bun qwen-nn.ts "The capital of France is"
 //   bun qwen-nn.ts --temp 0.8 --topp 0.95 --seed 42 "Write a haiku about the sea"
 
-import { MX, fromI32, sample, seed, evalAll, activeMemoryMB, tidy } from "../core/mx.ts";
-import { RMSNorm, QuantizedLinear, QuantizedEmbedding } from "../nn/nn.ts";
-import { loadSafetensors, get, freeMap } from "../io/loader.ts";
-import { Tokenizer } from "../text/tokenizer.ts";
-import type { Decoder, KV } from "../text/lm.ts";
+import { activeMemoryMB, evalAll, fromI32, MX, sample, seed, tidy } from "../core/mx.ts";
 import { readJson } from "../io/fs.ts";
+import { freeMap, get, loadSafetensors } from "../io/loader.ts";
+import { QuantizedEmbedding, QuantizedLinear, RMSNorm } from "../nn/nn.ts";
+import type { Decoder, KV } from "../text/lm.ts";
+import { Tokenizer } from "../text/tokenizer.ts";
 
 class Qwen3 implements Decoder {
   D: number; NL: number; nH: number; nKV: number; Dh: number;
@@ -58,7 +58,7 @@ class Qwen3 implements Decoder {
     if (prev) { k = prev.k.concat(k, 2); v = prev.v.concat(v, 2); }
     if (window > 0 && k.shape[2] > window) { k = trimSeq(k, window); v = trimSeq(v, window); } // sliding window
     cache[li] = { k, v };
-    let o = MX.sdpa(q, k, v, this.scale, L > 1).transpose([0, 2, 1, 3]).reshape([B, L, nH * Dh]);
+    const o = MX.sdpa(q, k, v, this.scale, L > 1).transpose([0, 2, 1, 3]).reshape([B, L, nH * Dh]);
     h = h.add(W.o.forward(o));
     const y2 = W.postNorm.forward(h);
     return h.add(W.down.forward(W.gate.forward(y2).silu().mul(W.up.forward(y2))));
@@ -140,7 +140,7 @@ export function generateBatch(model: Qwen3, batch: number[][], max: number) {
   const out = batch.map(() => [] as number[]);
   let pos = L;
   for (let i = 0; i < max; i++) {
-    cur.forEach((t, b) => out[b].push(t));
+    for (let b = 0; b < cur.length; b++) out[b].push(cur[b]);
     toks = stepTidy(model, Int32Array.from(cur), B, 1, pos, cache, 0, 0, 0);
     cur = toks.toU32(); toks.free(); pos++;
   }
@@ -172,4 +172,4 @@ if (import.meta.main) {
   console.log(`memory:     ${memLoad.toFixed(0)} MB after load, ${activeMemoryMB().toFixed(0)} MB after ${gen.length}-tok gen`);
 }
 
-export { Qwen3, generate, stepTidy, type KV };
+export { generate, type KV, Qwen3, stepTidy };

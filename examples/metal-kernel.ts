@@ -7,7 +7,7 @@
 //
 // Needs no model files.
 //   bun examples/metal-kernel.ts
-import { metalKernel, scalarI32, fromF32, tidy } from "../src/index.ts";
+import { fromF32, metalKernel, scalarI32, tidy } from "../src/index.ts";
 
 const lstm = metalKernel({
   name: "lstm",

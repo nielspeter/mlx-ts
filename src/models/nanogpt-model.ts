@@ -2,10 +2,10 @@
 // base-train.ts pretrains (learned positional embeddings, pre-LN blocks, GELU
 // MLP, separate Q/K/V, tied head), plus checkpoint load/save and generation.
 // Used by chat-sft.ts (SFT from a base checkpoint) and chat-ckpt.ts (chat CLI).
-import { MX, fromI32, sample, tidy, saveSafetensors } from "../core/mx.ts";
-import { loadSafetensors, get } from "../io/loader.ts";
-import { treeFlatten, type Tree } from "../core/pytree.ts";
+import { fromI32, MX, sample, saveSafetensors, tidy } from "../core/mx.ts";
+import { type Tree, treeFlatten } from "../core/pytree.ts";
 import { readJson, writeJson } from "../io/fs.ts";
+import { get, loadSafetensors } from "../io/loader.ts";
 
 export type Cfg = { vocab: number; n_layer: number; n_head: number; n_embd: number; block_size: number };
 const EPS = 1e-5;
@@ -71,4 +71,6 @@ export function generate(params: any, promptIds: number[], cfg: Cfg, eos: number
   });
 }
 
-export const freeParams = (params: any) => treeFlatten(params).forEach((x) => x.free());
+export const freeParams = (params: any) => {
+  for (const x of treeFlatten(params)) x.free();
+};

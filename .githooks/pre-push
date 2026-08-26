@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Run the fast gates before anything leaves the machine. These need no weights,
+# no GPU and no network, so they cost seconds — unlike the parity suite, which
+# stays a manual gate.
+#
+# Enable once per clone:  git config core.hooksPath .githooks
+# Skip deliberately:      git push --no-verify
+set -e
+echo "pre-push: biome"
+bunx biome check --formatter-enabled=false . || {
+  echo "pre-push: lint failed — 'bun run lint:fix' fixes most of it" >&2; exit 1; }
+echo "pre-push: typecheck"
+bun run typecheck
+echo "pre-push: audit"
+bun tools/audit.ts

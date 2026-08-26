@@ -2,7 +2,7 @@
 
 Notable changes, newest first. Hand-written.
 
-## 0.1.0 — unreleased
+## [0.1.0]
 
 First release. A TypeScript MLX SDK over Apple's `mlx-c` via FFI: no custom
 C/C++, no build step, running on Bun, Deno and Node.

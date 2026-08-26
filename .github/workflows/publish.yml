@@ -1,0 +1,79 @@
+name: Publish to npm
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+# One publish at a time, never cancelled: npm versions are immutable, so a
+# cancelled run mid-publish is not something you can retry cleanly.
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    # macOS, not ubuntu: `prepack` runs tools/codegen.ts, which parses the
+    # installed mlx-c headers to emit src/ffi/generated.ts. It needs the headers
+    # but NOT a GPU — codegen reads and writes text — so this works on a runner
+    # with no usable Metal device. GitHub-hosted, which is what trusted
+    # publishing requires (self-hosted runners are not supported).
+    runs-on: macos-15
+    timeout-minutes: 20
+    permissions:
+      contents: write     # creating the GitHub Release
+      id-token: write     # OIDC — this is what makes trusted publishing work
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+          package-manager-cache: false   # npm's guidance: never cache in release builds
+      - uses: oven-sh/setup-bun@v2       # codegen and the audits run under bun
+
+      - run: brew install mlx-c
+      - run: npm ci
+
+      # Everything that can fail must run BEFORE npm publish: versions are
+      # immutable, so a check on the far side of it gates nothing.
+      - run: npm run typecheck
+      - run: bun tools/audit.ts
+
+      # The runtime suite (scripts/validate-all.sh) is deliberately NOT here.
+      # It needs ~9 GB of weights and a real Metal device; it is the local gate.
+
+      - name: Verify version matches tag
+        run: |
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          if [ "$PACKAGE_VERSION" != "$TAG_VERSION" ]; then
+            echo "package.json version ($PACKAGE_VERSION) does not match tag ($TAG_VERSION)" >&2
+            exit 1
+          fi
+
+      # Extract release notes before publishing, and fail closed when the
+      # section is missing — testing the variable, not the file, because
+      # `echo "$NOTES" > f` writes a 1-byte newline and would pass `-s`.
+      - name: Extract changelog for this version
+        id: changelog
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          NOTES=$(awk "/^## \[${VERSION}\]/{flag=1; next} /^## \[/{flag=0} flag" CHANGELOG.md)
+          echo "$NOTES" > /tmp/release-notes.txt
+          if [ -z "${NOTES//[[:space:]]/}" ]; then
+            echo "CHANGELOG.md has no '## [${VERSION}]' section." >&2
+            exit 1
+          fi
+
+      # No --provenance flag: with trusted publishing from a public repo, npm
+      # generates provenance automatically. prepack runs codegen + tsc.
+      - name: Publish to npm (trusted publishing via OIDC)
+        run: npm publish --access public
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          body_path: /tmp/release-notes.txt
+          generate_release_notes: false

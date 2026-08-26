@@ -434,6 +434,15 @@ temperature, top-p, **top-k**, and **repetition penalty**
   (`tests/whisper-transcribe-test.ts`). Runs `large-v3-turbo` with **auto language
   detection** and a **sliding window** for unbounded dictation; Danish/Swedish/
   English verified. `bun src/models/whisper.ts audio.flac` (setup below).
+- **Text-to-music (MusicGen)** — `examples/musicgen.ts`: prompt in, `.wav` out.
+  SentencePiece **Unigram** tokenizer (`src/text/unigram.ts`) → **T5** encoder
+  (`src/models/t5.ts`) → the **MusicGen LM** (`src/models/musicgen.ts`: 4 delayed
+  EnCodec codebooks, cross-attention, classifier-free guidance) → the **EnCodec**
+  decoder (`src/models/encodec.ts`, whose LSTM runs on a hand-written Metal
+  kernel). LM logits match Hugging Face's own implementation. `-small` is the
+  default; `jasonvassallo/mlx-musicgen-{medium,large}` are the larger sizes,
+  since Facebook ships those only as PyTorch pickles.
+
 - **Multilingual chat** — the server injects a system prompt so replies come back
   in the user's language (Danish in → Danish out).
 - **Local RAG** — `POST /v1/embeddings` returns L2-normalized sentence vectors

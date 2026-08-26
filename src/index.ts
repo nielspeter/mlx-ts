@@ -7,14 +7,15 @@
 
 // --- audio: the Whisper front-end (ffmpeg decode -> log-Mel) ----------------
 export { decodeAudio, loadMelFilters, logMel, padOrTrim, SR } from "./audio/mel.ts";
+export { saveAudio } from "./audio/wav.ts";
 // --- arrays and memory ---------------------------------------------------
 // `tidy()` is not optional on a hot path: a FinalizationRegistry only runs
 // after a GC, which never happens inside a tight synchronous decode loop.
 export {
   activeMemoryMB, applyRepetitionPenalty, asyncEval, cacheMemoryMB, clearCache, dropout, escape,evalAll, fromF32, fromI32, fromU32, 
   MX, peakMemoryMB, resetPeakMemory,sample, 
-  saveSafetensors, scalar, seed,
-  setMemoryLimit, setWiredLimit,stack, tidy, 
+  saveSafetensors, scalar, seed,setCacheLimit,
+  setMemoryLimit, setWiredLimit, stack, tidy, 
 } from "./core/mx.ts";
 export { type Tree, treeFlatten, treeMap, treeUnflattenLike } from "./core/pytree.ts";
 // --- runtime / FFI -------------------------------------------------------
@@ -34,9 +35,12 @@ export {entries, freeMap,
   get, 
   loadSafetensors, shapeOf, shardedWeights, singleFileWeights, type WeightMap,type Weights, 
 } from "./io/loader.ts";
+export { type EncodecConfig, EncodecDecoder } from "./models/encodec.ts";
 // Fetch-and-construct from a Hugging Face repo id — the step between `npm i`
 // and a token.
 export { type Loaded, load } from "./models/load.ts";
+// Text -> music. T5 conditioning, a codebook LM, EnCodec back to a waveform.
+export { type GenerateOptions, type LayerKV, MusicGen, type MusicGenConfig, MusicGenLM } from "./models/musicgen.ts";
 // Namespaced: its `generate`/`forward` would collide with the ones above.
 export * as nanogpt from "./models/nanogpt-model.ts";
 export { OLMoE } from "./models/olmoe.ts";
@@ -44,6 +48,7 @@ export { OLMoE } from "./models/olmoe.ts";
 // takes one as its first argument, so exporting the function without the class
 // gave consumers a signature they could not satisfy.
 export { generateBatch, Qwen3, stepTidy } from "./models/qwen-nn.ts";
+export { type T5Config, T5Encoder } from "./models/t5.ts";
 // --- models --------------------------------------------------------------
 // Assembled models that are importable as modules. qwen.ts and gpt2.ts are
 // absent because they are CLI scripts, not modules: they build a model with
@@ -64,4 +69,5 @@ export { ChatTemplate, type Message } from "./text/chat-template.ts";
 export { type Decoder, type GenOptions, generate, type KV, streamText, streamTokens } from "./text/lm.ts";
 // --- text: tokenizing, chat templates, generation ------------------------
 export { GPT2_SPLIT, Tokenizer } from "./text/tokenizer.ts";
+export { UnigramTokenizer } from "./text/unigram.ts";
 export { langToken, WhisperTokenizer } from "./text/whisper-tokenizer.ts";

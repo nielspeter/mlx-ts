@@ -25,7 +25,16 @@ async function fetchWeights(repo: string, opts: FetchOptions): Promise<{ single?
     return { single: await hubFile(repo, "model.safetensors", opts) };
   } catch { /* genuinely sharded, fall through */ }
 
-  const index = await hubFile(repo, SHARD_INDEX, opts);
+  let index: string;
+  try {
+    index = await hubFile(repo, SHARD_INDEX, opts);
+  } catch {
+    throw new Error(
+      `${repo} has no safetensors weights — only PyTorch checkpoints (.bin), which ` +
+      `cannot be read from TypeScript. Use a repo that publishes safetensors, or ` +
+      `convert this one with reference/convert-to-safetensors.py.`,
+    );
+  }
   const shards = new Set(Object.values((await readJson<{ weight_map: Record<string, string> }>(index)).weight_map));
   for (const shard of shards) await hubFile(repo, shard, opts);
   return { index };

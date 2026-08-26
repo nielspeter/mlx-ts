@@ -9,7 +9,7 @@
 //   ~/.cache/mlx-ts/<org>/<name>/<file>        (MLXTS_CACHE overrides)
 
 import { existsSync } from "node:fs";
-import { mkdir, rename, stat, writeFile } from "node:fs/promises";
+import { mkdir, open, rename, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -35,30 +35,49 @@ export async function hubFile(repo: string, file: string, opts: FetchOptions = {
   const dest = join(cacheDir(), repo, file);
   if (existsSync(dest)) return dest;
 
-  const rev = opts.revision ?? "main";
-  const url = `${HUB}/${repo}/resolve/${rev}/${file}`;
-  const token = opts.token ?? process.env.HF_TOKEN;
-  const res = await fetch(url, { headers: token ? { authorization: `Bearer ${token}` } : {} });
-  if (!res.ok) throw new Error(`hub: ${res.status} ${res.statusText} for ${repo}/${file}`);
-
   await mkdir(dirname(dest), { recursive: true });
   // Download to a temp name and rename, so an interrupted fetch never leaves a
   // truncated file that the next run would treat as cached.
   const tmp = `${dest}.part`;
-  const total = Number(res.headers.get("content-length") ?? 0);
 
-  if (opts.onProgress && res.body) {
-    const chunks: Uint8Array[] = [];
-    let done = 0;
-    for await (const chunk of res.body as any as AsyncIterable<Uint8Array>) {
-      chunks.push(chunk); done += chunk.length; opts.onProgress(done, total);
+  // ...and resume into it if one is already there. A MusicGen medium checkpoint
+  // is ~7 GB; losing all of it to one interrupted run is not acceptable.
+  let from = existsSync(tmp) ? (await stat(tmp)).size : 0;
+
+  const rev = opts.revision ?? "main";
+  const url = `${HUB}/${repo}/resolve/${rev}/${file}`;
+  const token = opts.token ?? process.env.HF_TOKEN;
+  const res = await fetch(url, {
+    headers: {
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+      ...(from ? { range: `bytes=${from}-` } : {}),
+    },
+  });
+  if (!res.ok) throw new Error(`hub: ${res.status} ${res.statusText} for ${repo}/${file}`);
+  // 206 means the range was honoured. Anything else is the whole file again,
+  // so the partial has to be discarded rather than appended to.
+  if (from && res.status !== 206) from = 0;
+
+  const total = from + Number(res.headers.get("content-length") ?? 0);
+
+  // Streamed to disk a chunk at a time, never buffered whole: holding 7 GB in
+  // JS memory (twice, while reassembling the chunks) runs a machine out of RAM.
+  if (res.body) {
+    const fh = await open(tmp, from ? "r+" : "w");
+    try {
+      let done = from;
+      for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
+        await fh.write(chunk, 0, chunk.length, done);
+        done += chunk.length;
+        opts.onProgress?.(done, total);
+      }
+    } finally {
+      await fh.close();
     }
-    const buf = new Uint8Array(done);
-    let off = 0; for (const c of chunks) { buf.set(c, off); off += c.length; }
-    await writeFile(tmp, buf);
   } else {
     await writeFile(tmp, new Uint8Array(await res.arrayBuffer()));
   }
+
   await rename(tmp, dest);
   return dest;
 }

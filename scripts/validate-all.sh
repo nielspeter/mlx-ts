@@ -99,7 +99,7 @@ fi
 if [ -f "$HOME/.cache/mlx-ts/facebook/musicgen-small/model.safetensors" ]; then
   bun validation/musicgen-e2e.ts >/tmp/v_mge.txt 2>&1
   if grep -q "verdict : OK" /tmp/v_mge.txt; then
-    ok "MusicGen end to end ($(grep -oE 'memory .*' /tmp/v_mge.txt))"
+    ok "MusicGen end to end ($(grep -oE 'peak *: .*' /tmp/v_mge.txt | tr -s ' '))"
   else
     no "MusicGen end to end" "$(tail -2 /tmp/v_mge.txt | tr '\n' ' ')"
   fi

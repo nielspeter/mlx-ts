@@ -11,7 +11,7 @@ export {
   MX, tidy, fromF32, fromI32, fromU32, scalar, stack, evalAll, asyncEval, seed,
   saveSafetensors, dropout, applyRepetitionPenalty, sample, escape,
   activeMemoryMB, peakMemoryMB, cacheMemoryMB, clearCache, resetPeakMemory,
-  setMemoryLimit, setWiredLimit,
+  setMemoryLimit, setWiredLimit, setCacheLimit,
 } from "./core/mx.ts";
 export { treeFlatten, treeUnflattenLike, treeMap, type Tree } from "./core/pytree.ts";
 

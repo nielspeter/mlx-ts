@@ -258,6 +258,45 @@ The general lesson is that an arena needs an escape hatch as much as it needs a
 scope, and that a workaround appearing independently in three places is evidence
 of a defect rather than a style choice.
 
+## 6.7. Active memory is not the memory the machine has to find
+`escape()` (§6.6) makes ownership explicit, and the check that guards it watches
+active memory across a generation loop. That check passed — 0.39 MB/step, flat —
+while the same run held **28 GB** and drove a 39 GB machine into swap. Twice.
+
+MLX parks freed Metal buffers in a reuse pool rather than returning them to the
+OS, and the pool's default ceiling is the machine's RAM: `mlx_set_cache_limit`
+reported a starting value of **36722 MB** on a 36 GB box. A generation loop
+allocates and frees continuously, so it fills that pool as fast as it can:
+
+| | active | cache | total |
+|---|---|---|---|
+| musicgen-small, 300 steps | 2.2 GB | 14.5 GB | **16.7 GB** |
+| musicgen-medium, 500 steps | 8.4 GB | 19.7 GB | **28.1 GB** |
+| medium, cache capped at 512 MB | 8.4 GB | 0.5 GB | **8.9 GB** |
+
+Capping it costs nothing measurable — 61.9 steps/s uncapped against 61.4 at a
+256 MB cap, which is noise. The pool is pure waste in this shape of workload.
+
+Three things follow, and the third is the one that cost the most:
+
+1. `setMemoryLimit()` does not bound this. It governs when the allocator
+   evicts, not what it keeps; `setCacheLimit()` is the only knob that does.
+2. MLX is lazy, so the cap has to span the *evaluation*, not the call that
+   built the graph. Restoring the limit before the caller first read the result
+   moved EnCodec's decode outside the cap and cost 3.5 GB.
+3. **RSS cannot see any of this.** `ps` reported 7538 MB while MLX's own
+   accounting said 28 GB — Metal buffers are not counted in process resident
+   size. `scripts/sandbox.sh` polled RSS, so the safety net that existed
+   specifically to prevent a repeat of the 55 GB incident was blind to the
+   memory that caused it, and reported success throughout. It now polls
+   system-wide available pages via `vm_stat` and refuses a ceiling above 60% of
+   physical RAM, because a limit set near total RAM trips only after the machine
+   is already swapping.
+
+The general lesson is that a memory assertion has to measure what the operating
+system has to satisfy, not what the allocator chooses to report — and that a
+guard which has never been observed to fire is not yet known to work.
+
 ## 7. What a production `@mlx-ts/lm` still needs
 The list has shrunk a lot — most of the original items are now built and
 validated (§3, §6, §7b). None of what remains is a feasibility risk; it is

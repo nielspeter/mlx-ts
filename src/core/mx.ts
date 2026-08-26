@@ -221,6 +221,16 @@ export const peakMemoryMB = (): number => memOf(m.mlx_get_peak_memory);
 export const cacheMemoryMB = (): number => memOf(m.mlx_get_cache_memory);
 export const clearCache = (): void => { m.mlx_clear_cache(); };        // return reuse-cache buffers to the OS
 export const resetPeakMemory = (): void => { m.mlx_reset_peak_memory(); };
+/**
+ * Cap the buffer-reuse cache. MLX keeps freed Metal buffers around to hand
+ * back to the next allocation, and by default that pool has no ceiling: a
+ * MusicGen-medium generation grew it to 20 GB on top of 8 GB of weights, for
+ * 28 GB resident. This is the only knob that bounds it — setMemoryLimit()
+ * governs live allocations, which were never the problem.
+ *
+ * Returns the previous limit, so a caller can put it back.
+ */
+export const setCacheLimit = (mb: number): number => { const o = new BigUint64Array(1); m.mlx_set_cache_limit(ptr(o), BigInt(Math.round(mb * 1e6))); return Number(o[0]) / 1e6; };
 export const setMemoryLimit = (mb: number): void => { const o = new BigUint64Array(1); m.mlx_set_memory_limit(ptr(o), BigInt(Math.round(mb * 1e6))); };
 export const setWiredLimit = (mb: number): void => { const o = new BigUint64Array(1); if (m.mlx_set_wired_limit) m.mlx_set_wired_limit(ptr(o), BigInt(Math.round(mb * 1e6))); };
 

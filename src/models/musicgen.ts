@@ -17,7 +17,7 @@ import { UnigramTokenizer } from "../text/unigram.ts";
 import { singleFileWeights } from "../io/loader.ts";
 import { hubFile } from "../io/hub.ts";
 import { readJson } from "../io/fs.ts";
-import { sample } from "../core/mx.ts";
+import { sample, setCacheLimit } from "../core/mx.ts";
 export type MusicGenConfig = {
   hidden_size: number; num_hidden_layers: number; num_attention_heads: number;
   ffn_dim: number; num_codebooks: number; bos_token_id: number;
@@ -137,6 +137,12 @@ export type GenerateOptions = {
   temp?: number;
   /** Classifier-free guidance: how far to push from the unconditional logits. */
   guidance?: number;
+  /**
+   * Ceiling on MLX's buffer-reuse cache while generating, in MB. Defaults to
+   * 512, which costs nothing measurable and saves many GB — see generate().
+   * Pass Infinity to leave MLX's own default alone.
+   */
+  cacheLimitMB?: number;
   onStep?: (step: number, total: number) => void;
 };
 
@@ -248,7 +254,30 @@ export class MusicGen {
 
   /** Text prompt -> mono waveform. */
   generate(text: string, opts: GenerateOptions = {}): MX {
-    const { maxSteps = 250, topK = 250, temp = 1.0, guidance = 3.0, onStep } = opts;
+    const { maxSteps = 250, topK = 250, temp = 1.0, guidance = 3.0, onStep,
+            cacheLimitMB = 512 } = opts;
+
+    // MLX keeps freed Metal buffers in a reuse pool whose default ceiling is
+    // the machine's RAM (36 GB here), and a generation loop fills it: 300 steps
+    // of -small reached 16.7 GB total, and -medium reached 28 GB, which is
+    // enough to drive a 39 GB machine into swap. Capping it costs nothing
+    // measurable — 61.9 steps/s uncapped vs 61.4 at 256 MB — and this is the
+    // only knob that bounds it, since active memory was never the problem.
+    // Restored on the way out so the cap stays a local decision.
+    const prevCacheLimit = Number.isFinite(cacheLimitMB) ? setCacheLimit(cacheLimitMB) : 0;
+    try {
+      const out = this.generateInner(text, maxSteps, topK, temp, guidance, onStep);
+      // MLX is lazy, so without this the EnCodec decode would run at the
+      // caller's first read — after the cap is restored, which cost 3.5 GB.
+      evalAll(out);
+      return out;
+    } finally {
+      if (Number.isFinite(cacheLimitMB)) setCacheLimit(prevCacheLimit);
+    }
+  }
+
+  private generateInner(text: string, maxSteps: number, topK: number, temp: number,
+                        guidance: number, onStep: GenerateOptions["onStep"]): MX {
     const K = this.lm.cfg.num_codebooks;
     const BOS = this.lm.cfg.bos_token_id;
     const V = this.lm.cfg.vocab_size;

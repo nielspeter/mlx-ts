@@ -9,8 +9,11 @@
       "devDependencies": {
         "@types/bun": "^1.4.0",
         "@types/node": "^26.2.0",
-        "koffi": "^3.1.6",
         "typescript": "^7.0.2",
+      },
+      "optionalDependencies": {
+        "@nielspeter/mlx-ts-darwin-arm64": "0.1.0",
+        "koffi": "^3.1.6",
       },
     },
   },
@@ -46,6 +49,8 @@
     "@koromix/koffi-win32-ia32": ["@koromix/koffi-win32-ia32@3.1.6", "", { "os": "win32", "cpu": "ia32" }, "sha512-5mVelLKVDup4eoxZOpCzCyMPxoctsg+Qe4J9O5BP4KbBEdqoOEqaNEBBRgNzXcdr2g+GGfmIUo+oVR1NvIdiJw=="],
 
     "@koromix/koffi-win32-x64": ["@koromix/koffi-win32-x64@3.1.6", "", { "os": "win32", "cpu": "x64" }, "sha512-lPKjAaHz0aoiZXT/wDVqH+joR5y3lCZj1s9Bk5qx/DGRq+0MK8Ib8VoqiBOrJ69NG5AsJSvn0tQDcSqfRgLmBQ=="],
+
+    "@nielspeter/mlx-ts-darwin-arm64": ["@nielspeter/mlx-ts-darwin-arm64@0.1.0", "", { "os": "darwin", "cpu": "arm64" }, "sha512-QfoVTaPE/okh/ICT9daiFka4uVN6nYSCC0u9iwFive1uU1FJcbsJscqVm5iCMm57sQek3DjOvud2YM+5PooL6Q=="],
 
     "@types/bun": ["@types/bun@1.4.0", "", { "dependencies": { "bun-types": "1.4.0" } }, "sha512-K+lZULY23vRgK/CfTjFIV+tyifaNdSMlPh9j+6mQ/cLfpOznLyAuzgV/JQysyECpkBQLVMSyvjlr2fBUSA9wFQ=="],
 

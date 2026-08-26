@@ -160,6 +160,15 @@ if [ -f "$HOME/.cache/mlx-ts/facebook/musicgen-small/model.safetensors" ] \
   cmp_pair "MusicGen LM vs Hugging Face" /tmp/v_mg_t.txt /tmp/v_mg_p.txt mgvals
 fi
 
+# T5 text encoder vs Hugging Face's own implementation.
+if [ -f "$HOME/.cache/mlx-ts/facebook/musicgen-small/model.safetensors" ] \
+   && python3 -c "import torch, transformers" >/dev/null 2>&1; then
+  python3 reference/reference-t5.py >/tmp/v_t5_p.txt 2>&1
+  bun validation/t5-encode.ts >/tmp/v_t5_t.txt 2>&1
+  t5vals(){ grep -E "first8" | grep -oE "[-0-9.]+(, [-0-9.]+)*$"; }
+  cmp_pair "T5 encoder vs Hugging Face" /tmp/v_t5_t.txt /tmp/v_t5_p.txt t5vals
+fi
+
 bun validation/spike-moe.ts 2>&1 | grep -q "match: true" && ok "MoE gather_qmm op (vs MLX)" || no "spike-moe" "match"
 bun validation/spike-moe-layer.ts 2>&1 | grep -q "match: true" && ok "MoE full layer (vs MLX)" || no "spike-moe-layer" "match"
 bun validation/spike-throughput.ts 2>&1 | grep -q "identical (sync == async): true" && ok "async-overlap == sync tokens" || no "spike-throughput" "tokens"

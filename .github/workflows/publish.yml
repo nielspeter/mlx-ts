@@ -38,6 +38,11 @@ jobs:
 
       # Everything that can fail must run BEFORE npm publish: versions are
       # immutable, so a check on the far side of it gates nothing.
+      # Before anything type-checks: src/ffi/generated.ts is emitted from the
+      # installed mlx-c headers and is not in the repo. prepack does this too,
+      # but prepack runs during `npm publish` — long after the gates below.
+      - run: bun tools/codegen.ts
+
       - run: npm run typecheck
       - run: bun tools/audit.ts
 

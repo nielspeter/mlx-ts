@@ -1,9 +1,17 @@
 # mlx-ts — TypeScript → mlx-c → Metal
 
+[![npm version](https://img.shields.io/npm/v/@nielspeter/mlx-ts)](https://www.npmjs.com/package/@nielspeter/mlx-ts)
+[![CI](https://github.com/nielspeter/mlx-ts/actions/workflows/ci.yml/badge.svg)](https://github.com/nielspeter/mlx-ts/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Node.js >= 24](https://img.shields.io/badge/node-%3E%3D24-brightgreen)](https://nodejs.org/)
+[![Apple Silicon](https://img.shields.io/badge/macOS-Apple%20Silicon-black?logo=apple)](https://support.apple.com/en-us/116943)
+
+[npm](https://www.npmjs.com/package/@nielspeter/mlx-ts) · [native runtime](https://www.npmjs.com/package/@nielspeter/mlx-ts-darwin-arm64) · [FINDINGS](docs/FINDINGS.md) · [CHANGELOG](CHANGELOG.md)
+
 A TypeScript MLX SDK over **`mlx-c`** (Apple's official C API) via FFI, with
 **zero custom C/C++** and no build step — running on **Bun, Deno and Node**, and
 **numerically identical** to MLX's Python reference (`scripts/validate-all.sh`:
-45/45).
+47/47).
 
 Read `docs/FINDINGS.md` for what was proven and how. Apple Silicon + Metal only.
 
@@ -98,6 +106,11 @@ macOS on Apple Silicon only. Bun and Deno work as-is; Node needs 24+ (the
 package ships compiled JS, because Node refuses to type-strip inside
 `node_modules`) and pulls in `koffi` for FFI. The package itself carries no
 weights and no binaries — 96 KB.
+
+The project publishes two packages: [`@nielspeter/mlx-ts`](https://www.npmjs.com/package/@nielspeter/mlx-ts)
+(the library, 105 kB) and
+[`@nielspeter/mlx-ts-darwin-arm64`](https://www.npmjs.com/package/@nielspeter/mlx-ts-darwin-arm64)
+(the native runtime, an `optionalDependency`).
 
 **On the Homebrew step.** It is required today. A platform package
 (`@nielspeter/mlx-ts-darwin-arm64`, an `optionalDependency` carrying Apple's own
@@ -517,7 +530,7 @@ bun src/models/gpt2.ts "The capital of France is"   # greedy; TEMP/TOP_K/TOP_P/R
   current mean-pooled base-LLM vectors.
 - **Shipping the native dependency** — the published package still requires
   `brew install mlx-c`. The blocker is gone: `tools/fetch-prebuilds.sh` builds
-  `prebuilds/` from Apple's own `mlx-metal` binaries and the suite is 46/46
+  `prebuilds/` from Apple's own `mlx-metal` binaries and the suite is 47/47
   forced onto that path (`docs/FINDINGS.md` §7f). What remains is publishing it
   as a platform package — `@nielspeter/mlx-ts-darwin-arm64` under
   `optionalDependencies`, the shape Apple uses — and deciding whether ~50 MB

@@ -1,8 +1,8 @@
 // Bun backend — the reference implementation. bun:ffi already speaks the CType
 // vocabulary this contract borrowed, so this is close to a pass-through. The
 // one wrinkle is NULL: bun:ffi returns a null pointer as `null`, not 0.
-import { dlopen, ptr as bunPtr, toArrayBuffer, CString, JSCallback } from "bun:ffi";
-import type { Backend, Callback, SymbolSpec, SymbolTable, Symbols } from "./types.ts";
+import { ptr as bunPtr, CString, dlopen, JSCallback, toArrayBuffer } from "bun:ffi";
+import type { Backend, Callback, SymbolSpec, Symbols, SymbolTable } from "./types.ts";
 
 export const backend: Backend = {
   name: "bun",

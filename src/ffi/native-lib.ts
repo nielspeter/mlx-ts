@@ -5,9 +5,9 @@
 // prebuilds/ dir. The bundled sets are relocatable via @loader_path, so
 // dlopen'ing libmlxc pulls libmlx / libjaccl / mlx.metallib from beside it.
 import { existsSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 // src/ffi -> repo root when running from source; dist/ffi -> package root

@@ -8,16 +8,14 @@
 // step — the tidy()/escape() split exactly. Every step runs inside tidy(), and
 // the cache escapes it. Without that the cache is freed as a scope-local
 // intermediate and the next step reads freed handles (see FINDINGS §6.6).
-import { MX, fromI32, fromU32, tidy, escape, stack, scalar, evalAll } from "../core/mx.ts";
-import type { Weights } from "../io/loader.ts";
-
-import { T5Encoder, type T5Config } from "./t5.ts";
-import { EncodecDecoder, type EncodecConfig } from "./encodec.ts";
-import { UnigramTokenizer } from "../text/unigram.ts";
-import { singleFileWeights } from "../io/loader.ts";
-import { hubFile } from "../io/hub.ts";
+import { escape, evalAll, fromI32, fromU32, MX, sample, scalar, setCacheLimit, stack, tidy } from "../core/mx.ts";
 import { readJson } from "../io/fs.ts";
-import { sample, setCacheLimit } from "../core/mx.ts";
+import { hubFile } from "../io/hub.ts";
+import type { Weights } from "../io/loader.ts";
+import { singleFileWeights } from "../io/loader.ts";
+import { UnigramTokenizer } from "../text/unigram.ts";
+import { type EncodecConfig, EncodecDecoder } from "./encodec.ts";
+import { type T5Config, T5Encoder } from "./t5.ts";
 export type MusicGenConfig = {
   hidden_size: number; num_hidden_layers: number; num_attention_heads: number;
   ffn_dim: number; num_codebooks: number; bos_token_id: number;

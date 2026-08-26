@@ -2,7 +2,7 @@
 //   bun benchmarks/single-ops.ts
 
 import { fromI32, MX } from "../src/core/mx.ts";
-import { randomUniform, maximum, maxAxis, minAxis, exp, negative, logsumexpAxis, timeFn } from "./time-utils.ts";
+import { exp, logsumexpAxis, maxAxis, maximum, minAxis, negative, randomUniform, timeFn } from "./time-utils.ts";
 
 function timeAdd() {
   const a = randomUniform([32, 1024, 1024]); const b0 = randomUniform([32, 1024, 1024]);
@@ -56,7 +56,7 @@ function timeTake() {
   const a = randomUniform([10000, 500]); a.eval();
   const ids = Array.from({ length: 20 }, () =>
     fromI32(Int32Array.from({ length: 10 }, () => Math.floor(Math.random() * 10000)), [10]));
-  ids.forEach((i) => i.eval());
+  for (const i of ids) i.eval();
   timeFn(() => ids.map((idx) => a.takeAxis(idx, 0)) as MX[], "take");
 }
 

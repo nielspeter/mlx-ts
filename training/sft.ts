@@ -7,12 +7,12 @@
 // Validated vs reference-sft.py: same loaded weights + data -> step-0 loss matches;
 // both converge. (Training drifts past step 0 — FINDINGS §6 #8 — so the bar is
 // "same start, both converge", as for lora-train / nanoGPT.)
-import { MX, fromI32, scalar, evalAll, clearCache, tidy } from "../src/core/mx.ts";
-import { crossEntropy } from "../src/nn/loss.ts";
+import { clearCache, evalAll, fromI32, MX, scalar, tidy } from "../src/core/mx.ts";
+import { type Tree, treeFlatten, treeUnflattenLike } from "../src/core/pytree.ts";
+import { get, loadSafetensors } from "../src/io/loader.ts";
 import { valueAndGrad } from "../src/nn/autograd.ts";
-import { treeFlatten, treeUnflattenLike, type Tree } from "../src/core/pytree.ts";
-import { loadSafetensors, get } from "../src/io/loader.ts";
-import { Tokenizer, GPT2_SPLIT } from "../src/text/tokenizer.ts";
+import { crossEntropy } from "../src/nn/loss.ts";
+import { GPT2_SPLIT, Tokenizer } from "../src/text/tokenizer.ts";
 
 const cfg = await Bun.file("models/config-gpt2.json").json();
 const D = cfg.n_embd, NL = cfg.n_layer, NH = cfg.n_head, Dh = D / NH;
@@ -100,7 +100,7 @@ const lrAt = (it: number) => it < WARMUP ? LR0 * (it + 1) / WARMUP : LR0;   // w
 
 function genReply(p: any, q: string, maxNew = 32): string {
   return tidy(() => {
-    let ids = tok.encode(PROMPT(q));
+    const ids = tok.encode(PROMPT(q));
     const out: number[] = [];
     for (let i = 0; i < maxNew; i++) {
       const logits = forward(p, fromI32(Int32Array.from(ids), [1, ids.length]), ids.length).reshape([ids.length, VOCAB]);

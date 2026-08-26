@@ -2,7 +2,7 @@
 // its tensors from TypeScript — proof that mlx_load handles genuine model files.
 //   bun inspect-real.ts <path-to.safetensors>
 
-import { loadSafetensors, entries } from "../src/io/loader.ts";
+import { entries, loadSafetensors } from "../src/io/loader.ts";
 
 const path = process.argv[2];
 if (!path) { console.error("usage: bun inspect-real.ts <file.safetensors>"); process.exit(1); }

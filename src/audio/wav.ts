@@ -2,8 +2,7 @@
 //
 // MusicGen emits float samples in roughly [-1, 1]; 16-bit PCM is what every
 // player reads without argument.
-import { writeFile } from "node:fs/promises";
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
 /** Write `samples` (float, ~[-1,1]) to `path` as 16-bit mono PCM. */

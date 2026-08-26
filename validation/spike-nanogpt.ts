@@ -11,10 +11,10 @@
 // (shared via /tmp/nanogpt-*.bin) -> matching step-0 loss; both converge to a
 // comparable val loss. Training isn't bit-reproducible (FINDINGS §6 #8), so the
 // bar is "same start, both converge" — as for lora-train / microGPT.
-import { MX, fromI32, fromF32, scalar, evalAll, seed, sample, clearCache, tidy, dropout } from "../src/core/mx.ts";
-import { crossEntropy } from "../src/nn/loss.ts";
+import { clearCache, dropout, evalAll, fromF32, fromI32, MX, sample, scalar, seed, tidy } from "../src/core/mx.ts";
+import { type Tree, treeFlatten, treeUnflattenLike } from "../src/core/pytree.ts";
 import { valueAndGrad } from "../src/nn/autograd.ts";
-import { treeFlatten, treeUnflattenLike, type Tree } from "../src/core/pytree.ts";
+import { crossEntropy } from "../src/nn/loss.ts";
 
 // --- config (nanoGPT's shakespeare-char, scaled to run on one Mac in a spike) ---
 const NL = +(process.env.N_LAYER ?? 4), NH = +(process.env.N_HEAD ?? 4), D = +(process.env.N_EMBD ?? 128);
@@ -182,7 +182,7 @@ console.log(`BEST VAL loss=${bestVal.toFixed(4)}`);
 // --- sample Shakespeare (autoregressive, context cropped to last T) ---
 seed(42);
 const sampleText = tidy(() => {
-  let ids = [stoi.get("\n") ?? 0];
+  const ids = [stoi.get("\n") ?? 0];
   const out: number[] = [];
   for (let i = 0; i < 400; i++) {
     const ctx = ids.slice(-T), L = ctx.length;           // forward expects [B=1,T]: right-pad

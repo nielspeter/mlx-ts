@@ -7,10 +7,10 @@
 // bench files read like the Python originals without bloating mx.ts. mlx-ts
 // always runs on the default stream (Metal/GPU on Apple silicon).
 
-import { ptr } from "../src/ffi/index.ts";
-import { m, stream } from "../src/ffi/generated.ts";
+import { activeMemoryMB, evalAll, MX, tidy } from "../src/core/mx.ts";
 import * as g from "../src/ffi/generated.ts";
-import { MX, tidy, evalAll, activeMemoryMB } from "../src/core/mx.ts";
+import { m, stream } from "../src/ffi/generated.ts";
+import { ptr } from "../src/ffi/index.ts";
 
 // mlx_dtype enum: float16=9, float32=10, float64=11, bfloat16=12, uint32=3
 export const FLOAT32 = 10, FLOAT16 = 9, BFLOAT16 = 12, UINT32 = 3;

@@ -2,7 +2,7 @@
 // matmul by the inverse-DFT basis (Hermitian 2x weighting), then a windowed
 // overlap-add. Validate against mlx-audio's istft (reference-istft.py).
 //   /tmp/wvenv/bin/python reference-istft.py && bun spike-istft.ts
-import { MX, fromF32 } from "../src/core/mx.ts";
+import { fromF32, MX } from "../src/core/mx.ts";
 
 const N_FFT = 400, HOP = 100, BINS = N_FFT / 2 + 1, F = 50;
 const TWO_PI = 2 * Math.PI;

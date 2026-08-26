@@ -9,8 +9,8 @@
 
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { ptr, view as toArrayBuffer } from "../ffi/index.ts";
 import { m, stream } from "../ffi/generated.ts";
+import { ptr, view as toArrayBuffer } from "../ffi/index.ts";
 
 const FLOAT32 = 10, INT32 = 7, UINT32 = 3;
 const reg = new FinalizationRegistry<number>((h) => { if (h) m.mlx_array_free(h); });
@@ -51,7 +51,6 @@ export function escape<T>(v: T): T {
 function slot(): BigUint64Array { const r = new BigUint64Array(1); r[0] = BigInt((m.mlx_array_new() as number) ?? 0); return r; }
 const optI = (v: number | null): bigint => v === null ? 0n : BigInt.asUintN(32, BigInt(v)) | (1n << 32n);
 const optF = (v: number | null): bigint => v === null ? 0n : BigInt(new Uint32Array(new Float32Array([v]).buffer)[0]) | (1n << 32n);
-const cstr = (s: string) => ptr(new Uint8Array([...new TextEncoder().encode(s), 0]));
 const AFFINE = new Uint8Array([...new TextEncoder().encode("affine"), 0]);
 const CAUSAL = new Uint8Array([...new TextEncoder().encode("causal"), 0]);
 const NONE = new Uint8Array([0]);

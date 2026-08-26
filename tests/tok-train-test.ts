@@ -2,7 +2,7 @@
 // TRAINED models/tokenizer.json (from tok-train.py / Rust BpeTrainer): token-exact encode
 // vs the Rust tokenizer + clean decode round-trip.
 //   VOCAB=2048 python3 tok-train.py && bun tok-train-test.ts
-import { Tokenizer, GPT2_SPLIT } from "../src/text/tokenizer.ts";
+import { GPT2_SPLIT, Tokenizer } from "../src/text/tokenizer.ts";
 
 const fx = await Bun.file("tests/tok-trained-fixtures.json").json();
 const tok = await Tokenizer.fromFile("models/tokenizer-trained.json", GPT2_SPLIT);

@@ -4,7 +4,7 @@
 // read the file in chunks, encode whole lines, append uint16 tokens to disk.
 //   CORPUS=data/tinystories.txt TOKENS=data/tokens MAX_BYTES=200000000 bun training/data-prep.ts
 import { mkdirSync } from "node:fs";
-import { Tokenizer, GPT2_SPLIT } from "../src/text/tokenizer.ts";
+import { GPT2_SPLIT, Tokenizer } from "../src/text/tokenizer.ts";
 
 mkdirSync("data", { recursive: true });   // gitignored; absent in a fresh clone
 

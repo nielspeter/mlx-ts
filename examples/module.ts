@@ -1,7 +1,7 @@
 // Building a model: compose nn Modules the way src/models/ does, with weights
 // you make up rather than download. No model files needed.
 //   bun examples/module.ts
-import { Module, Linear, RMSNorm, MX, fromF32, tidy, activeMemoryMB } from "../src/index.ts";
+import { activeMemoryMB, fromF32, Linear, Module, MX, RMSNorm, tidy } from "../src/index.ts";
 
 // Deterministic stand-in for real weights, so the output is reproducible.
 const det = (n: number, seed: number) =>

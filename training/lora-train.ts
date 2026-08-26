@@ -3,14 +3,14 @@
 // Adam.update operate on the tree. No hand-threaded parameter indices.
 //   bun lora-train.ts
 
-import { MX, fromI32, fromF32, scalar, evalAll } from "../src/core/mx.ts";
-import { Qwen3 } from "../src/models/qwen-nn.ts";
+import { evalAll, fromF32, fromI32, MX, scalar } from "../src/core/mx.ts";
+import { type Tree, treeFlatten } from "../src/core/pytree.ts";
 import { loadSafetensors } from "../src/io/loader.ts";
-import { Module, LoraDelta } from "../src/nn/nn.ts";
-import { Adam } from "../src/nn/optim.ts";
-import { crossEntropy } from "../src/nn/loss.ts";
+import { Qwen3 } from "../src/models/qwen-nn.ts";
 import { valueAndGrad } from "../src/nn/autograd.ts";
-import { treeFlatten, type Tree } from "../src/core/pytree.ts";
+import { crossEntropy } from "../src/nn/loss.ts";
+import { LoraDelta, Module } from "../src/nn/nn.ts";
+import { Adam } from "../src/nn/optim.ts";
 
 const cfg = await Bun.file("models/config-4bit.json").json();
 const model = new Qwen3(cfg, loadSafetensors("models/model-q4.safetensors"));

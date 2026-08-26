@@ -3,10 +3,10 @@
 // The model is our tiny nanogpt-model checkpoint instead of Qwen3.
 //   bun chat-web.ts                 # listens on :8080 (PORT to override)
 //   open http://localhost:8080
-import { MX, fromI32, tidy, sample } from "../src/core/mx.ts";
-import { Tokenizer, GPT2_SPLIT } from "../src/text/tokenizer.ts";
-import { loadCkpt, forward } from "../src/models/nanogpt-model.ts";
+import { fromI32, sample, tidy } from "../src/core/mx.ts";
 import { readText } from "../src/io/fs.ts";
+import { forward, loadCkpt } from "../src/models/nanogpt-model.ts";
+import { GPT2_SPLIT, Tokenizer } from "../src/text/tokenizer.ts";
 import { serve } from "./serve.ts";
 
 const CKPT = process.env.CHAT_CKPT ?? "checkpoints/chat-ckpt.safetensors";
@@ -50,9 +50,9 @@ const renderPrompt = (messages: Message[]) =>
 // streaming generation: one token at a time, incremental UTF-8 decode, stop at EOS
 // or when the model starts a new "User:" turn.
 async function* run(messages: Message[], temp: number, maxNew: number, cancelled: () => boolean) {
-  let ids = tok.encode(renderPrompt(messages));
+  const ids = tok.encode(renderPrompt(messages));
   const det = tok.detokenizer();
-  let full = "", n = 0;
+  let full = "";
   for (let i = 0; i < maxNew; i++) {
     if (cancelled()) break;
     const ctx = ids.slice(-cfg.block_size), L = ctx.length;
@@ -61,8 +61,7 @@ async function* run(messages: Message[], temp: number, maxNew: number, cancelled
       return sample(logits.slice([L - 1, 0], [L, cfg.vocab]), temp, 0, 0).itemU();
     });
     if (tk === EOS) break;
-    ids.push(tk); n++;
-    const piece = det.add(tk);
+    ids.push(tk);     const piece = det.add(tk);
     if (!piece) continue;
     full += piece;
     const cut = full.indexOf("\nUser");                       // weak model may try to continue the convo

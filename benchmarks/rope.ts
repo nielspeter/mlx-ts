@@ -1,7 +1,7 @@
 // TS port of benchmarks/python/rope_bench.py — fast rope, vec + matrix, looped 32x.
 //   bun benchmarks/rope.ts
 
-import { randomUniform, astype, FLOAT16, timeFn, loop } from "./time-utils.ts";
+import { astype, FLOAT16, loop, randomUniform, timeFn } from "./time-utils.ts";
 
 const DIMS = 64, THETA = 10000, LOOP = 32;
 

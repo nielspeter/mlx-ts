@@ -5,11 +5,9 @@
 // unusable inside tidy() for as long as it was: nothing exercised "state
 // created during a tidy() must survive it".
 //   bun test tests/arena.test.ts
-import { test, expect } from "bun:test";
-import { MX, fromF32, scalar, tidy, escape, evalAll } from "../src/index.ts";
-import { Adam } from "../src/index.ts";
-import { valueAndGrad } from "../src/index.ts";
+import { expect, test } from "bun:test";
 import type { Tree } from "../src/index.ts";
+import { Adam, escape, evalAll, fromF32, MX, scalar, tidy, valueAndGrad } from "../src/index.ts";
 
 const arr = (v = 1) => fromF32(new Float32Array([v, v, v, v]), [2, 2]);
 const freed = (x: MX) => x.h === 0;

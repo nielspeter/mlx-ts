@@ -4,16 +4,17 @@
 // bias, fused QKV (Conv1D), gelu_new (tanh approx), tied lm_head. KV-cached greedy
 // decode. Token-exact vs reference-gpt2.py (same weights, MLX Python).
 //   bun gpt2.ts "The capital of France is"
-import {
-  array, arrayI32, itemU32, evalArray, vec,
-  matmul, add, multiply, reshape, transposeAxes, fastLayerNorm,
-  fastScaledDotProductAttention, takeAxis, argmaxAxis, concatenateAxis,
-  tanh, square, slice, type Arr,
+
+import { applyRepetitionPenalty, MX, sample as mxSample, seed as mxSeed } from "../core/mx.ts";
+import {type Arr,add, argmaxAxis, 
+  array, arrayI32, concatenateAxis,evalArray, fastLayerNorm,
+  fastScaledDotProductAttention, itemU32, 
+  matmul, multiply, reshape, slice, square, takeAxis, 
+  tanh, transposeAxes, vec,
 } from "../ffi/generated.ts";
-import { loadSafetensors, get } from "../io/loader.ts";
-import { Tokenizer, GPT2_SPLIT } from "../text/tokenizer.ts";
-import { MX, sample as mxSample, applyRepetitionPenalty, seed as mxSeed } from "../core/mx.ts";
 import { readJson } from "../io/fs.ts";
+import { get, loadSafetensors } from "../io/loader.ts";
+import { GPT2_SPLIT, Tokenizer } from "../text/tokenizer.ts";
 
 const cfg = await readJson("models/config-gpt2.json");
 const D = cfg.n_embd, NL = cfg.n_layer, nH = cfg.n_head, Dh = D / nH;

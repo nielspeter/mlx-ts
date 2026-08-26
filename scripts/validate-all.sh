@@ -149,6 +149,17 @@ if [ -f "$HOME/.cache/mlx-ts/mlx-community/encodec-32khz-float32/model.safetenso
   cmp_pair "EnCodec decoder vs MLX Python" /tmp/v_ec_t.txt /tmp/v_ec_p.txt ecvals
 fi
 
+# MusicGen's LM vs Hugging Face's own implementation. Compares the logit
+# values, not their sum: summing 8192 float32s is order-dependent and the two
+# stacks differ in the 5th decimal there while every element agrees.
+if [ -f "$HOME/.cache/mlx-ts/facebook/musicgen-small/model.safetensors" ] \
+   && python3 -c "import torch, transformers" >/dev/null 2>&1; then
+  python3 reference/reference-musicgen.py >/tmp/v_mg_p.txt 2>&1
+  bun validation/musicgen-lm.ts >/tmp/v_mg_t.txt 2>&1
+  mgvals(){ grep -E "first8" | grep -oE "[-0-9.]+(, [-0-9.]+)*$"; }
+  cmp_pair "MusicGen LM vs Hugging Face" /tmp/v_mg_t.txt /tmp/v_mg_p.txt mgvals
+fi
+
 bun validation/spike-moe.ts 2>&1 | grep -q "match: true" && ok "MoE gather_qmm op (vs MLX)" || no "spike-moe" "match"
 bun validation/spike-moe-layer.ts 2>&1 | grep -q "match: true" && ok "MoE full layer (vs MLX)" || no "spike-moe-layer" "match"
 bun validation/spike-throughput.ts 2>&1 | grep -q "identical (sync == async): true" && ok "async-overlap == sync tokens" || no "spike-throughput" "tokens"

@@ -17,9 +17,13 @@ cd "$TMP"
 printf '{ "name": "pkg-check", "private": true, "type": "module" }\n' > package.json
 printf '{ "nodeModulesDir": "manual" }\n' > deno.json
 npm install --silent "$TARBALL" >/dev/null 2>&1
+# The platform package too, when it has been assembled — a consumer without
+# Homebrew gets the runtime from there, so the resolver must see it.
+PLAT=$(ls "$ROOT"/platform/darwin-arm64/*.tgz 2>/dev/null | head -1 || true)
+[ -n "$PLAT" ] && npm install --silent "$PLAT" >/dev/null 2>&1 || true
 
 cat > use.ts <<'TS'
-import { fromF32, tidy, Module, Linear, backend, type MX } from "@nielspeter/mlx-ts";
+import { fromF32, tidy, Module, Linear, backend, LIB_CANDIDATES, type MX } from "@nielspeter/mlx-ts";
 const a = fromF32(new Float32Array([1, 2, 3, 4, 5, 6]), [2, 3]);
 const b = fromF32(new Float32Array([0.5, -1, 2, 0.25, -0.75, 1.5]), [3, 2]);
 const sum = a.matmul(b).toF32().reduce((s, v) => s + v, 0);
@@ -30,7 +34,11 @@ class Net extends Module {
 }
 const shape = tidy(() => new Net().call(a)).shape.join("x");
 if (Math.abs(sum - 20) > 1e-4 || shape !== "2x2") { console.error(`BAD sum=${sum} shape=${shape}`); process.exit(1); }
-console.log(`${backend.name}: ok`);
+// If the platform package is installed, the resolver must have it as a
+// candidate — that is the path a machine without Homebrew takes.
+const plat = LIB_CANDIDATES.find((c) => c.path.includes("mlx-ts-darwin-arm64"));
+const note = plat ? (plat.exists ? " (platform pkg present)" : " (platform pkg listed, missing)") : "";
+console.log(`${backend.name}: ok${note}`);
 TS
 
 FAIL=0

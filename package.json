@@ -50,13 +50,15 @@
     "test": "bun test tests/",
     "validate": "bash scripts/validate-all.sh",
     "prepack": "bun tools/codegen.ts && tsc -p tsconfig.build.json",
-    "build": "tsc -p tsconfig.build.json"
+    "build": "tsc -p tsconfig.build.json",
+    "build:platform": "bash tools/fetch-prebuilds.sh && bash tools/make-platform-package.sh"
   },
   "dependencies": {
     "@huggingface/jinja": "^0.5.9"
   },
   "optionalDependencies": {
-    "koffi": "^3.1.6"
+    "koffi": "^3.1.6",
+    "@nielspeter/mlx-ts-darwin-arm64": "0.1.0"
   },
   "devDependencies": {
     "@types/bun": "^1.4.0",

@@ -40,3 +40,6 @@ prebuilds/
 # build output (published, not tracked)
 dist/
 *.tgz
+
+# assembled platform package (published, not tracked)
+platform/

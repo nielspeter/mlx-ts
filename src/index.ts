@@ -67,4 +67,4 @@ export * as nanogpt from "./models/nanogpt-model.ts";
 // pointer. Pointers are plain numbers on every runtime.
 export { backend, open, ptr, view, cstring, callback } from "./ffi/index.ts";
 export type { Backend, CType, SymbolSpec, SymbolTable, Callback } from "./ffi/types.ts";
-export { LIBMLXC } from "./ffi/native-lib.ts";
+export { LIBMLXC, LIB_CANDIDATES } from "./ffi/native-lib.ts";

@@ -1,10 +1,12 @@
-// Resolve the mlx-c dylib path. Prefer a BUNDLED copy (the prebuilt platform
-// package / `prebuilds/` dir) so the package runs without a Homebrew install;
-// fall back to Homebrew for local dev. macOS/arm64 only. `MLXTS_LIB` overrides.
-// The bundled set (libmlxc + libmlx + libjaccl + mlx.metallib) is made relocatable
-// with @loader_path, so dlopen'ing libmlxc here pulls the rest from the same dir.
+// Resolve the mlx-c dylib. macOS/arm64 only. `MLXTS_LIB` overrides everything.
+//
+// Three places it can come from, in order: a Homebrew install, the platform
+// package (@nielspeter/mlx-ts-darwin-arm64, an optionalDependency), or a local
+// prebuilds/ dir. The bundled sets are relocatable via @loader_path, so
+// dlopen'ing libmlxc pulls libmlx / libjaccl / mlx.metallib from beside it.
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -18,14 +20,33 @@ const roots = [join(here, "..", ".."), join(here, "..", "..", "..")];
 // machines without it, which is what it exists for. MLXTS_LIB overrides both.
 const bundles = roots.map((r) => join(r, "prebuilds", "darwin-arm64", "libmlxc.dylib"));
 const BUNDLED = bundles.find(existsSync) ?? bundles[0];
+
+// The platform package, when installed. It is an optionalDependency, so absence
+// is the normal case rather than an error.
+function platformPackage(): string | undefined {
+  try {
+    const req = createRequire(import.meta.url);
+    return join(dirname(req.resolve("@nielspeter/mlx-ts-darwin-arm64/package.json")), "libmlxc.dylib");
+  } catch { return undefined; }
+}
+
 const candidates = [
   process.env.MLXTS_LIB,
   "/opt/homebrew/opt/mlx-c/lib/libmlxc.dylib",                // Homebrew (Apple silicon)
   "/opt/homebrew/lib/libmlxc.dylib",
   "/usr/local/opt/mlx-c/lib/libmlxc.dylib",                   // Homebrew (Intel)
   "/usr/local/lib/libmlxc.dylib",
-  BUNDLED,                                                    // bundled fallback — see above
+  platformPackage(),                                          // npm, no Homebrew needed
+  BUNDLED,                                                    // a local prebuilds/ dir
 ].filter(Boolean) as string[];
+
+/**
+ * Every path considered, in order, and whether it exists. Exported because
+ * "which libmlxc did it pick, and why" is the first question when numbers or
+ * load errors look wrong — and on a developer machine several are present.
+ */
+export const LIB_CANDIDATES: ReadonlyArray<{ path: string; exists: boolean }> =
+  candidates.map((path) => ({ path, exists: existsSync(path) }));
 
 const found = candidates.find((p) => existsSync(p));
 if (!found) {

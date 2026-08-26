@@ -77,8 +77,8 @@ token-for-token. Everything below is the validated machinery underneath it.
 ## Install
 
 ```sh
-brew install mlx-c                      # the native dependency
-npm i @nielspeter/mlx-ts              # or: bun add / deno add npm:
+brew install mlx-c            # the native runtime
+npm i @nielspeter/mlx-ts      # or: bun add / deno add npm:
 ```
 
 ```ts
@@ -96,9 +96,16 @@ Supported today: 4-bit `qwen3` and `olmoe` checkpoints.
 
 macOS on Apple Silicon only. Bun and Deno work as-is; Node needs 24+ (the
 package ships compiled JS, because Node refuses to type-strip inside
-`node_modules`) and pulls in `koffi` for FFI. The package contains `src/` only —
-no weights, no binaries; `brew install mlx-c` provides `libmlxc.dylib`, and
-`MLXTS_LIB` overrides the lookup.
+`node_modules`) and pulls in `koffi` for FFI. The package itself carries no
+weights and no binaries — 96 KB.
+
+**On the Homebrew step.** It is required today. A platform package
+(`@nielspeter/mlx-ts-darwin-arm64`, an `optionalDependency` carrying Apple's own
+`libmlx` + `mlx.metallib` alongside our `libmlxc`) is assembled by
+`bun run build:platform` and verified end to end on all three runtimes, but is
+not published yet — so for now, install mlx-c. The resolver already prefers, in
+order: `MLXTS_LIB`, a Homebrew install, the platform package, a local
+`prebuilds/`. `LIB_CANDIDATES` shows what it considered and what it found.
 
 The repo itself is not the package: clone it for the examples, the parity suite
 against MLX-Python, and `docs/FINDINGS.md`.

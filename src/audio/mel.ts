@@ -10,8 +10,8 @@
 // as a validated front-end, but matching a real Whisper checkpoint means loading
 // its shipped mel_filters when weights are added.
 
-import { MX, fromF32, tidy } from "../core/mx.ts";
 import { spawn } from "node:child_process";
+import { fromF32, MX, tidy } from "../core/mx.ts";
 import { readBytes } from "../io/fs.ts";
 
 export const SR = 16000, N_FFT = 400, HOP = 160, N_MELS = 80, N_SAMPLES = 30 * SR; // 30 s chunk

@@ -1,7 +1,7 @@
 // Validate the TS GPT-2 BPE encoder (tokenizer.ts + GPT2_SPLIT) against HF
 // `tokenizers` fixtures (reference-gpt2-tok.py).
 //   python3 reference-gpt2-tok.py && bun gpt2-tok-test.ts
-import { Tokenizer, GPT2_SPLIT } from "../src/text/tokenizer.ts";
+import { GPT2_SPLIT, Tokenizer } from "../src/text/tokenizer.ts";
 
 const fixtures = await Bun.file("tests/gpt2-tok-fixtures.json").json();
 const tok = await Tokenizer.fromFile("models/gpt2-tokenizer.json", GPT2_SPLIT);

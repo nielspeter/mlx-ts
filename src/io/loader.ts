@@ -1,11 +1,11 @@
 // Safetensors loading over mlx-c: open a file into a string->array map and pull
 // tensors out by name. Built on the generated `m` symbol table.
 
-import { ptr, cstring, view as toArrayBuffer } from "../ffi/index.ts";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { m, type Arr } from "../ffi/generated.ts";
-import { MX, clearCache } from "../core/mx.ts";
+import { clearCache, MX } from "../core/mx.ts";
+import { type Arr, m } from "../ffi/generated.ts";
+import { cstring, ptr, view as toArrayBuffer } from "../ffi/index.ts";
 
 // The safetensors Load primitive only implements eval_gpu == no -> load on CPU.
 const cpuStream = m.mlx_default_cpu_stream_new() as number;

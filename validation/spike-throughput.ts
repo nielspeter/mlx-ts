@@ -6,9 +6,9 @@
 //      bounded while async evals are in flight?
 // Pass = async >= sync tok/s, identical tokens, bounded memory.
 
-import { MX, fromI32, sample, tidy, asyncEval, activeMemoryMB } from "../src/core/mx.ts";
-import { Qwen3, generate, type KV } from "../src/models/qwen-nn.ts";
+import { activeMemoryMB, asyncEval, fromI32, MX, sample, tidy } from "../src/core/mx.ts";
 import { loadSafetensors } from "../src/io/loader.ts";
+import { generate, type KV, Qwen3 } from "../src/models/qwen-nn.ts";
 import { Tokenizer } from "../src/text/tokenizer.ts";
 
 const cfg = await Bun.file("models/config-4bit.json").json();
@@ -40,7 +40,7 @@ function genAsync() {
   const cache: KV[] = Array(model.NL).fill(null);
   const flat = () => cache.flatMap((c) => (c ? [c.k, c.v] : []));
   const t0 = performance.now();
-  let ids = fromI32(Int32Array.from(prompt), [1, prompt.length]);
+  const ids = fromI32(Int32Array.from(prompt), [1, prompt.length]);
   let y = buildStep(ids, 1, prompt.length, 0, cache);
   asyncEval(y, ...flat()); ids.free();
   let pos = prompt.length;

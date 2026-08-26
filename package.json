@@ -1,7 +1,7 @@
 {
   "name": "@nielspeter/mlx-ts",
   "version": "0.1.1",
-  "description": "A TypeScript MLX SDK over Apple's mlx-c via FFI — Bun, Deno and Node. Apple Silicon only.",
+  "description": "A TypeScript MLX SDK over Apple's mlx-c via FFI \u2014 Bun, Deno and Node. Apple Silicon only.",
   "license": "MIT",
   "homepage": "https://github.com/nielspeter/mlx-ts#readme",
   "repository": {
@@ -60,7 +60,10 @@
     "validate": "bash scripts/validate-all.sh",
     "prepack": "bun tools/codegen.ts && tsc -p tsconfig.build.json",
     "build": "tsc -p tsconfig.build.json",
-    "build:platform": "bash tools/fetch-prebuilds.sh && bash tools/make-platform-package.sh"
+    "build:platform": "bash tools/fetch-prebuilds.sh && bash tools/make-platform-package.sh",
+    "lint": "biome check --formatter-enabled=false .",
+    "lint:fix": "biome check --write --formatter-enabled=false .",
+    "format": "biome format --write ."
   },
   "dependencies": {
     "@huggingface/jinja": "^0.5.9"
@@ -70,6 +73,7 @@
     "@nielspeter/mlx-ts-darwin-arm64": "0.1.0"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.10",
     "@types/bun": "^1.4.0",
     "@types/node": "^26.2.0",
     "typescript": "^7.0.2"

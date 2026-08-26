@@ -3,12 +3,12 @@
 // completion-only loss. Saves a chat checkpoint for chat-ckpt.ts. This is the
 // pretrain -> SFT handoff, all on our own weights.
 //   bun chat-sft.ts        (needs checkpoints/base-ckpt.safetensors + models/tokenizer-trained.json)
-import { MX, fromI32, fromF32, scalar, evalAll, clearCache, tidy } from "../src/core/mx.ts";
-import { maskedCrossEntropy } from "../src/nn/loss.ts";
+import { clearCache, evalAll, fromF32, fromI32, MX, scalar, tidy } from "../src/core/mx.ts";
+import { type Tree, treeFlatten, treeUnflattenLike } from "../src/core/pytree.ts";
+import { type Cfg, forward, freeParams, generate, loadCkpt, saveCkpt } from "../src/models/nanogpt-model.ts";
 import { valueAndGrad } from "../src/nn/autograd.ts";
-import { treeFlatten, treeUnflattenLike, type Tree } from "../src/core/pytree.ts";
-import { Tokenizer, GPT2_SPLIT } from "../src/text/tokenizer.ts";
-import { loadCkpt, saveCkpt, forward, generate, freeParams, type Cfg } from "../src/models/nanogpt-model.ts";
+import { maskedCrossEntropy } from "../src/nn/loss.ts";
+import { GPT2_SPLIT, Tokenizer } from "../src/text/tokenizer.ts";
 
 const BASE = process.env.BASE_CKPT ?? "checkpoints/base-ckpt.safetensors";
 const OUT = process.env.CHAT_CKPT ?? "checkpoints/chat-ckpt.safetensors";

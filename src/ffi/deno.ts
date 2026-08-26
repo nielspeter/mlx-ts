@@ -5,7 +5,7 @@
 //  - u64/usize cross as BigInt (callers already pass BigInt for size_t args).
 //  - a 64-bit *return* falls off V8's fast-call path: ~52 ns/call vs ~2.6 ns
 //    for a 32-bit one (spike-ffi-deno.ts). Declare hot accessors 32-bit.
-import type { Backend, Callback, CType, SymbolSpec, SymbolTable, Symbols } from "./types.ts";
+import type { Backend, Callback, CType, SymbolSpec, Symbols, SymbolTable } from "./types.ts";
 
 const D = (globalThis as any).Deno;
 

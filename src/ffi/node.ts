@@ -3,7 +3,7 @@
 // either a number or a BigInt going in, so the address round-trip is cheaper
 // here than on Deno: a Number() on the way out and nothing on the way in.
 import koffi from "koffi";
-import type { Backend, Callback, CType, SymbolSpec, SymbolTable, Symbols } from "./types.ts";
+import type { Backend, Callback, CType, SymbolSpec, Symbols, SymbolTable } from "./types.ts";
 
 const TYPE: Record<CType, string> = {
   ptr: "void *", cstring: "str", void: "void", bool: "bool",

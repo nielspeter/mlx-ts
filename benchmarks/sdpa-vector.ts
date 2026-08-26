@@ -5,7 +5,7 @@
 //   bun benchmarks/sdpa-vector.ts
 
 import { MX } from "../src/core/mx.ts";
-import { randomUniform, astype, FLOAT16, timeFn, loop } from "./time-utils.ts";
+import { astype, FLOAT16, loop, randomUniform, timeFn } from "./time-utils.ts";
 
 const L = 16384, H = 32, H_k = H / 4, D = 128, V = 128, LOOP = 10;
 const scale = 1.0;

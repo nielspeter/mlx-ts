@@ -33,7 +33,7 @@ export async function serve(port: number, handler: Handler): Promise<void> {
       const res = await handler(new Request(url, {
         method,
         headers: nreq.headers as any,
-        body: body && body.length ? new Uint8Array(body) : undefined,
+        body: body?.length ? new Uint8Array(body) : undefined,
       }));
 
       nres.writeHead(res.status, Object.fromEntries(res.headers));

@@ -2,8 +2,8 @@
 // Needs no model weights — this is the example that runs on a fresh clone.
 //   bun examples/basics.ts   |   deno run --allow-all examples/basics.ts   |   node examples/basics.ts
 import {
-  fromF32, scalar, stack, tidy, evalAll,
-  activeMemoryMB, peakMemoryMB, clearCache, backend,
+  activeMemoryMB, backend,clearCache, evalAll,
+  fromF32, peakMemoryMB, scalar, stack, tidy, 
 } from "../src/index.ts";
 
 console.log(`runtime: ${backend.version}\n`);

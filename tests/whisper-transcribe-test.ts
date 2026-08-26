@@ -1,8 +1,9 @@
 // Assert mlx-ts greedy transcription is token-for-token identical to mlx_whisper.
 //   /tmp/wvenv/bin/python reference-whisper-transcribe.py && bun whisper-transcribe-test.ts
+
+import { decodeAudio, loadMelFilters } from "../src/audio/mel.ts";
 import { loadWhisper } from "../src/models/whisper.ts";
 import { WhisperTokenizer } from "../src/text/whisper-tokenizer.ts";
-import { decodeAudio, loadMelFilters } from "../src/audio/mel.ts";
 
 const AUDIO = process.argv[2] ?? "/tmp/jfk.flac";
 const model = await loadWhisper();

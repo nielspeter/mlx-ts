@@ -4,7 +4,7 @@
 //   bun benchmarks/rms-norm.ts
 
 import { MX, scalar } from "../src/core/mx.ts";
-import { randomUniform, astype, square, rsqrt, meanAxis, FLOAT16, timeFn, loop } from "./time-utils.ts";
+import { astype, FLOAT16, loop, meanAxis, randomUniform, rsqrt, square, timeFn } from "./time-utils.ts";
 
 const EPS = 1e-5;
 

@@ -1,7 +1,7 @@
 // Validate whisper.ts against mlx_whisper: identical mel + tokens -> compare
 // encoder audio features and decoder logits (incl. the discrete argmax token).
 //   /tmp/wvenv/bin/python reference-whisper.py && bun whisper-test.ts
-import { MX, fromF32, fromI32 } from "../src/core/mx.ts";
+import { fromF32, fromI32, MX } from "../src/core/mx.ts";
 import { loadWhisper } from "../src/models/whisper.ts";
 
 const readF32 = async (p: string) => {

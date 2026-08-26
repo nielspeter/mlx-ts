@@ -4,11 +4,11 @@
 // features -> tied-embedding logits. Runs in fp16 like the reference.
 //   weights: models/whisper-tiny.safetensors (converted from mlx-community/whisper-tiny)
 
-import { MX, fromF32, fromI32, scalar, sample, tidy, evalAll } from "../core/mx.ts";
-import { loadSafetensors, get } from "../io/loader.ts";
-import { decodeAudio, padOrTrim, loadMelFilters, logMel } from "../audio/mel.ts";
-import { WhisperTokenizer } from "../text/whisper-tokenizer.ts";
+import { decodeAudio, loadMelFilters, logMel, padOrTrim } from "../audio/mel.ts";
+import { evalAll, fromF32, fromI32, MX, sample, tidy } from "../core/mx.ts";
 import { readJson } from "../io/fs.ts";
+import { get, loadSafetensors } from "../io/loader.ts";
+import { WhisperTokenizer } from "../text/whisper-tokenizer.ts";
 
 const FP16 = 9, EPS = 1e-5;
 

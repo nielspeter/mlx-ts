@@ -2,7 +2,7 @@
 // and the src/ tree has to import cleanly under Deno and Node too. node:fs/
 // promises is the one file API all three implement, so everything here is a
 // thin wrapper over it — no per-runtime branching needed.
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
 const ensureDir = (p: string) => mkdir(dirname(p), { recursive: true });

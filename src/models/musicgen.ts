@@ -8,7 +8,7 @@
 // step — the tidy()/escape() split exactly. Every step runs inside tidy(), and
 // the cache escapes it. Without that the cache is freed as a scope-local
 // intermediate and the next step reads freed handles (see FINDINGS §6.6).
-import { MX, fromI32, fromU32, tidy, escape, stack, scalar, evalAll } from "../core/mx.ts";
+import { escape, fromI32, MX, stack } from "../core/mx.ts";
 import type { Weights } from "../io/loader.ts";
 
 export type MusicGenConfig = {

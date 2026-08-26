@@ -3,7 +3,7 @@
 //   bun benchmarks/layer-norm.ts
 
 import { MX, scalar } from "../src/core/mx.ts";
-import { randomUniform, astype, rsqrt, meanAxis, varAxis, layerNorm, FLOAT32, FLOAT16, BFLOAT16, timeFn, loop } from "./time-utils.ts";
+import { astype, BFLOAT16, FLOAT16, FLOAT32, layerNorm, loop, meanAxis, randomUniform, rsqrt, timeFn, varAxis } from "./time-utils.ts";
 
 const EPS = 1e-5, L = 1024, LOOP = 32;
 

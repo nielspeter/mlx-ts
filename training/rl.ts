@@ -9,12 +9,12 @@
 // words in the completion. The policy learns to complete more positively; mean
 // reward rises. No labeled completions, just a reward signal.
 //   bun rl.ts
-import { MX, fromI32, scalar, evalAll, seed, sample, clearCache, tidy } from "../src/core/mx.ts";
-import { crossEntropy } from "../src/nn/loss.ts";
+import { clearCache, evalAll, fromI32, MX, sample, scalar, seed, tidy } from "../src/core/mx.ts";
+import { type Tree, treeFlatten, treeUnflattenLike } from "../src/core/pytree.ts";
+import { get, loadSafetensors } from "../src/io/loader.ts";
 import { valueAndGrad } from "../src/nn/autograd.ts";
-import { treeFlatten, treeUnflattenLike, type Tree } from "../src/core/pytree.ts";
-import { loadSafetensors, get } from "../src/io/loader.ts";
-import { Tokenizer, GPT2_SPLIT } from "../src/text/tokenizer.ts";
+import { crossEntropy } from "../src/nn/loss.ts";
+import { GPT2_SPLIT, Tokenizer } from "../src/text/tokenizer.ts";
 
 const cfg = await Bun.file("models/config-gpt2.json").json();
 const D = cfg.n_embd, NL = cfg.n_layer, NH = cfg.n_head, Dh = D / NH;

@@ -3,8 +3,8 @@
 // produced; here we feed the identical inputs through mlx-ts and assert allclose.
 // Regenerate fixtures with:  python3 tests/gen-fixtures.py
 //   bun test tests/
-import { test, expect } from "bun:test";
-import { MX, fromF32, fromI32, fromU32 } from "../src/core/mx.ts";
+import { expect, test } from "bun:test";
+import { fromF32, fromI32, fromU32, MX } from "../src/core/mx.ts";
 
 type Tensor = { shape: number[]; dtype?: "f32" | "i32" | "u32"; data: number[] };
 type Case = { name: string; op: string; inputs: Tensor[]; params: any; expected: Tensor; atol?: number; rtol?: number };

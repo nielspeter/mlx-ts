@@ -2,9 +2,9 @@
 // cross-entropy — the same machinery training/ uses, on a toy problem that
 // needs no data files.
 //   bun examples/train.ts
-import {
-  valueAndGrad, Adam, crossEntropy, fromF32, fromU32, tidy,
-  type MX, type Tree,
+import {Adam, crossEntropy, fromF32, fromU32, 
+  type MX, type Tree,tidy,
+  valueAndGrad, 
 } from "../src/index.ts";
 
 const N = 256, D = 4, C = 3, STEPS = 60;

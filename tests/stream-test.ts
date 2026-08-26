@@ -2,10 +2,10 @@
 // be token-for-token identical to qwen-nn's proven generate(), and streamText
 // must reconstruct exactly what tok.decode() produces over those ids.
 
-import { Qwen3, generate as generateRef } from "../src/models/qwen-nn.ts";
-import { streamTokens, streamText } from "../src/text/lm.ts";
-import { Tokenizer } from "../src/text/tokenizer.ts";
 import { loadSafetensors } from "../src/io/loader.ts";
+import { generate as generateRef, Qwen3 } from "../src/models/qwen-nn.ts";
+import { streamText, streamTokens } from "../src/text/lm.ts";
+import { Tokenizer } from "../src/text/tokenizer.ts";
 
 const cfg = await Bun.file("models/config-4bit.json").json();
 const model = new Qwen3(cfg, loadSafetensors("models/model-q4.safetensors"));

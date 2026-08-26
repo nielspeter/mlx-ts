@@ -4,13 +4,13 @@
 //
 //   python3 reference-quant.py && bun codegen.ts && bun model-quant.ts
 
-import {
-  arrayI32, itemU32, evalArray, vec,
-  add, multiply, sigmoid, fastRmsNorm, reshape, transposeAxes,
-  fastRope, fastScaledDotProductAttention, takeAxis, argmaxAxis, concatenateAxis,
-  quantizedMatmul, type Arr,
+import {type Arr,
+  add, argmaxAxis, 
+  arrayI32, concatenateAxis,evalArray, fastRmsNorm, 
+  fastRope, fastScaledDotProductAttention, itemU32, multiply, 
+  quantizedMatmul, reshape, sigmoid, takeAxis, transposeAxes,vec,
 } from "../src/ffi/generated.ts";
-import { loadSafetensors, get, entries } from "../src/io/loader.ts";
+import { entries, get, loadSafetensors } from "../src/io/loader.ts";
 
 const VOCAB = 32, D = 64, nH = 4, nKV = 2, Dh = 16, I = 128, LAYERS = 2;
 const EPS = 1e-6, THETA = 1_000_000, SCALE = Dh ** -0.5, B = 1;

@@ -9,9 +9,10 @@
 //   3. no file outside src/ is imported across a directory boundary
 //      (that is what library code in the wrong place looks like)
 //   4. every file path named in the docs exists
-import { readFileSync, existsSync } from "node:fs";
+
 import { execSync } from "node:child_process";
-import { dirname, join, normalize, relative } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join, normalize } from "node:path";
 
 const sh = (cmd: string) => execSync(cmd, { encoding: "utf8" }).trim();
 const tracked = sh("git ls-files").split("\n");

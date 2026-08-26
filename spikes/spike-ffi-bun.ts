@@ -17,7 +17,7 @@
 // All three spikes run the same [2,3] @ [3,2] matmul -> [2.25, 4, 7.5, 6.25],
 // sum exactly 20, so a mismatch is visible without a tolerance argument.
 //   bun spike-ffi-bun.ts
-import { dlopen, ptr, toArrayBuffer as bunToArrayBuffer, type Pointer } from "bun:ffi";
+import { toArrayBuffer as bunToArrayBuffer, dlopen, type Pointer, ptr } from "bun:ffi";
 import { LIBMLXC } from "../src/ffi/native-lib.ts";
 
 // This spike exists to show that a handle is a plain JS number — which is the

@@ -49,7 +49,7 @@ function parseHeader(header: string): Fn[] {
   const fns: Fn[] = [];
   let inDoc = false;
   let buf = "";
-  for (let raw of lines) {
+  for (const raw of lines) {
     const line = raw;
     if (inDoc) { if (line.includes("*/")) inDoc = false; continue; }
     const t = line.trimStart();

@@ -1,7 +1,8 @@
 // chat_cli (nanochat stage): chat with the SFT'd checkpoint from chat-sft.ts.
 //   bun chat-ckpt.ts "What is the capital of France?"
-import { Tokenizer, GPT2_SPLIT } from "../src/text/tokenizer.ts";
-import { loadCkpt, generate } from "../src/models/nanogpt-model.ts";
+
+import { generate, loadCkpt } from "../src/models/nanogpt-model.ts";
+import { GPT2_SPLIT, Tokenizer } from "../src/text/tokenizer.ts";
 
 const CKPT = process.env.CHAT_CKPT ?? "checkpoints/chat-ckpt.safetensors";
 const tok = await Tokenizer.fromFile("models/tokenizer-trained.json", GPT2_SPLIT);

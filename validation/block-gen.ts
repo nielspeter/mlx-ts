@@ -2,9 +2,9 @@
 // AUTO-GENERATED wrappers in generated.ts. If codegen is correct, this matches
 // reference.py to ~float32.  Run: bun codegen.ts && bun block-gen.ts
 
-import {
-  array, item, matmul, add, multiply, sigmoid, fastRmsNorm, reshape,
-  transposeAxes, fastRope, fastScaledDotProductAttention, sum, type Arr,
+import {type Arr,add, 
+  array, fastRmsNorm, fastRope, fastScaledDotProductAttention, item, matmul, multiply, reshape,sigmoid, sum, 
+  transposeAxes, 
 } from "../src/ffi/generated.ts";
 
 const B = 1, L = 3, D = 64, nH = 4, nKV = 2, Dh = 16, I = 128;

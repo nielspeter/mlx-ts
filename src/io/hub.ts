@@ -7,10 +7,11 @@
 //
 // Cache layout mirrors the repo id so several models coexist:
 //   ~/.cache/mlx-ts/<org>/<name>/<file>        (MLXTS_CACHE overrides)
-import { mkdir, stat, rename, writeFile } from "node:fs/promises";
+
 import { existsSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { mkdir, rename, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
+import { dirname, join } from "node:path";
 
 const HUB = "https://huggingface.co";
 

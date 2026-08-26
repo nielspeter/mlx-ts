@@ -5,19 +5,19 @@
 //   bun qwen.ts "The capital of France is"
 
 import {
-  arrayI32, itemU32, evalArray, vec,
-  matmul, add, multiply, sigmoid, fastRmsNorm, reshape, transposeAxes,
-  fastRope, fastScaledDotProductAttention, takeAxis, argmaxAxis, concatenateAxis,
-  type Arr,
+  type Arr,add, argmaxAxis, 
+  arrayI32, concatenateAxis,evalArray, fastRmsNorm, 
+  fastRope, fastScaledDotProductAttention, itemU32, 
+  matmul, multiply, reshape, sigmoid, takeAxis, transposeAxes,vec,
 } from "../ffi/generated.ts";
-import { loadSafetensors, get } from "../io/loader.ts";
-import { Tokenizer } from "../text/tokenizer.ts";
 import { readJson } from "../io/fs.ts";
+import { get, loadSafetensors } from "../io/loader.ts";
+import { Tokenizer } from "../text/tokenizer.ts";
 
 const cfg = await readJson("models/config.json");
-const D = cfg.hidden_size, NL = cfg.num_hidden_layers;
+const NL = cfg.num_hidden_layers;
 const nH = cfg.num_attention_heads, nKV = cfg.num_key_value_heads, Dh = cfg.head_dim;
-const I = cfg.intermediate_size, EPS = cfg.rms_norm_eps, THETA = cfg.rope_theta;
+const EPS = cfg.rms_norm_eps, THETA = cfg.rope_theta;
 const SCALE = Dh ** -0.5, B = 1, EOS = cfg.eos_token_id;
 
 const w = loadSafetensors("models/model-qwen.safetensors");

@@ -9,10 +9,10 @@
 // Without that, the graph (and memory) grows with every step and nothing runs.
 
 import {
-  array, arrayI32, itemU32, evalArray, vec,
-  matmul, add, multiply, sigmoid, fastRmsNorm, reshape, transposeAxes,
-  fastRope, fastScaledDotProductAttention, takeAxis, argmaxAxis, concatenateAxis,
-  type Arr,
+  type Arr,add, argmaxAxis, 
+  array, arrayI32, concatenateAxis,evalArray, fastRmsNorm, 
+  fastRope, fastScaledDotProductAttention, itemU32, 
+  matmul, multiply, reshape, sigmoid, takeAxis, transposeAxes,vec,
 } from "../src/ffi/generated.ts";
 
 // ---- config ----

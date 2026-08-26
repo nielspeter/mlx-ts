@@ -5,12 +5,12 @@
 //   bun stream.ts "Write a haiku about the sea"
 //   bun stream.ts --temp 0.8 --topp 0.95 --topk 40 --reppenalty 1.1 --seed 42 "Tell me a story"
 
+import { readJson } from "../src/io/fs.ts";
+import { loadSafetensors } from "../src/io/loader.ts";
 import { Qwen3 } from "../src/models/qwen-nn.ts";
+import { ChatTemplate } from "../src/text/chat-template.ts";
 import { streamText } from "../src/text/lm.ts";
 import { Tokenizer } from "../src/text/tokenizer.ts";
-import { ChatTemplate } from "../src/text/chat-template.ts";
-import { loadSafetensors } from "../src/io/loader.ts";
-import { readJson } from "../src/io/fs.ts";
 
 const argv = process.argv.slice(2);
 const flag = (n: string, d: number) => { const i = argv.indexOf(n); return i >= 0 ? Number(argv[i + 1]) : d; };

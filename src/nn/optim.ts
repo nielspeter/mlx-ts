@@ -2,8 +2,8 @@
 // and a matching grads tree and returns the updated params tree. Per-leaf
 // first/second moment state is keyed by position in the flattened tree.
 
-import { MX, scalar, evalAll, escape } from "../core/mx.ts";
-import { treeFlatten, treeUnflattenLike, type Tree } from "../core/pytree.ts";
+import { escape, evalAll, MX, scalar } from "../core/mx.ts";
+import { type Tree, treeFlatten, treeUnflattenLike } from "../core/pytree.ts";
 
 export class Adam {
   private m: (MX | null)[] = [];

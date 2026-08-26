@@ -7,7 +7,7 @@
 //
 // The LSTM is the interesting part: MLX has no fused one, so it runs on the
 // custom Metal kernel in src/ffi/kernel.ts — the reason that spike existed.
-import { MX, fromF32, fromI32, tidy, scalar, stack } from "../core/mx.ts";
+import { fromF32, fromI32, MX, scalar, stack, tidy } from "../core/mx.ts";
 import { conv1d, convTranspose1d, exp } from "../ffi/generated.ts";
 import { metalKernel, scalarI32 } from "../ffi/kernel.ts";
 import type { Weights } from "../io/loader.ts";

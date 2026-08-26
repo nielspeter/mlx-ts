@@ -3,9 +3,10 @@
 // batched inputs). The per-op batching rules live in the C++ core and run inside
 // vmap_replace; we only orchestrate. Closure plumbing mirrors train.ts.
 //   bun spike-vmap.ts
-import { open, callback, ptr } from "../src/ffi/index.ts";
-import { MX, fromF32 } from "../src/core/mx.ts";
+
+import { fromF32, MX } from "../src/core/mx.ts";
 import { m } from "../src/ffi/generated.ts";
+import { callback, open, ptr } from "../src/ffi/index.ts";
 import { LIBMLXC } from "../src/ffi/native-lib.ts";
 
 // detail funcs are internal -> not in the generated table; dlopen by hand.

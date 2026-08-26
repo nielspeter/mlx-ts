@@ -5,9 +5,9 @@
 // Weights are generated deterministically so reference.py can reproduce the
 // exact same numbers and we can check numerical parity. Run: bun block.ts
 
-import {
-  array, matmul, add, mul, silu, rmsNorm, reshape, transpose, rope,
-  sdpaCausal, sumAll, type Arr,
+import {type Arr,add, 
+  array, matmul, mul, reshape, rmsNorm, rope,
+  sdpaCausal, silu, sumAll, transpose, 
 } from "./mlx.ts";
 
 // ---- config (small, for a fast deterministic check) ----
@@ -48,7 +48,7 @@ const x = array(det(B * L * D, 100), [B, L, D]);
 // ---- forward ----
 function block(h: Arr): Arr {
   // attention
-  let y = rmsNorm(h, inNorm, EPS);
+  const y = rmsNorm(h, inNorm, EPS);
   let q = matmul(y, Wq);
   let k = matmul(y, Wk);
   let v = matmul(y, Wv);

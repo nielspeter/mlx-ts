@@ -17,9 +17,10 @@
 //     "incompatible pointer to integer conversion".
 //   - Grid and threadgroup follow Metal's own semantics; MLX does not infer
 //     them.
+
+import { MX } from "../core/mx.ts";
 import { m, stream } from "./generated.ts";
 import { ptr } from "./index.ts";
-import { MX } from "../core/mx.ts";
 
 const FLOAT32 = 10;
 const KEEP: unknown[] = [];

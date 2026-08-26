@@ -1,11 +1,12 @@
 // One decoding step of MusicGen's LM vs Hugging Face's own implementation
 // (reference/reference-musicgen.py). Same local weights, same inputs.
 //   bun validation/musicgen-lm.ts
-import { MusicGenLM, type MusicGenConfig, type LayerKV } from "../src/models/musicgen.ts";
-import { singleFileWeights } from "../src/io/loader.ts";
-import { fromU32, fromF32, tidy, activeMemoryMB } from "../src/core/mx.ts";
-import { hubFile } from "../src/io/hub.ts";
+
+import { activeMemoryMB, fromF32, fromU32, tidy } from "../src/core/mx.ts";
 import { readJson } from "../src/io/fs.ts";
+import { hubFile } from "../src/io/hub.ts";
+import { singleFileWeights } from "../src/io/loader.ts";
+import { type LayerKV, type MusicGenConfig, MusicGenLM } from "../src/models/musicgen.ts";
 
 const REPO = "facebook/musicgen-small";
 const cfg = (await readJson<any>(await hubFile(REPO, "config.json"))).decoder as MusicGenConfig;

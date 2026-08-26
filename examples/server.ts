@@ -11,19 +11,18 @@
 // at a time; extra requests queue. (A real multi-tenant server needs batched
 // decode + per-request arenas — see README "not yet".)
 
-import { Qwen3 } from "../src/models/qwen-nn.ts";
-import { MX, fromI32, tidy } from "../src/core/mx.ts";
-import { streamTokens, type GenOptions } from "../src/text/lm.ts";
-import { Tokenizer } from "../src/text/tokenizer.ts";
-import { ChatTemplate, type Message } from "../src/text/chat-template.ts";
-import { loadSafetensors } from "../src/io/loader.ts";
-import { Whisper, loadWhisper } from "../src/models/whisper.ts";
-import { WhisperTokenizer } from "../src/text/whisper-tokenizer.ts";
+import { unlink, writeFile } from "node:fs/promises";
 import { decodeAudio, loadMelFilters } from "../src/audio/mel.ts";
-import { unlink } from "node:fs/promises";
+import { fromI32, MX, tidy } from "../src/core/mx.ts";
 import { readJson, readText } from "../src/io/fs.ts";
+import { loadSafetensors } from "../src/io/loader.ts";
+import { Qwen3 } from "../src/models/qwen-nn.ts";
+import { loadWhisper, Whisper } from "../src/models/whisper.ts";
+import { ChatTemplate, type Message } from "../src/text/chat-template.ts";
+import { type GenOptions, streamTokens } from "../src/text/lm.ts";
+import { Tokenizer } from "../src/text/tokenizer.ts";
+import { WhisperTokenizer } from "../src/text/whisper-tokenizer.ts";
 import { serve } from "./serve.ts";
-import { writeFile } from "node:fs/promises";
 
 const MODEL_ID = "qwen3-0.6b-4bit";
 const PORT = Number(process.env.PORT ?? 8080);

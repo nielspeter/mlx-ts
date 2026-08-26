@@ -5,12 +5,12 @@
 //   bun olmoe.ts "The capital of France is"
 //   MX_SHARDED=models/model-olmoe-sharded/model.safetensors.index.json bun olmoe.ts "..."
 
-import { MX, fromI32, stack, activeMemoryMB, peakMemoryMB, cacheMemoryMB, setMemoryLimit, resetPeakMemory } from "../core/mx.ts";
-import { RMSNorm, QuantizedLinear, QuantizedEmbedding, MoE, type Experts } from "../nn/nn.ts";
-import { singleFileWeights, shardedWeights, type Weights } from "../io/loader.ts";
-import { Tokenizer } from "../text/tokenizer.ts";
-import { generate, type Decoder, type KV } from "../text/lm.ts";
+import { activeMemoryMB, cacheMemoryMB, fromI32, MX, peakMemoryMB, resetPeakMemory, setMemoryLimit, stack } from "../core/mx.ts";
 import { readJson } from "../io/fs.ts";
+import { shardedWeights, singleFileWeights, type Weights } from "../io/loader.ts";
+import { type Experts, MoE, QuantizedEmbedding, QuantizedLinear, RMSNorm } from "../nn/nn.ts";
+import { type Decoder, generate, type KV } from "../text/lm.ts";
+import { Tokenizer } from "../text/tokenizer.ts";
 
 type Layer = {
   inNorm: RMSNorm; postNorm: RMSNorm; qNorm: RMSNorm; kNorm: RMSNorm;

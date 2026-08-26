@@ -12,8 +12,8 @@ export { saveAudio } from "./audio/wav.ts";
 // `tidy()` is not optional on a hot path: a FinalizationRegistry only runs
 // after a GC, which never happens inside a tight synchronous decode loop.
 export {
-  activeMemoryMB, applyRepetitionPenalty, asyncEval, cacheMemoryMB, clearCache, dropout, escape,evalAll, fromF32, fromI32, fromU32, 
-  MX, peakMemoryMB, resetPeakMemory,sample, 
+  activeMemoryMB, applyRepetitionPenalty, asyncEval, cacheMemoryMB, clearCache, dropout, escape,evalAll, freeAll,fromF32, fromI32, fromU32, 
+  MX, Owned, peakMemoryMB, resetPeakMemory,sample, 
   saveSafetensors, scalar, seed,setCacheLimit,
   setMemoryLimit, setWiredLimit, stack, tidy, 
 } from "./core/mx.ts";

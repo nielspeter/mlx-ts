@@ -2,7 +2,7 @@
 // (reference/reference-musicgen.py). Same local weights, same inputs.
 //   bun validation/musicgen-lm.ts
 
-import { activeMemoryMB, fromF32, fromU32, tidy } from "../src/core/mx.ts";
+import { activeMemoryMB, fromF32, fromU32, Owned, tidy } from "../src/core/mx.ts";
 import { readJson } from "../src/io/fs.ts";
 import { hubFile } from "../src/io/hub.ts";
 import { singleFileWeights } from "../src/io/loader.ts";
@@ -19,7 +19,7 @@ for (let k = 0; k < K; k++) tok[k] = (k * 977 + 7) % 2048;
 const cond = new Float32Array(Lt * D);
 for (let i = 0; i < Lt; i++) for (let j = 0; j < D; j++) cond[i * D + j] = ((i * 131 + j * 977 + 7) % 1009) / 1009 - 0.5;
 
-const cache: LayerKV[] = Array.from({ length: cfg.num_hidden_layers }, () => null);
+using cache = new Owned<LayerKV>(cfg.num_hidden_layers);
 const logits = tidy(() => lm.step(fromU32(tok, [B, 1, K]), fromF32(cond, [B, Lt, D]), cache, 0));
 
 const a = logits.toF32();                       // [B, 1, vocab, K]

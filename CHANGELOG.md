@@ -2,6 +2,30 @@
 
 Notable changes, newest first. Hand-written.
 
+## [0.1.1]
+
+First release through the trusted-publishing pipeline (OIDC from GitHub
+Actions), rather than an interactive `npm publish`.
+
+### Fixed
+
+- `.gitignore` matched `models/` unanchored, so it also matched `src/models/`
+  and kept `src/models/load.ts` — the hub loader — out of git. The published
+  0.1.0 package was unaffected (`dist/` is built from the working tree), but the
+  repository could not typecheck. Patterns are now anchored to the repo root.
+
+### Changed
+
+- `tools/audit.ts` gains a rule: every imported file must be *tracked* by git,
+  not merely present on disk. The audit had been reading a working tree a fresh
+  clone would not have, which is what let the above through.
+- CI is a single macOS job. The Linux half could never have worked — typecheck
+  and the audit both read `src/ffi/generated.ts`, which codegen emits from the
+  installed mlx-c headers. It now also confirms GitHub's macOS runners give MLX
+  a usable Metal device.
+- README carries npm/CI/licence badges and links both published packages;
+  corrected the suite count to 47/47.
+
 ## [0.1.0]
 
 First release. A TypeScript MLX SDK over Apple's `mlx-c` via FFI: no custom

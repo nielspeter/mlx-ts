@@ -43,3 +43,6 @@ chat-ckpt-config.json
 
 # assembled platform package (published, not tracked)
 /platform/
+
+# generated audio
+*.wav

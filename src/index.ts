@@ -52,6 +52,12 @@ export { WhisperTokenizer, langToken } from "./text/whisper-tokenizer.ts";
 // takes one as its first argument, so exporting the function without the class
 // gave consumers a signature they could not satisfy.
 export { Qwen3, generateBatch, stepTidy } from "./models/qwen-nn.ts";
+// Text -> music. T5 conditioning, a codebook LM, EnCodec back to a waveform.
+export { MusicGen, MusicGenLM, type GenerateOptions, type MusicGenConfig, type LayerKV } from "./models/musicgen.ts";
+export { T5Encoder, type T5Config } from "./models/t5.ts";
+export { EncodecDecoder, type EncodecConfig } from "./models/encodec.ts";
+export { UnigramTokenizer } from "./text/unigram.ts";
+export { saveAudio } from "./audio/wav.ts";
 // Fetch-and-construct from a Hugging Face repo id — the step between `npm i`
 // and a token.
 export { load, type Loaded } from "./models/load.ts";

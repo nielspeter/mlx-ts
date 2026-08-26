@@ -86,6 +86,25 @@ if bun -e 'import {isCached} from "./src/io/hub.ts"; process.exit(await isCached
                  *) no "hub load()" "$OUT" ;; esac
 fi
 
+# The MLX repo layout (medium/large) reaches the weights through a name rewrite.
+# Headers only — no weights downloaded — so this is cheap enough to always run.
+if bun validation/musicgen-mlx-layout.ts >/tmp/v_mgl.txt 2>&1 && grep -q "verdict : OK" /tmp/v_mgl.txt; then
+  ok "MusicGen MLX layout ($(grep -oE 'checked : [^-]*' /tmp/v_mgl.txt | head -1))"
+else
+  no "MusicGen MLX layout" "$(tail -2 /tmp/v_mgl.txt | tr '\n' ' ')"
+fi
+
+# End-to-end MusicGen, bounded to 30 frames, with a leak assertion — see
+# validation/musicgen-e2e.ts for why the memory is measured mid-generation.
+if [ -f "$HOME/.cache/mlx-ts/facebook/musicgen-small/model.safetensors" ]; then
+  bun validation/musicgen-e2e.ts >/tmp/v_mge.txt 2>&1
+  if grep -q "verdict : OK" /tmp/v_mge.txt; then
+    ok "MusicGen end to end ($(grep -oE 'memory .*' /tmp/v_mge.txt))"
+  else
+    no "MusicGen end to end" "$(tail -2 /tmp/v_mge.txt | tr '\n' ' ')"
+  fi
+fi
+
 echo "=== examples (no model files needed) ==="
 for EX in basics module train metal-kernel; do
   OUT=$(bun examples/$EX.ts 2>&1 | tail -1)

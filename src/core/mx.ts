@@ -48,6 +48,65 @@ export function escape<T>(v: T): T {
   return v;
 }
 
+/** Free every MX reachable from `v`. Arrays and plain objects are walked. */
+export function freeAll(v: unknown): void {
+  const s = new Set<MX>(); collect(v, s);
+  for (const x of s) x.free();
+}
+
+/**
+ * A slot table that owns what it holds — the other half of the memory model.
+ *
+ * `tidy()` frees what a scope created and `escape()` lifts a value out of that
+ * scope, but escape() only transfers ownership; it does not say who frees the
+ * value being replaced. That part was hand-rolled at both of its call sites —
+ * an optimizer's moment buffers and a KV cache — and getting it wrong in the
+ * second one leaked ~10 MB per step and reached 55 GB on a 39 GB machine.
+ *
+ * Here it happens once, in set(). The value escapes the caller's arena and the
+ * previous occupant is freed, minus anything the new value still holds:
+ * replacing `{k, v}` with `{k, v2}` must not free the `k` that is still live.
+ *
+ *   using cache = new Owned<LayerKV>(nLayers);
+ *   cache.set(l, { k, v });        // frees the pair it replaced
+ *                                  // ...and the whole table at scope exit
+ */
+export class Owned<T> {
+  private slots: (T | null)[];
+
+  constructor(n: number) { this.slots = new Array<T | null>(n).fill(null); }
+
+  get length(): number { return this.slots.length; }
+
+  get(i: number): T | null { return this.slots[i] ?? null; }
+
+  /** Take ownership of `v`, freeing what slot `i` held. Returns `v`. */
+  set(i: number, v: T): T {
+    // Grow on demand: an optimizer discovers how many leaves it has by walking
+    // the tree, so it cannot size the table up front.
+    while (this.slots.length <= i) this.slots.push(null);
+    const prev = this.slots[i];
+    this.slots[i] = escape(v);
+    if (prev != null && prev !== v) {
+      const keep = new Set<MX>(); collect(v, keep);
+      const old = new Set<MX>(); collect(prev, old);
+      for (const x of old) if (!keep.has(x)) x.free();
+    }
+    return v;
+  }
+
+  /** Free every slot and empty the table. Safe to call more than once. */
+  free(): void {
+    for (let i = 0; i < this.slots.length; i++) {
+      const v = this.slots[i];
+      this.slots[i] = null;
+      if (v != null) freeAll(v);
+    }
+  }
+
+  [Symbol.dispose]() { this.free(); }
+}
+
 function slot(): BigUint64Array { const r = new BigUint64Array(1); r[0] = BigInt((m.mlx_array_new() as number) ?? 0); return r; }
 const optI = (v: number | null): bigint => v === null ? 0n : BigInt.asUintN(32, BigInt(v)) | (1n << 32n);
 const optF = (v: number | null): bigint => v === null ? 0n : BigInt(new Uint32Array(new Float32Array([v]).buffer)[0]) | (1n << 32n);

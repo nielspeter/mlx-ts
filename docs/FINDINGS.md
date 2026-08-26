@@ -258,6 +258,28 @@ The general lesson is that an arena needs an escape hatch as much as it needs a
 scope, and that a workaround appearing independently in three places is evidence
 of a defect rather than a style choice.
 
+That lesson then had to be learned a second time. `escape()` transfers
+ownership but says nothing about who frees the value being replaced, and that
+part stayed hand-rolled at both of its call sites — the optimizer above, and
+MusicGen's KV cache. The second copy omitted the free, which is the 55 GB
+incident in §6.7. `Owned<T>` now holds it in one place: `set()` escapes the new
+value and frees the previous occupant, minus anything the new value still
+references, so replacing `{k, v}` with `{k, v2}` cannot free a live `k`. It
+implements `Symbol.dispose`, so a KV cache is `using cache = new Owned(...)`
+and releases at scope exit.
+
+Worth noting what the runtimes do and do not provide here. `using` /
+`Symbol.dispose` and `DisposableStack` are available in all three (Bun 1.3,
+Node 26, Deno 2.9), and Node's own FFI documentation recommends `using` for
+library handles. But `DisposableStack` requires an explicit `.use()` per
+resource, and MLX ops create intermediates that are never named —
+`a.add(b).mul(c)` — which is why `tidy()` tracks at construction instead. What
+no runtime offers is refcounting or any way to tell the GC about native bytes:
+`napi_adjust_external_memory` exists, but only for compiled addons, not FFI. So
+explicit ownership is not a shortcut taken here; it is the only option, and
+Node's `node:ffi` says as much — it "does not track pointer validity, memory
+ownership, or native object lifetimes".
+
 ## 6.7. Active memory is not the memory the machine has to find
 `escape()` (§6.6) makes ownership explicit, and the check that guards it watches
 active memory across a generation loop. That check passed — 0.39 MB/step, flat —

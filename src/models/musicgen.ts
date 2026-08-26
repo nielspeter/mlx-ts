@@ -8,7 +8,7 @@
 // step — the tidy()/escape() split exactly. Every step runs inside tidy(), and
 // the cache escapes it. Without that the cache is freed as a scope-local
 // intermediate and the next step reads freed handles (see FINDINGS §6.6).
-import { escape, evalAll, fromI32, fromU32, MX, sample, scalar, setCacheLimit, stack, tidy } from "../core/mx.ts";
+import { escape, evalAll, fromI32, fromU32, MX, Owned, sample, scalar, setCacheLimit, stack, tidy } from "../core/mx.ts";
 import { readJson } from "../io/fs.ts";
 import { hubFile } from "../io/hub.ts";
 import type { Weights } from "../io/loader.ts";
@@ -80,7 +80,7 @@ export class MusicGenLM {
    * @param cache  per-layer KV, mutated in place; entries escape the caller's arena
    * @param offset absolute position, for the positional embedding
    */
-  step(tokens: MX, cond: MX, cache: LayerKV[], offset: number): MX {
+  step(tokens: MX, cond: MX, cache: Owned<LayerKV>, offset: number): MX {
     const { num_codebooks: K, num_hidden_layers: NL, hidden_size: D } = this.cfg;
     const B = tokens.shape[0];
 
@@ -99,15 +99,12 @@ export class MusicGenLM {
     for (let l = 0; l < NL; l++) {
       const p = `decoder.model.decoder.layers.${l}`;
       const sa = this.attention(`${p}.self_attn`, this.norm(`${p}.self_attn_layer_norm`, x), 
-                                this.norm(`${p}.self_attn_layer_norm`, x), cache[l], true);
-      // escape() transfers OWNERSHIP: these arrays leave the caller's arena, so
-      // freeing the pair they replace is now our job. The cache grows by one
-      // token per step, so leaking it costs ~393 KB x step x layer — about
-      // 49 GB over a 500-step generation, which is exactly what it did.
-      const prev = cache[l];
-      cache[l] = { k: escape(sa.kv!.k), v: escape(sa.kv!.v) };
-      prev?.k.free();
-      prev?.v.free();
+                                this.norm(`${p}.self_attn_layer_norm`, x), cache.get(l), true);
+      // Owned.set() escapes the pair out of this step's arena and frees the one
+      // it replaces. The cache grows by one token per step, so leaking it costs
+      // ~393 KB x step x layer — about 49 GB over a 500-step generation, which
+      // is exactly what it did before the free was there.
+      cache.set(l, { k: sa.kv!.k, v: sa.kv!.v });
       x = x.add(sa.out);
 
       const xc = this.norm(`${p}.encoder_attn_layer_norm`, x);
@@ -295,7 +292,7 @@ export class MusicGen {
     // The delay pattern: codebook k does not start until step k, so the model
     // predicts each codebook conditioned on the coarser ones above it.
     const seq: number[][] = [new Array(K).fill(BOS)];
-    const cache: LayerKV[] = new Array(this.lm.cfg.num_hidden_layers).fill(null);
+    using cache = new Owned<LayerKV>(this.lm.cfg.num_hidden_layers);
 
     for (let off = 0; off < maxSteps; off++) {
       const cur = seq[off];
@@ -313,10 +310,10 @@ export class MusicGen {
       seq.push(next);
       onStep?.(off + 1, maxSteps);
     }
-    // The cache and the conditioning escaped every tidy() above, so nothing
-    // else will release them. EnCodec needs the memory next.
+    // The conditioning escaped every tidy() above, so nothing else will release
+    // it; the cache frees itself at scope exit. EnCodec needs the memory next.
     cond.free();
-    for (const c of cache) { c?.k.free(); c?.v.free(); }
+    cache.free();
 
     // Undo the delay: codebook i is i steps late, so shift it back.
     const rows = seq.length - K;

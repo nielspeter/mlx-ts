@@ -66,5 +66,7 @@ export * as nanogpt from "./models/nanogpt-model.ts";
 // symbols, `ptr`/`view` cross the buffer boundary, `callback` makes a C function
 // pointer. Pointers are plain numbers on every runtime.
 export { backend, open, ptr, view, cstring, callback } from "./ffi/index.ts";
+// Write your own Metal kernel when MLX has no fused op for what you need.
+export { metalKernel, scalarI32 } from "./ffi/kernel.ts";
 export type { Backend, CType, SymbolSpec, SymbolTable, Callback } from "./ffi/types.ts";
 export { LIBMLXC, LIB_CANDIDATES } from "./ffi/native-lib.ts";

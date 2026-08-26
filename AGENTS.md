@@ -3,7 +3,7 @@
 A working TypeScript MLX SDK over Apple's `mlx-c` C API via FFI — no custom
 C/C++, no build step, and it runs on **Bun, Deno and Node**. It runs real dense
 and MoE LLMs (inference + LoRA training), every layer validated against MLX
-Python or HF. **`scripts/validate-all.sh` is 48/48 green** against Homebrew
+Python or HF. **`scripts/validate-all.sh` is 49/49 green** against Homebrew
 mlx-c (the count varies with which model files you have fetched). Read `docs/FINDINGS.md` first — it's the full,
 honest write-up; this file is the operational guide.
 

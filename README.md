@@ -11,7 +11,7 @@
 A TypeScript MLX SDK over **`mlx-c`** (Apple's official C API) via FFI, with
 **zero custom C/C++** and no build step — running on **Bun, Deno and Node**, and
 **numerically identical** to MLX's Python reference (`scripts/validate-all.sh`:
-49/49).
+50/50).
 
 Read `docs/FINDINGS.md` for what was proven and how. Apple Silicon + Metal only.
 
@@ -531,7 +531,7 @@ bun src/models/gpt2.ts "The capital of France is"   # greedy; TEMP/TOP_K/TOP_P/R
   current mean-pooled base-LLM vectors.
 - **Shipping the native dependency** — the published package still requires
   `brew install mlx-c`. The blocker is gone: `tools/fetch-prebuilds.sh` builds
-  `prebuilds/` from Apple's own `mlx-metal` binaries and the suite is 49/49
+  `prebuilds/` from Apple's own `mlx-metal` binaries and the suite is 50/50
   forced onto that path (`docs/FINDINGS.md` §7f). What remains is publishing it
   as a platform package — `@nielspeter/mlx-ts-darwin-arm64` under
   `optionalDependencies`, the shape Apple uses — and deciding whether ~50 MB

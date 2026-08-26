@@ -50,7 +50,7 @@ hidden, cell_out = _lstm_kernel(
     inputs=[x, h_in, cell, H, 0, T],
     output_shapes=[(B, H), (B, H)],
     output_dtypes=[mx.float32, mx.float32],
-    grid=(B, H * 4, 1),
+    grid=(B, h_in.size // 4, 1),   # Apple's own expression: B*H
     threadgroup=(256, 1, 1),
 )
 mx.eval(hidden, cell_out)

@@ -64,7 +64,10 @@ const [hidden, cellOut] = tidy(() =>
     // the shader would fail to compile.
     [x, hIn, cell, scalarI32(H), scalarI32(0), scalarI32(T)],
     [{ shape: [B, H] }, { shape: [B, H] }],   // output shapes
-    [B, H * 4, 1],                            // grid
+    // grid.y is one thread per hidden unit: h_in is [B, 4H], so h_in.size/4 is
+    // B*H. Passing B*4H "works" — no crash, no error — and quietly computes the
+    // wrong thing, because each thread writes past its row.
+    [B, B * H, 1],                            // grid
     [256, 1, 1],                              // threadgroup
   ));
 

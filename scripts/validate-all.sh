@@ -137,6 +137,18 @@ bun examples/metal-kernel.ts >/tmp/v_mk_t.txt 2>&1
 mkvals(){ grep -E "hidden_state|cell_state" | grep -oE "[-0-9.]+(, [-0-9.]+)*$"; }
 cmp_pair "custom Metal kernel (LSTM) vs MLX Python" /tmp/v_mk_t.txt /tmp/v_mk_p.txt mkvals
 
+# EnCodec decoder (MusicGen's audio half) — exercises the custom Metal LSTM
+# kernel, reflect padding and the transposed-conv upsampling stack.
+# Needs the weights cached AND mlx-examples' encodec.py (the oracle imports it);
+# MLX_EXAMPLES points at the directory holding it.
+if [ -f "$HOME/.cache/mlx-ts/mlx-community/encodec-32khz-float32/model.safetensors" ] \
+   && [ -f "${MLX_EXAMPLES:-/tmp}/encodec.py" ]; then
+  python3 reference/reference-encodec.py >/tmp/v_ec_p.txt 2>&1
+  bun validation/encodec-decode.ts >/tmp/v_ec_t.txt 2>&1
+  ecvals(){ grep -E "first8|sum" | grep -oE "[-0-9.]+(, [-0-9.]+)*$"; }
+  cmp_pair "EnCodec decoder vs MLX Python" /tmp/v_ec_t.txt /tmp/v_ec_p.txt ecvals
+fi
+
 bun validation/spike-moe.ts 2>&1 | grep -q "match: true" && ok "MoE gather_qmm op (vs MLX)" || no "spike-moe" "match"
 bun validation/spike-moe-layer.ts 2>&1 | grep -q "match: true" && ok "MoE full layer (vs MLX)" || no "spike-moe-layer" "match"
 bun validation/spike-throughput.ts 2>&1 | grep -q "identical (sync == async): true" && ok "async-overlap == sync tokens" || no "spike-throughput" "tokens"

@@ -1,9 +1,9 @@
 # Downloaded weights / tokenizers / configs, corpora and token shards, and
 # training outputs. All live in their own dirs now (see README "Repo layout");
 # the bare patterns stay so a stray file at the root is still ignored.
-models/
-data/
-checkpoints/
+/models/
+/data/
+/checkpoints/
 *.safetensors
 model-*-sharded/
 config*.json
@@ -31,15 +31,15 @@ base-ckpt.safetensors
 base-ckpt-config.json
 chat-ckpt.safetensors
 chat-ckpt-config.json
-prebuilds/
+/prebuilds/
 
 # editor / OS cruft
 .DS_Store
 .claude/
 
 # build output (published, not tracked)
-dist/
+/dist/
 *.tgz
 
 # assembled platform package (published, not tracked)
-platform/
+/platform/

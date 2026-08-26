@@ -37,6 +37,18 @@ for (const f of code) {
   }
 }
 
+// 5. Every imported file must be TRACKED, not merely present on disk. The audit
+// otherwise reads a working tree that a fresh clone will not have: `.gitignore`
+// carried an unanchored `models/`, which matches any directory of that name at
+// any depth — so `src/models/load.ts` was silently skipped by `git add` and the
+// pushed repo could not typecheck, while everything passed locally.
+const GENERATED = new Set(["src/ffi/generated.ts"]);   // emitted by tools/codegen.ts
+const trackedSet = new Set(tracked);
+for (const [from, to] of edges) {
+  if (!existsSync(to) || trackedSet.has(to) || GENERATED.has(to)) continue;
+  fail("5 untracked-import", `${from} imports ${to}, which git does not track (ignored?)`);
+}
+
 const top = (p: string) => p.split("/")[0];
 for (const [from, to] of edges) {
   if (top(from) === "src" && top(to) !== "src") {

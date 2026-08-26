@@ -4,25 +4,14 @@ on:
   push: { branches: [main] }
   pull_request:
 
+# One macOS job, not a Linux "static" job plus a macOS one. The split looked
+# tidy but the Linux half could never work: typecheck and the audit both read
+# src/ffi/generated.ts, which is emitted by tools/codegen.ts from the installed
+# mlx-c headers and is therefore absent on a fresh clone anywhere without them.
 jobs:
-  # Everything that does not need Metal, a GPU, or multi-GB weights.
-  static:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-      - run: bun install --frozen-lockfile
-      - name: typecheck
-        run: bun run typecheck
-      - name: structural audit
-        run: bun tools/audit.ts
-
-  # Needs Apple Silicon + Metal + mlx-c. Runs the checks that need no weights:
-  # codegen against real headers, the arena tests, and the three zero-download
-  # examples on all three runtimes. The full parity suite (scripts/validate-all.sh)
-  # is not run here — it needs ~9 GB of model files — so it stays a local gate.
-  metal:
+  check:
     runs-on: macos-15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -30,14 +19,22 @@ jobs:
         with: { deno-version: v2.x }
       - uses: actions/setup-node@v4
         with: { node-version: "24" }
+
       - run: brew install mlx-c
       - run: bun install --frozen-lockfile
-      - name: codegen from the installed mlx-c headers
+
+      - name: codegen (required before anything type-checks)
         run: bun tools/codegen.ts
+
+      - run: bun run typecheck
+      - run: bun tools/audit.ts
+      - run: bun tools/check-api.ts
+
       - name: arena / ownership tests
         run: bun test tests/arena.test.ts
       - name: op parity fixtures
         run: bun test tests/lib.test.ts
+
       - name: examples on Bun, Deno and Node
         run: |
           for ex in basics module train; do
@@ -45,6 +42,7 @@ jobs:
             deno run --allow-all examples/$ex.ts
             node examples/$ex.ts
           done
+
       - name: same fingerprint on all three runtimes
         run: |
           fp() { grep -oE 'sum *= *[-0-9.]+' | tr -d ' '; }
@@ -53,3 +51,6 @@ jobs:
           N=$(node validation/block-gen.ts | fp)
           echo "bun=$B deno=$D node=$N"
           [ "$B" = "$D" ] && [ "$B" = "$N" ] && [ -n "$B" ]
+
+      # The full parity suite (scripts/validate-all.sh) stays local: it needs
+      # ~9 GB of model weights.

@@ -11,7 +11,9 @@
 A TypeScript MLX SDK over **`mlx-c`** (Apple's official C API) via FFI, with
 **zero custom C/C++** and no build step — running on **Bun, Deno and Node**, and
 **numerically identical** to MLX's Python reference (`scripts/validate-all.sh`:
-54/54).
+**61/61**, of which 5 Stable Diffusion checks are opt-in via `MLXTS_SD=1`).
+Test coverage over `src/` is measured and gated at **66% of functions / 74% of
+lines**.
 
 Read `docs/FINDINGS.md` for what was proven and how. Apple Silicon + Metal only.
 
@@ -79,6 +81,30 @@ const audio = model.generate("trance", { maxSteps: 500 });   // 50 frames = 1s
 await saveAudio("out.wav", audio.toF32(), model.samplingRate);
 ```
 
+**Text to image.** Stable Diffusion, end to end — CLIP conditions it, the UNet
+denoises, the VAE turns latents into pixels.
+
+```ts
+import { savePng, StableDiffusion } from "@nielspeter/mlx-ts";
+
+const sd = await StableDiffusion.fromPretrained();
+const img = sd.generate("a photo of an astronaut riding a horse", {
+  width: 384, height: 384, steps: 20, seed: 42,   // same seed -> same image
+});
+await savePng("out.png", img.toF32(), 384, 384);
+```
+
+**Images and text in one space.** CLIP's two towers project into the same 768
+dimensions, so cosine similarity classifies without any training.
+
+```ts
+import { ClipVisionEncoder, fromF32, loadImage } from "@nielspeter/mlx-ts";
+
+const px = await loadImage("photo.jpg", { size: 224 });      // ffmpeg decodes it
+const vec = vision.embed(fromF32(px, [1, 224, 224, 3]), W.mx("visual_projection.weight"));
+// ...then compare against text embeddings; examples/clip-zeroshot.ts is the whole thing.
+```
+
 **Embeddings for local RAG.** Vectors, not a chat completion.
 
 ```ts
@@ -139,7 +165,8 @@ const [hidden, cellOut] = tidy(() => lstm.apply(
 
 Runnable versions live in `examples/`: `examples/chat.ts`, `examples/stream.ts`,
 `examples/musicgen.ts`, `examples/train.ts`, `examples/metal-kernel.ts`,
-`examples/hub.ts`, and `examples/server.ts` — an OpenAI-compatible endpoint with
+`examples/hub.ts`, `examples/stable-diffusion.ts`, `examples/clip-zeroshot.ts`,
+and `examples/server.ts` — an OpenAI-compatible endpoint with
 a chat page and a live mic. CI runs them on Bun, Deno and Node.
 
 ## When you'd want something else
@@ -200,7 +227,7 @@ npm i @nielspeter/mlx-ts      # or: bun add / deno add npm:
 That is the whole install. The native runtime arrives as
 [`@nielspeter/mlx-ts-darwin-arm64`](https://www.npmjs.com/package/@nielspeter/mlx-ts-darwin-arm64),
 an `optionalDependency` carrying Apple's own `libmlx` + `mlx.metallib` next to
-our `libmlxc` (199 MB unpacked). The parity suite is **54/54 forced onto it**,
+our `libmlxc` (199 MB unpacked). The parity suite passes **forced onto it**,
 matching Homebrew's build exactly.
 
 ```ts
@@ -281,7 +308,7 @@ source stays free of enums and parameter properties.
 different MLX than Homebrew's does **not** agree numerically — an earlier local
 bundle diverged from MLX-Python on real Qwen3 and on LoRA training. That is not
 true of the published platform package, which is built from Apple's own
-`mlx-metal` binaries and passes the suite 54/54. `scripts/validate-all.sh`
+`mlx-metal` binaries and passes the suite. `scripts/validate-all.sh`
 prints which library it resolved; set `MLXTS_LIB` to choose.
 
 ## Repo layout
@@ -524,9 +551,10 @@ base, packed into a u64), `mlx_fast_scaled_dot_product_attention` with
 
 ## What you can build with it
 
-mlx-ts today is a **local runtime for text LLMs, Whisper speech-to-text and
-MusicGen text-to-music**, plus training (LoRA, full fine-tuning, a GRPO loss
-path) and custom Metal kernels — Apple-Silicon-only, published as
+mlx-ts today is a **local runtime for text LLMs, Whisper speech-to-text,
+MusicGen text-to-music, Stable Diffusion text-to-image and CLIP image
+embeddings**, plus training (LoRA, full fine-tuning, a GRPO loss path) and
+custom Metal kernels — Apple-Silicon-only, published as
 `@nielspeter/mlx-ts` and also runnable as scripts in this repo. The library
 under `src/` runs on Bun, Deno and Node, as do all of `examples/`; only
 `training/` is still Bun-only. Sampling supports greedy,
@@ -662,7 +690,9 @@ bun src/models/gpt2.ts "The capital of France is"   # greedy; TEMP/TOP_K/TOP_P/R
   (`espeak-ng`, like ffmpeg). Scoped as product work — see `docs/FINDINGS.md` §7c.
 - **Cross-platform** — Apple-Silicon + Metal only (no Linux/CUDA, Windows,
   Intel). Runtime portability is done: see "Runtimes" above.
-- **Vision / multimodal** (CLIP, LLaVA, image-gen) — no vision encoders wired yet.
+- **Multimodal LLMs** (LLaVA and friends) — the vision half exists now
+  (`src/models/clip-vision.ts`), but nothing yet feeds those patch embeddings
+  into a language model.
 - **High-throughput multi-tenant serving** — only equal-length batching; ragged
   prompts need padding masks + continuous batching.
 - **Broad model compatibility** — only affine 4-bit quant (no AWQ/GPTQ), so many

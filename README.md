@@ -246,7 +246,7 @@ Supported today: 4-bit `qwen3` and `olmoe` checkpoints.
 macOS on Apple Silicon only. Bun and Deno work as-is; Node needs 24+ (the
 package ships compiled JS, because Node refuses to type-strip inside
 `node_modules`) and pulls in `koffi` for FFI. The library package carries no
-weights and no binaries — 135 kB packed; the native runtime is the separate
+weights and no binaries — 162 kB packed; the native runtime is the separate
 platform package above, pulled in automatically.
 
 **On Homebrew.** `brew install mlx-c` is optional, and takes precedence when

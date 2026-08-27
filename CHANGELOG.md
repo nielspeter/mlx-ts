@@ -2,6 +2,74 @@
 
 Notable changes, newest first. Hand-written.
 
+## [0.3.0]
+
+Images. mlx-ts now generates them, and reads them — which makes this the
+release where the SDK covers text, speech, audio and vision rather than three
+of the four.
+
+### Added
+
+- **Stable Diffusion, end to end** — a prompt in, a PNG out.
+
+      bun examples/stable-diffusion.ts "an astronaut riding a horse" --size 384
+
+  384x384 in about 4 seconds. Every piece was pinned against mlx-examples'
+  own port loading the same checkpoint before the next was built: `conv2d` and
+  `convTranspose2d`, `GroupNorm`, the VAE decoder, CLIP's text encoder and
+  tokenizer, the UNet (686 tensors, matched first try) and the noise schedule.
+  `src/image/png.ts` writes the result, verified by parsing the file back.
+
+- **CLIP's vision tower** (`src/models/clip-vision.ts`) — images and text in
+  one space, so cosine similarity classifies without any training:
+
+      bun examples/clip-zeroshot.ts photo.jpg
+      0.1889  a photo of a cat
+      0.1083  a photo of a car
+
+  The transformer is shared with the text tower
+  (`src/models/clip-layers.ts`); what
+  differs is that a stride-14 convolution splits the image into patches, a
+  class token leads the sequence, and attention is **not** causal.
+
+- **`src/image/load.ts`** — decode any image ffmpeg understands, scaled and
+  centre-cropped the way CLIP's own preprocessor does.
+
+- **`conv2d` / `convTranspose2d` on `MX`**, channels-last, plus `broadcastTo`,
+  `mulScalar`, `addScalar`, `randomNormal` and `setCacheLimit`.
+
+- **Test coverage, measured and gated.** There was none before; the first
+  honest figure was 20% of functions. `scripts/coverage.sh` now reports and
+  enforces in pre-push and CI, at **66% of functions / 74% of lines**, with a
+  ratchet floor. 32 unit tests became 139.
+
+### Fixed
+
+- **A bun:ffi ABI cliff.** `conv2d` segfaulted at address `0x1` on Bun 1.3.14 —
+  `groups`, passed as `1`, read where the stream handle belongs. The binding
+  was correct; Node and Deno matched Python exactly. On Apple arm64 the first
+  eight integer arguments travel in registers, and what breaks is an `int32`
+  that spills past them. Fifteen symbols share that shape, all convolution or
+  padding, and none had ever been called. **Requires Bun >= 1.4.0.** Written up
+  as `docs/FINDINGS.md` 6.8.
+
+- **MLX laziness, twice more.** The diffusion loop built one graph holding
+  every UNet pass and evaluated them at the end, reporting a fictional 291
+  steps/s; and the VAE decode ran after the cache cap was restored, reaching
+  5.2 GB of reuse buffers. The full pipeline now peaks at 4.8 GB.
+
+- **The Whisper checks had been skipping, not passing** — the suite called a
+  reference script by a path left behind when those moved into `reference/`,
+  silenced by `>/dev/null`.
+
+### Changed
+
+- The parity suite is **61/61**. Five Stable Diffusion checks are opt-in via
+  `MLXTS_SD=1`: they load the 3.2 GB UNet twice and were the peak of the run.
+  Skipping them says so out loud rather than passing over it.
+- `tools/check-api.ts` covers the new modules. It did not before, which is how
+  three exports stayed missing from the public API while every gate was green.
+
 ## [0.2.2]
 
 Documentation only — no runtime change since 0.2.1. Cut because the install

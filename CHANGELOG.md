@@ -2,6 +2,80 @@
 
 Notable changes, newest first. Hand-written.
 
+## [0.4.0]
+
+Text to speech, and voice cloning. Also the first release that requires nothing
+at runtime: `dependencies` is empty.
+
+### Added
+
+- **Spark-TTS — text in, a `.wav` out.** `examples/spark-tts.ts`. A
+  **Qwen2-0.5B** (`src/models/qwen2.ts`) predicts audio tokens out of a 166k
+  vocabulary, and **BiCodec** (`src/models/bicodec.ts`) renders them: a codebook
+  quantizer, an FSQ speaker decoder, a 12-layer Vocos prenet conditioned through
+  AdaLayerNorm, and a Snake-activation wave generator that upsamples 320x to
+  16 kHz. The voice is *described* — gender, pitch, speed. No phonemizer, no
+  `espeak-ng`. About 2x realtime.
+
+- **Voice cloning.** `examples/spark-clone.ts`: a recording in, the same voice
+  saying something else. BiCodec's **speaker encoder** (`src/models/speaker.ts`)
+  turns six seconds of audio into the 32 tokens that stand for a speaker — a
+  Slaney mel front end, an **ECAPA-TDNN** with Res2Net blocks and attentive
+  statistics pooling, a **perceiver resampler** that squeezes any clip length
+  into 32 latents, and **FSQ** to pack them into ids.
+
+  Checked against the *original PyTorch* Spark-TTS rather than another MLX port,
+  which is the only reason a real bug was caught — see below. All 32 ids match
+  on synthetic and on real audio. Cloning is also verified end to end with no
+  Python: `validation/spark-clone.ts` clones a voice and scores it with ECAPA's
+  x-vector, a different head from the one the tokens come from (~0.95 against a
+  ~0.38 floor for an unrelated voice).
+
+- **`upcastWeights(W)`** — read a bf16 checkpoint at float32. bf16 is fine to
+  generate with and too coarse to compare with: Qwen2 carries outlier channels
+  in the thousands that cancel in the last layer, so one ulp at layer 9 becomes
+  a percent at the logits. At float32 our LM matches PyTorch exactly.
+
+- **New ops**: `convTranspose1d`, `sin`, `square`, `maximum`, and `strides` /
+  `contiguous` accessors. BatchNorm folded from running statistics, inference
+  only by construction.
+
+### Fixed
+
+- **`toF32()` ignored strides.** A transposed array read back in its
+  *pre*-transpose order under the new shape — right shape, wrong data, no error.
+  This affected any tensor read back to the host after a `transpose()`, not just
+  the new models.
+
+- **`toF32()` segfaulted on a non-float32 array.** `mlx_array_data_float32`
+  returns null for bf16 and the read walked off it. It casts now.
+
+- **A short STFT window is centred inside `n_fft`, as `torch.stft` pads it.**
+  We had followed mlx-audio, which left-aligns it. Both produce something that
+  looks like a spectrogram and nothing downstream complains — it moved 12 of
+  BiCodec's 32 speaker tokens. Whisper's `logMel` was never affected: it frames
+  with `win_length == n_fft`, where the offset is zero.
+
+### Changed
+
+- **`@huggingface/jinja` is loaded on demand and is now optional.** Nothing in
+  `src/` needs it but `src/text/chat-template.ts`, yet importing mlx-ts to run
+  a diffusion model or a codec pulled in a templating language — and failed
+  outright if it was absent. It is imported on demand now, the way
+  `src/ffi/index.ts` picks its backend, so `dependencies` is empty and the
+  library requires nothing at runtime.
+
+  `ChatTemplate`'s constructor is private as a result; construction goes through
+  `ChatTemplate.fromString()` or `.fromConfig()`, since a deferred import cannot
+  be awaited in a constructor. `render()` stays synchronous.
+
+- **The Spark checks compare against committed reference numbers.**
+  `validation/spark-golden.json`, 4 KB, generated once from the original PyTorch
+  by `reference/gen-spark-fixtures.py`. A live oracle would need torch,
+  torchaudio, transformers and a source fetch of a package that is not on PyPI —
+  so it would skip for almost everyone. An oracle nobody can run is an oracle
+  that never runs.
+
 ## [0.3.1]
 
 `npm i @nielspeter/mlx-ts` is now the entire install. No Homebrew, no ffmpeg.

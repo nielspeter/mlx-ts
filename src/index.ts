@@ -6,7 +6,7 @@
 
 
 // --- audio: the Whisper front-end (ffmpeg decode -> log-Mel) ----------------
-export { decodeAudio, loadMelFilters, logMel, padOrTrim, SR } from "./audio/mel.ts";
+export { decodeAudio, loadMelFilters, logMel, padOrTrim, playAudio, SR  } from "./audio/mel.ts";
 export { saveAudio } from "./audio/wav.ts";
 // --- arrays and memory ---------------------------------------------------
 // `tidy()` is not optional on a hot path: a FinalizationRegistry only runs

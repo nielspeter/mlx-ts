@@ -11,6 +11,9 @@
 // its shipped mel_filters when weights are added.
 
 import { spawn } from "node:child_process";
+import { rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { basename, join } from "node:path";
 import { fromF32, MX, tidy } from "../core/mx.ts";
 import { readBytes } from "../io/fs.ts";
 
@@ -50,18 +53,77 @@ function melFilterT(): MX {
 
 // Decode any audio file to 16 kHz mono PCM via ffmpeg, as s16 -> float32/32768
 // (matches Whisper's load_audio so mel/transcription line up bit-for-bit).
-export async function decodeAudio(path: string): Promise<Float32Array> {
+/** Run a command to completion, collecting stdout. */
+function run(cmd: string, args: string[]): Promise<Uint8Array> {
   // node:child_process rather than Bun.spawn — Deno and Node implement it too.
-  const p = spawn("ffmpeg", ["-nostdin", "-i", path, "-f", "s16le", "-ac", "1", "-ar", String(SR), "-"],
-    { stdio: ["ignore", "pipe", "ignore"] });
-  const chunks: Uint8Array[] = [];
-  for await (const c of p.stdout) chunks.push(c as Uint8Array);
-  const buf = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
-  let off = 0; for (const c of chunks) { buf.set(c, off); off += c.length; }
-  const i16 = new Int16Array(buf.buffer, buf.byteOffset, Math.floor(buf.byteLength / 2));
+  return new Promise((resolve, reject) => {
+    const p = spawn(cmd, args, { stdio: ["ignore", "pipe", "ignore"] });
+    const chunks: Uint8Array[] = [];
+    p.stdout.on("data", (c: Uint8Array) => chunks.push(c));
+    p.on("error", () => reject(new Error(`${cmd} not found on PATH`)));
+    p.on("close", (code) => {
+      if (code !== 0) return reject(new Error(`${cmd} exited ${code}`));
+      const buf = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
+      let off = 0;
+      for (const c of chunks) { buf.set(c, off); off += c.length; }
+      resolve(buf);
+    });
+  });
+}
+
+/**
+ * The samples of a RIFF/WAVE file, found by walking its chunks.
+ *
+ * Not by skipping 44 bytes: afconvert writes extra chunks, and assuming the
+ * classic header silently reads metadata as audio — which shifts the signal and
+ * looks like a decoder disagreeing when it is only a parser being lazy.
+ */
+function wavSamples(buf: Uint8Array): Int16Array {
+  const v = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+  let p = 12;                                     // past "RIFF" size "WAVE"
+  while (p + 8 <= buf.length) {
+    const id = String.fromCharCode(buf[p], buf[p + 1], buf[p + 2], buf[p + 3]);
+    const size = v.getUint32(p + 4, true);
+    if (id === "data") {
+      const start = buf.byteOffset + p + 8;
+      return new Int16Array(buf.buffer.slice(start, start + size));
+    }
+    p += 8 + size + (size & 1);                   // chunks are word-aligned
+  }
+  throw new Error("decodeAudio: no data chunk in the decoded WAVE");
+}
+
+/**
+ * Any audio file -> mono float PCM at `SR`.
+ *
+ * Uses macOS's own `afconvert`, which is built in — MLX is Apple-Silicon-only,
+ * so there is nothing to gain by requiring a separate install. Set
+ * `MLXTS_AUDIO_DECODER=ffmpeg` to use ffmpeg instead; the Whisper parity check
+ * does, because its oracle decodes that way and a ~1% difference in the mel
+ * spectrogram could flip a token.
+ */
+export async function decodeAudio(path: string): Promise<Float32Array> {
+  let i16: Int16Array;
+
+  if (process.env.MLXTS_AUDIO_DECODER === "ffmpeg") {
+    const raw = await run("ffmpeg", ["-nostdin", "-i", path, "-f", "s16le", "-ac", "1", "-ar", String(SR), "-"]);
+    i16 = new Int16Array(raw.buffer, raw.byteOffset, Math.floor(raw.byteLength / 2));
+  } else {
+    // afconvert writes a file rather than a stream, so it goes via a temp path.
+    const out = join(tmpdir(), `mlx-ts-decode-${process.pid}-${basename(path)}.wav`);
+    await run("afconvert", ["-f", "WAVE", "-d", `LEI16@${SR}`, "-c", "1", path, out]);
+    i16 = wavSamples(await readBytes(out));
+    await rm(out, { force: true });
+  }
+
   const f = new Float32Array(i16.length);
   for (let i = 0; i < i16.length; i++) f[i] = i16[i] / 32768;
   return f;
+}
+
+/** Play an audio file through the system output. macOS only, like the rest. */
+export async function playAudio(path: string): Promise<void> {
+  await run("afplay", [path]);
 }
 
 // Pad with zeros (or trim) to `length` samples — Whisper feeds the encoder a

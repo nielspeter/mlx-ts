@@ -12,7 +12,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 // HOP/N_FFT/N_MELS/N_SAMPLES are deliberately not in the public API — they are
 // implementation detail of the front-end — so they come from the module.
-import { HOP, loadMelFilters, logMel, N_FFT, N_MELS, N_SAMPLES, padOrTrim, SR } from "../src/audio/mel.ts";
+import { decodeAudio, HOP, loadMelFilters, logMel, N_FFT, N_MELS, N_SAMPLES, padOrTrim, SR } from "../src/audio/mel.ts";
+import { saveAudio } from "../src/audio/wav.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "mlx-ts-mel-"));
 
@@ -74,6 +75,29 @@ test("different pitches land in different bands", () => {
   const low = logMel(tone(n, 220)).mel;
   const high = logMel(tone(n, 3000)).mel;
   expect([...low]).not.toEqual([...high]);
+});
+
+test("decodeAudio round-trips a file written by saveAudio", async () => {
+  // Also covers the WAVE chunk walk. An earlier version of this decoder assumed
+  // the classic 44-byte header, which reads metadata as audio on any file that
+  // carries extra chunks — the signal shifts and it looks like the decoder
+  // disagreeing rather than the parser being lazy.
+  const path = join(dir, "round.wav");
+  const src = tone(SR, 440);                        // one second
+  await saveAudio(path, src, SR);
+  const back = await decodeAudio(path);
+  expect(back.length).toBe(src.length);
+  // int16 quantisation is the only loss.
+  let max = 0;
+  for (let i = 0; i < src.length; i++) max = Math.max(max, Math.abs(src[i] - back[i]));
+  expect(max).toBeLessThan(1e-4);
+});
+
+test("decodeAudio resamples to the model's rate", async () => {
+  const path = join(dir, "highrate.wav");
+  await saveAudio(path, tone(44100, 440), 44100);   // one second at 44.1 kHz
+  const back = await decodeAudio(path);
+  expect(Math.abs(back.length - SR)).toBeLessThan(SR * 0.02);
 });
 
 test("loadMelFilters reads a filterbank of the declared width", async () => {

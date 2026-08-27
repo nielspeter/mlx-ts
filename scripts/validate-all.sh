@@ -110,6 +110,10 @@ bun validation/groupnorm.ts >/tmp/v_gn_t.txt 2>&1
 gnvals(){ grep -oE "sum=-?[0-9]+\.[0-9]{4}|first4=\[[^]]*\]"; }
 cmp_pair "GroupNorm vs MLX Python" /tmp/v_gn_t.txt /tmp/v_gn_p.txt gnvals
 
+# ---- Stable Diffusion checks: opt-in with MLXTS_SD=1 --------------------------
+#
+#   MLXTS_SD=1 bash scripts/validate-all.sh
+#
 # The VAE decoder against mlx-examples' own Stable Diffusion port. Both sides
 # load stabilityai/sd-vae-ft-mse, so a difference is our decoder, not the
 # checkpoint. Needs their package and an MLX python; setup is:
@@ -122,7 +126,12 @@ cmp_pair "GroupNorm vs MLX Python" /tmp/v_gn_t.txt /tmp/v_gn_p.txt gnvals
 #
 # Compared on mean and the first few pixels, not the total: summing 49k floats
 # is order-dependent and the two land 0.036 apart out of -4788.
-if [ -x /tmp/sdvenv/bin/python ] && [ -d "${MLX_SD:-/tmp/mlxsd_pkg}/stable_diffusion" ]; then
+# Opt-in: MLXTS_SD=1. These load the SD UNet twice — once in the Python oracle
+# and once here, 3.2 GB each — which makes them the peak of the whole suite and
+# stops it completing on a machine with other work running. conv2d and
+# GroupNorm above stay unconditional; they need no weights.
+if [ "${MLXTS_SD:-0}" = "1" ] && [ -x /tmp/sdvenv/bin/python ] \
+   && [ -d "${MLX_SD:-/tmp/mlxsd_pkg}/stable_diffusion" ]; then
   MLX_SD="${MLX_SD:-/tmp/mlxsd_pkg}" /tmp/sdvenv/bin/python reference/reference-vae.py >/tmp/v_vae_p.txt 2>&1
   bun validation/vae-decode.ts >/tmp/v_vae_t.txt 2>&1
   vaevals(){ grep -oE "shape=\[[^]]*\]|mean=-?[0-9]+\.[0-9]{5}|first4=\[[^]]*\]"; }
@@ -167,6 +176,12 @@ if [ -x /tmp/sdvenv/bin/python ] && [ -d "${MLX_SD:-/tmp/mlxsd_pkg}/stable_diffu
   else
     no "scheduler" "$(diff /tmp/v_sch_t.txt /tmp/v_sch_p.txt | head -2 | tr '\n' ' ')"
   fi
+elif [ "${MLXTS_SD:-0}" = "1" ]; then
+  echo "  ⏭  Stable Diffusion checks: MLXTS_SD=1 set but the oracle is missing —"
+  echo "     need /tmp/sdvenv and \${MLX_SD:-/tmp/mlxsd_pkg}/stable_diffusion (see above)"
+else
+  echo "  ⏭  Stable Diffusion checks skipped (VAE, CLIP x2, UNet, scheduler)."
+  echo "     They load the 3.2 GB UNet twice; run them with MLXTS_SD=1."
 fi
 
 # The MLX repo layout (medium/large) reaches the weights through a name rewrite.

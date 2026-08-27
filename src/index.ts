@@ -30,6 +30,7 @@ export { backend, callback, cstring, open, ptr, view } from "./ffi/index.ts";
 export { metalKernel, scalarI32 } from "./ffi/kernel.ts";
 export { LIB_CANDIDATES, LIBMLXC } from "./ffi/native-lib.ts";
 export type { Backend, Callback, CType, SymbolSpec, SymbolTable } from "./ffi/types.ts";
+export { CLIP_MEAN, CLIP_STD, type LoadImageOptions, loadImage } from "./image/load.ts";
 export { savePng } from "./image/png.ts";
 export { cacheDir, type FetchOptions, hubFile, isCached } from "./io/hub.ts";
 // --- weights -------------------------------------------------------------
@@ -38,6 +39,7 @@ export {entries, freeMap,
   loadSafetensors, shapeOf, shardedWeights, singleFileWeights, type WeightMap,type Weights, 
 } from "./io/loader.ts";
 export { type ClipConfig, ClipTextEncoder } from "./models/clip.ts";
+export { type ClipVisionConfig, ClipVisionEncoder } from "./models/clip-vision.ts";
 // Stable Diffusion: prompt -> image. The pieces are exported too, so a caller
 // can drive the loop themselves.
 export { type DiffusionConfig, EulerSampler } from "./models/diffusion.ts";

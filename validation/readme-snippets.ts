@@ -11,7 +11,9 @@ import {
   Adam, crossEntropy, decodeAudio, fromI32, load, loadMelFilters, loadWhisper,
   metalKernel, MusicGen, saveAudio, scalarI32, seed, streamText, tidy,
   valueAndGrad, WhisperTokenizer, Qwen3, Tokenizer, loadSafetensors, type MX, type Tree,
+  StableDiffusion, savePng, ClipVisionEncoder, loadImage, fromF32,
 } from "../src/index.ts";
+import type { Weights } from "../src/io/loader.ts";
 
 export async function chat() {
   const { model, tokenizer } = await load("mlx-community/Qwen3-0.6B-4bit");
@@ -56,6 +58,19 @@ export function train(params: Tree, X: MX, Y: MX, STEPS: number) {
     params = next;
   }
   return params;
+}
+
+export async function image() {
+  const sd = await StableDiffusion.fromPretrained();
+  const img = sd.generate("a photo of an astronaut riding a horse", {
+    width: 384, height: 384, steps: 20, seed: 42,
+  });
+  await savePng("out.png", img.toF32(), 384, 384);
+}
+
+export async function zeroShot(vision: ClipVisionEncoder, W: Weights) {
+  const px = await loadImage("photo.jpg", { size: 224 });
+  return vision.embed(fromF32(px, [1, 224, 224, 3]), W.mx("visual_projection.weight"));
 }
 
 export function kernel(x: MX, hIn: MX, cell: MX, H: number, B: number, T: number) {

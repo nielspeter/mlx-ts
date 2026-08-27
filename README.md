@@ -11,8 +11,8 @@
 A TypeScript MLX SDK over **`mlx-c`** (Apple's official C API) via FFI, with
 **zero custom C/C++** and no build step — running on **Bun, Deno and Node**, and
 **numerically identical** to MLX's Python reference (`scripts/validate-all.sh`:
-**71/71**, of which 5 Stable Diffusion checks are opt-in via `MLXTS_SD=1` and
-9 Spark-TTS checks via `MLXTS_TTS=1`).
+**67/67**, of which 5 Stable Diffusion checks are opt-in via `MLXTS_SD=1` and
+5 Spark-TTS checks via `MLXTS_TTS=1`).
 Test coverage over `src/` is measured and gated at **67% of functions / 74% of
 lines**.
 
@@ -631,7 +631,9 @@ temperature, top-p, **top-k**, and **repetition penalty**
   ids. Checked against the **original PyTorch Spark-TTS**, not against another
   port: all 32 ids match on synthetic and on real audio. That mattered — the
   mlx-audio port left-aligns a short STFT window where `torch.stft` centres it,
-  which silently moved 12 of the 32 ids until it was caught. Cloning is also
+  which silently moved 12 of the 32 ids until it was caught. Those reference
+  numbers are committed (`validation/spark-golden.json`), so the checks run with
+  nothing installed beyond mlx-ts itself. Cloning is also
   checked end to end with no Python: `validation/spark-clone.ts` clones a voice
   and scores it with ECAPA's x-vector, a different head from the one the tokens
   come from (~0.95 against a ~0.38 floor for an unrelated voice).

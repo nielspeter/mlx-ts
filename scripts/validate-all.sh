@@ -199,95 +199,53 @@ fi
 #
 #   MLXTS_TTS=1 bash scripts/validate-all.sh
 #
-# Gated for the same reason as the SD block: the oracle and our side each load
-# the 0.5B LM plus BiCodec, and the roundtrip adds Whisper on top.
+# Gated for memory, not for tooling: these load a 0.5B LM plus BiCodec, and the
+# roundtrip adds Whisper on top. Nothing here needs Python.
 #
-# Every oracle here is the ORIGINAL PyTorch Spark-TTS, not another MLX port.
-# Comparing two ports can only show they agree — and the port used first
-# (mlx-audio) turned out to be wrong three times over: a left-aligned STFT window
-# where torch.stft centres it, `groups` passed positionally into
+# The reference numbers live in validation/spark-golden.json, generated once from
+# the ORIGINAL PyTorch Spark-TTS by reference/gen-spark-fixtures.py and committed.
+# Not from another MLX port: comparing two ports can only show they agree, and
+# the port used first turned out to be wrong three times over — a left-aligned
+# STFT window where torch.stft centres it, `groups` passed positionally into
 # conv_transpose1d's `output_padding` slot, and never leaving training mode. The
-# first two changed our numbers; the third makes its own cloning path throw.
+# first two changed our numbers.
 #
-# Setup is documented in the header of reference/reference-speaker.py.
-if [ "${MLXTS_TTS:-0}" = "1" ] && [ -x /tmp/sdvenv/bin/python ] \
-   && /tmp/sdvenv/bin/python -c "import torch, transformers" >/dev/null 2>&1 \
-   && [ -d "${MLX_SPARK:-/tmp/sparktts}/sparktts" ]; then
-  export MLX_SPARK="${MLX_SPARK:-/tmp/sparktts}"
-  # BiCodec's decode path: quantizer -> speaker FSQ -> prenet -> wave generator.
-  # All four stages now, waveform included — the reference emits 5120 samples,
-  # the same as us. Compared on mean and absmean, which are layout-invariant:
-  # our tensors are channels-last where PyTorch's are channels-first, so first4
-  # differs by layout on the 3-D ones.
-  /tmp/sdvenv/bin/python reference/reference-bicodec.py >/tmp/v_bic_p.txt 2>&1
-  bun validation/bicodec-decode.ts >/tmp/v_bic_t.txt 2>&1
-  bicvals(){ grep -E "^(z_q|d_vector|prenet|wav)" | grep -oE "(absmean|mean)=-?[0-9]+\.[0-9]{6}" | tr "\n" " "; }
-  cmp_pair "BiCodec decode vs PyTorch Spark-TTS (4 stages)" /tmp/v_bic_t.txt /tmp/v_bic_p.txt bicvals
-  # The waveform flattens the same either way ([1,N,1] vs [1,1,N]), so these are
-  # the samples themselves, not a summary of them.
-  wavhead(){ grep -E "^wav" | grep -oE "first4=\[[^]]*\]"; }
-  cmp_pair "BiCodec waveform samples vs PyTorch" /tmp/v_bic_t.txt /tmp/v_bic_p.txt wavhead
-
-  # The prompt and the LM, both at float32, which makes this an exact check
-  # rather than a ranking one. In bf16 it could only ever be the latter: the
-  # model carries outlier channels in the thousands that cancel in the last
-  # layer, so one ulp at layer 9 becomes a percent at the logits — PyTorch's own
-  # bf16 diverges from its float32 after 5 greedy tokens.
-  /tmp/sdvenv/bin/python reference/reference-spark.py >/tmp/v_lm_p.txt 2>&1
-  bun validation/spark-lm.ts >/tmp/v_lm_t.txt 2>&1
-  promptids(){ grep "^prompt ids:" | grep -oE "[0-9]+" | tr "\n" " "; }
-  cmp_pair "Spark-TTS prompt ids vs PyTorch" /tmp/v_lm_t.txt /tmp/v_lm_p.txt promptids
-  # NOT named genids: that is a global helper defined at the top of this script
-  # and used by the Qwen3 checks below, and a redefinition here silently breaks
-  # them — which is exactly what happened.
-  sparkgen(){ grep "^gen ids:" | grep -oE "[0-9]+" | tr "\n" " "; }
-  cmp_pair "Spark-TTS greedy ids vs PyTorch (16 tokens)" /tmp/v_lm_t.txt /tmp/v_lm_p.txt sparkgen
-  top5ids(){ grep "^top5:" | grep -oE "(1[0-9]{5}|[0-9]{1,5})," | tr "\n" " "; }
-  cmp_pair "Spark-TTS logit ranking vs PyTorch" /tmp/v_lm_t.txt /tmp/v_lm_p.txt top5ids
-
-  # The speaker encoder: mel -> ECAPA -> perceiver -> FSQ -> 32 tokens.
-  #
-  # Checked against the ORIGINAL PyTorch Spark-TTS rather than mlx-audio, which
-  # is wrong on the mel (it left-aligns a short window inside n_fft where
-  # torch.stft centres it) and never leaves training mode. See the header of
-  # reference-speaker.py for both, and for the one-off setup this needs. Skipped
-  # rather than failed when that setup is absent.
-  if /tmp/sdvenv/bin/python -c "import torchaudio, einx" >/dev/null 2>&1; then
-    /tmp/sdvenv/bin/python reference/reference-speaker.py >/tmp/v_spk_p.txt 2>&1
-    bun validation/speaker-encode.ts >/tmp/v_spk_t.txt 2>&1
-    spkvals(){ grep -oE "(absmean|mean)=-?[0-9]+\.[0-9]{4}"; }
-    cmp_pair "speaker encoder vs PyTorch Spark-TTS (4 stages)" /tmp/v_spk_t.txt /tmp/v_spk_p.txt spkvals
-    spktok(){ grep "^tokens:" | grep -oE "[0-9]+" | tr "\n" " "; }
-    cmp_pair "speaker tokens vs PyTorch Spark-TTS (32 ids)" /tmp/v_spk_t.txt /tmp/v_spk_p.txt spktok
-  else
-    echo "  ⏭  speaker encoder parity: needs torch + the Spark-TTS modules"
-    echo "     (see reference/reference-speaker.py). Cloning is still checked below."
-  fi
-
-  # Clone a voice and check it *is* that voice. Judged by ECAPA's x-vector, which
-  # is a different head from the perceiver/FSQ path the tokens come from, so this
-  # is not circular. No Python.
-  if bun validation/spark-clone.ts >/tmp/v_clone.txt 2>&1 && grep -q "clone: ok" /tmp/v_clone.txt; then
-    ok "voice cloning ($(grep -oE "similarity to the reference: [0-9.]+" /tmp/v_clone.txt | grep -oE "[0-9.]+$") vs $(grep -oE "similarity to another voice: [0-9.]+" /tmp/v_clone.txt | grep -oE "[0-9.]+$") floor)"
-  else
-    no "voice cloning" "$(grep -E "similarity|heard" /tmp/v_clone.txt | tr '\n' ' ')"
-  fi
+# Freezing them rather than running an oracle live is deliberate. The Spark-TTS
+# package is not on PyPI, so a live oracle would need torch, torchaudio,
+# transformers and a source fetch that can rot — and would therefore skip for
+# almost everyone. An oracle nobody can run is an oracle that never runs.
+if [ "${MLXTS_TTS:-0}" = "1" ]; then
+  for spec in "bicodec-decode:BiCodec decode (4 stages)" \
+              "speaker-encode:speaker encoder (mel, ECAPA, perceiver, 32 tokens)" \
+              "spark-lm:Spark-TTS prompt and LM at float32"; do
+    f="${spec%%:*}"; label="${spec#*:}"
+    if bun "validation/$f.ts" >"/tmp/v_$f.txt" 2>&1 && grep -q ": ok$" "/tmp/v_$f.txt"; then
+      ok "$label vs PyTorch Spark-TTS"
+    else
+      no "$label" "$(grep -E "FAIL|MISMATCH|Error" "/tmp/v_$f.txt" | head -2 | tr '\n' ' ')"
+    fi
+  done
 
   # Speak a sentence and transcribe it back. Nothing else in the suite says the
-  # output is *speech*: every stage can match its oracle and still produce noise
-  # if the stages are joined wrong. No Python involved.
+  # output is *speech*: every stage can match its reference and the result still
+  # be noise if the stages are joined wrong.
   if bun validation/spark-roundtrip.ts >/tmp/v_rt.txt 2>&1 && grep -q "roundtrip: ok" /tmp/v_rt.txt; then
     ok "Spark-TTS speaks and Whisper reads it back ($(grep -oE "^spoke [0-9.]+s" /tmp/v_rt.txt))"
   else
     no "Spark-TTS roundtrip" "$(grep -E "^heard:" /tmp/v_rt.txt | head -1)"
   fi
-elif [ "${MLXTS_TTS:-0}" = "1" ]; then
-  echo "  ⏭  Spark-TTS checks: MLXTS_TTS=1 set but the PyTorch oracle is missing —"
-  echo "     see the header of reference/reference-speaker.py for the setup"
+
+  # Clone a voice and check it *is* that voice, scored with ECAPA's x-vector —
+  # a different head from the perceiver/FSQ path the tokens come from, so this
+  # is not circular.
+  if bun validation/spark-clone.ts >/tmp/v_clone.txt 2>&1 && grep -q "clone: ok" /tmp/v_clone.txt; then
+    ok "voice cloning ($(grep -oE "similarity to the reference: [0-9.]+" /tmp/v_clone.txt | grep -oE "[0-9.]+$") vs $(grep -oE "similarity to another voice: [0-9.]+" /tmp/v_clone.txt | grep -oE "[0-9.]+$") floor)"
+  else
+    no "voice cloning" "$(grep -E "similarity|heard" /tmp/v_clone.txt | tr '\n' ' ')"
+  fi
 else
   echo "  ⏭  Spark-TTS checks skipped (BiCodec, speaker encoder, prompt/LM,"
-  echo "     speech roundtrip, voice cloning)."
-  echo "     They load the LM and BiCodec twice, plus Whisper; run with MLXTS_TTS=1."
+  echo "     speech roundtrip, voice cloning). Run them with MLXTS_TTS=1."
 fi
 
 # The MLX repo layout (medium/large) reaches the weights through a name rewrite.

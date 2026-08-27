@@ -49,6 +49,7 @@ export { OLMoE } from "./models/olmoe.ts";
 // gave consumers a signature they could not satisfy.
 export { generateBatch, Qwen3, stepTidy } from "./models/qwen-nn.ts";
 export { type T5Config, T5Encoder } from "./models/t5.ts";
+export { upsampleNearest, type VaeConfig, VaeDecoder } from "./models/vae.ts";
 // --- models --------------------------------------------------------------
 // Assembled models that are importable as modules. qwen.ts and gpt2.ts are
 // absent because they are CLI scripts, not modules: they build a model with
@@ -59,11 +60,11 @@ export { loadWhisper, Whisper } from "./models/whisper.ts";
 export { valueAndGrad } from "./nn/autograd.ts";
 export { crossEntropy, maskedCrossEntropy } from "./nn/loss.ts";
 // --- modules, optimizers, losses ----------------------------------------
-export {Embedding, type Experts,Linear, 
+export {Embedding, type Experts,
+  GroupNorm,Linear, 
   LoraDelta, 
   Module,
   MoE, QuantizedEmbedding,QuantizedLinear, RMSNorm, 
-  GroupNorm,
 } from "./nn/nn.ts";
 export { Adam } from "./nn/optim.ts";
 export { ChatTemplate, type Message } from "./text/chat-template.ts";

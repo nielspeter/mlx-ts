@@ -141,6 +141,7 @@ export class MX {
 
   // shape
   reshape(sh: number[]) { return this.r(m.mlx_reshape, this.h, ptr(new Int32Array(sh)), BigInt(sh.length), stream); }
+  broadcastTo(sh: number[]) { return this.r(m.mlx_broadcast_to, this.h, ptr(new Int32Array(sh)), BigInt(sh.length), stream); }
   transpose(ax: number[]) { return this.r(m.mlx_transpose_axes, this.h, ptr(new Int32Array(ax)), BigInt(ax.length), stream); }
   // slice [start, stop) along leading axes (stride 1) — e.g. split a fused QKV weight
   slice(start: number[], stop: number[]) {

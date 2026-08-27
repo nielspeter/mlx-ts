@@ -110,6 +110,25 @@ bun validation/groupnorm.ts >/tmp/v_gn_t.txt 2>&1
 gnvals(){ grep -oE "sum=-?[0-9]+\.[0-9]{4}|first4=\[[^]]*\]"; }
 cmp_pair "GroupNorm vs MLX Python" /tmp/v_gn_t.txt /tmp/v_gn_p.txt gnvals
 
+# The VAE decoder against mlx-examples' own Stable Diffusion port. Both sides
+# load stabilityai/sd-vae-ft-mse, so a difference is our decoder, not the
+# checkpoint. Needs their package and an MLX python; setup is:
+#
+#   python3 -m venv /tmp/sdvenv
+#   /tmp/sdvenv/bin/pip install mlx huggingface_hub httpx safetensors numpy regex
+#   mkdir -p /tmp/mlxsd_pkg/stable_diffusion && cd /tmp/mlxsd_pkg/stable_diffusion
+#   for f in vae unet config model_io __init__ tokenizer clip sampler; do curl -sLO \
+#     "https://raw.githubusercontent.com/ml-explore/mlx-examples/main/stable_diffusion/stable_diffusion/$f.py"; done
+#
+# Compared on mean and the first few pixels, not the total: summing 49k floats
+# is order-dependent and the two land 0.036 apart out of -4788.
+if [ -x /tmp/sdvenv/bin/python ] && [ -d "${MLX_SD:-/tmp/mlxsd_pkg}/stable_diffusion" ]; then
+  MLX_SD="${MLX_SD:-/tmp/mlxsd_pkg}" /tmp/sdvenv/bin/python reference/reference-vae.py >/tmp/v_vae_p.txt 2>&1
+  bun validation/vae-decode.ts >/tmp/v_vae_t.txt 2>&1
+  vaevals(){ grep -oE "shape=\[[^]]*\]|mean=-?[0-9]+\.[0-9]{5}|first4=\[[^]]*\]"; }
+  cmp_pair "VAE decoder vs mlx-examples" /tmp/v_vae_t.txt /tmp/v_vae_p.txt vaevals
+fi
+
 # The MLX repo layout (medium/large) reaches the weights through a name rewrite.
 # Headers only — no weights downloaded — so this is cheap enough to always run.
 if bun validation/musicgen-mlx-layout.ts >/tmp/v_mgl.txt 2>&1 && grep -q "verdict : OK" /tmp/v_mgl.txt; then

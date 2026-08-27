@@ -3,6 +3,7 @@
 //   bun examples/musicgen.ts "trance"
 //   bun examples/musicgen.ts "happy rock" --seconds 10 --out rock.wav
 //   bun examples/musicgen.ts "trance" --model jasonvassallo/mlx-musicgen-medium
+//   bun examples/musicgen.ts "trance" --seed 1234        # reproducible take
 //
 // First run downloads ~2.6 GB (the model, plus EnCodec's decoder) into
 // ~/.cache/mlx-ts. Every run after that is local.
@@ -17,7 +18,7 @@
 // EnCodec codebooks under a delay pattern, guided by the gap between its
 // conditional and unconditional predictions. EnCodec turns those codes back
 // into a waveform.
-import { MusicGen, saveAudio } from "../src/index.ts";
+import { MusicGen, saveAudio, seed } from "../src/index.ts";
 
 const argv = process.argv.slice(2);
 const flag = (name: string, dflt: number) => {
@@ -31,8 +32,14 @@ const str = (name: string, dflt: string) => {
 const prompt = argv.filter((a, i) => !a.startsWith("--") && !(i > 0 && argv[i - 1].startsWith("--"))).join(" ") || "trance";
 const seconds = flag("seconds", 5);
 const out = str("out", "out.wav");
+// Sampling draws from MLX's RNG, so seeding it makes a prompt reproduce its
+// take exactly — the difference between "that one was good" and "that one is
+// gone". Unseeded runs stay random.
+const seedArg = argv.includes("--seed") ? flag("seed", 0) : null;
 
-console.log(`prompt: ${JSON.stringify(prompt)}  (${seconds}s)`);
+console.log(`prompt: ${JSON.stringify(prompt)}  (${seconds}s)` +
+            (seedArg === null ? "" : `  seed ${seedArg}`));
+if (seedArg !== null) seed(seedArg);
 const t0 = performance.now();
 const model = await MusicGen.fromPretrained(str("model", "facebook/musicgen-small"));
 console.log(`loaded in ${((performance.now() - t0) / 1000).toFixed(1)}s\n`);

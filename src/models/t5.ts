@@ -6,7 +6,7 @@
 //   - NO 1/sqrt(head_dim) attention scaling. T5 folds it into the weights.
 //   - Relative position bias instead of positional embeddings: a [buckets,
 //     heads] table on block 0 only, added to the scores of EVERY layer.
-import { fromI32, type MX, tidy } from "../core/mx.ts";
+import { escape, fromI32, type MX, tidy } from "../core/mx.ts";
 import type { Weights } from "../io/loader.ts";
 
 export type T5Config = {
@@ -89,7 +89,13 @@ export class T5Encoder {
 
   private _zero: MX | null = null;
   private zero(): MX {
-    if (!this._zero) this._zero = fromI32(Int32Array.from([0]), [1]).astype(10);
+    // escape()d because it is cached on the instance and so must outlive the
+    // tidy() that happens to create it. Without that, encode()'s own arena
+    // frees it at scope exit while this field still points at the handle, and
+    // the next generate() reads freed memory — "expected a non-empty
+    // mlx_array". Same defect as FINDINGS §6.6, one level less obvious: the
+    // value is created lazily, so the first call always works.
+    if (!this._zero) this._zero = escape(fromI32(Int32Array.from([0]), [1]).astype(10));
     return this._zero;
   }
 }

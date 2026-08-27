@@ -274,6 +274,20 @@ export class MusicGen {
   private generateInner(text: string, maxSteps: number, topK: number, temp: number,
                         guidance: number, onStep: GenerateOptions["onStep"]): MX {
     const K = this.lm.cfg.num_codebooks;
+
+    // The delay pattern eats K frames, and EnCodec's decoder needs a few more
+    // than that: its conv stack cannot run on an input shorter than the kernel
+    // is wide. Below this it dies inside MLX with "[conv] Spatial dimensions of
+    // input after padding cannot be smaller than weight spatial dimensions",
+    // which tells a caller nothing. Measured: K + 3 is the shortest that
+    // decodes.
+    if (maxSteps < K + 3) {
+      throw new Error(
+        `maxSteps must be at least ${K + 3} (got ${maxSteps}): the delay pattern ` +
+        `consumes ${K} frames and EnCodec cannot decode what is left. ` +
+        `That is ${((K + 3) / 50).toFixed(2)}s of audio — use --seconds instead.`,
+      );
+    }
     const BOS = this.lm.cfg.bos_token_id;
     const V = this.lm.cfg.vocab_size;
 

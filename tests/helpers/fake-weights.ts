@@ -18,6 +18,10 @@ export function detTensor(name: string, shape: number[]): MX {
   const n = shape.reduce((a, b) => a * b, 1);
   const data = new Float32Array(n);
   for (let i = 0; i < n; i++) data[i] = ((i * 131 + seed * 977 + 7) % 1009) / 1009 - 0.5;
+  // A variance is never negative, and BatchNorm divides by its square root — so
+  // a fixture that hands one out is not a checkpoint the model could ever load,
+  // it is a NaN generator. Keep the values deterministic but positive.
+  if (name.endsWith("running_var")) for (let i = 0; i < n; i++) data[i] = Math.abs(data[i]) + 0.05;
   return fromF32(data, shape);
 }
 

@@ -202,6 +202,10 @@ export class MX {
   square() {
     return this.r(m.mlx_square, this.h, stream);
   }
+  /** Elementwise max against a scalar — ReLU is `x.maximum(0)`. */
+  maximum(v: number) {
+    return this.r(m.mlx_maximum, this.h, scalar(v).h, stream);
+  }
   meanAll() {
     const n = this.size;
     return this.sumAxes(

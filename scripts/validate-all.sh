@@ -223,12 +223,36 @@ if [ "${MLXTS_TTS:-0}" = "1" ] && [ -x /tmp/sdvenv/bin/python ] \
   # a top-5 ordering rather than by value: the checkpoint is bf16, one ulp at
   # layer 9 is amplified by cancellation in layer 23 (+3700 -> -800), and greedy
   # ids then diverge at the first exact bf16 tie between two audio tokens.
-  /tmp/sdvenv/bin/python reference/reference-spark.py >/tmp/v_spk_p.txt 2>&1
-  bun validation/spark-lm.ts >/tmp/v_spk_t.txt 2>&1
+  /tmp/sdvenv/bin/python reference/reference-spark.py >/tmp/v_lm_p.txt 2>&1
+  bun validation/spark-lm.ts >/tmp/v_lm_t.txt 2>&1
   promptids(){ grep "^prompt ids:" | grep -oE "[0-9]+" | tr "\n" " "; }
-  cmp_pair "Spark-TTS prompt ids vs mlx-audio" /tmp/v_spk_t.txt /tmp/v_spk_p.txt promptids
+  cmp_pair "Spark-TTS prompt ids vs mlx-audio" /tmp/v_lm_t.txt /tmp/v_lm_p.txt promptids
   top5(){ grep "^top5:" | grep -oE "(1[0-9]{5}|[0-9]{1,5})," | tr "\n" " "; }
-  cmp_pair "Spark-TTS logit ranking vs mlx-audio" /tmp/v_spk_t.txt /tmp/v_spk_p.txt top5
+  cmp_pair "Spark-TTS logit ranking vs mlx-audio" /tmp/v_lm_t.txt /tmp/v_lm_p.txt top5
+
+  # The speaker encoder: mel -> ECAPA -> perceiver -> FSQ -> 32 tokens. The token
+  # ids must match exactly; the tensors in between are compared on mean/absmean,
+  # which are layout-invariant (ours are channels-last, mlx-audio's are
+  # channels-first).
+  #
+  # The oracle needs model.train(False) — mlx-audio never leaves training mode,
+  # so ECAPA's BatchNorms try to compute batch statistics from one utterance and
+  # throw. Its cloning path does not run as shipped.
+  /tmp/sdvenv/bin/python reference/reference-speaker.py >/tmp/v_spk_p.txt 2>&1
+  bun validation/speaker-encode.ts >/tmp/v_spk_t.txt 2>&1
+  spkvals(){ grep -oE "(absmean|mean)=-?[0-9]+\.[0-9]{4}"; }
+  cmp_pair "speaker encoder vs mlx-audio (4 stages)" /tmp/v_spk_t.txt /tmp/v_spk_p.txt spkvals
+  spktok(){ grep "^tokens:" | grep -oE "[0-9]+" | tr "\n" " "; }
+  cmp_pair "speaker tokens vs mlx-audio (32 ids)" /tmp/v_spk_t.txt /tmp/v_spk_p.txt spktok
+
+  # Clone a voice and check it *is* that voice. Judged by ECAPA's x-vector, which
+  # is a different head from the perceiver/FSQ path the tokens come from, so this
+  # is not circular. No Python.
+  if bun validation/spark-clone.ts >/tmp/v_clone.txt 2>&1 && grep -q "clone: ok" /tmp/v_clone.txt; then
+    ok "voice cloning ($(grep -oE "similarity to the reference: [0-9.]+" /tmp/v_clone.txt | grep -oE "[0-9.]+$") vs $(grep -oE "similarity to another voice: [0-9.]+" /tmp/v_clone.txt | grep -oE "[0-9.]+$") floor)"
+  else
+    no "voice cloning" "$(grep -E "similarity|heard" /tmp/v_clone.txt | tr '\n' ' ')"
+  fi
 
   # Speak a sentence and transcribe it back. Nothing else in the suite says the
   # output is *speech*: every stage can match its oracle and still produce noise
@@ -242,7 +266,8 @@ elif [ "${MLXTS_TTS:-0}" = "1" ]; then
   echo "  ⏭  Spark-TTS checks: MLXTS_TTS=1 set but mlx-audio is missing —"
   echo "     /tmp/sdvenv/bin/pip install mlx-audio tokenizers"
 else
-  echo "  ⏭  Spark-TTS checks skipped (BiCodec, prompt/LM, speech roundtrip)."
+  echo "  ⏭  Spark-TTS checks skipped (BiCodec, speaker encoder, prompt/LM,"
+  echo "     speech roundtrip, voice cloning)."
   echo "     They load the LM and BiCodec twice, plus Whisper; run with MLXTS_TTS=1."
 fi
 

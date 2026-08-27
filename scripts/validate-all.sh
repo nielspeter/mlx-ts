@@ -86,6 +86,17 @@ if bun -e 'import {isCached} from "./src/io/hub.ts"; process.exit(await isCached
                  *) no "hub load()" "$OUT" ;; esac
 fi
 
+# The Qwen2 backbone against mlx-lm, on Spark-TTS's own prompt format. Compared
+# as token ids, not text: a tokenizer disagreement would otherwise hide behind
+# matching words. A plain sentence makes this checkpoint repeat one token
+# forever, and two implementations agreeing on a constant proves nothing.
+if [ -f "$HOME/.cache/mlx-ts/mlx-community/Spark-TTS-0.5B-bf16/model.safetensors" ] \
+   && [ -x /tmp/sdvenv/bin/python ]; then
+  /tmp/sdvenv/bin/python reference/reference-qwen2.py >/tmp/v_q2_p.txt 2>&1
+  bun validation/qwen2-generate.ts >/tmp/v_q2_t.txt 2>&1
+  cmp_pair "Qwen2 backbone vs mlx-lm" /tmp/v_q2_t.txt /tmp/v_q2_p.txt genids
+fi
+
 # conv2d / convTranspose2d — the primitives a UNet and a VAE are built from.
 # Pinned before anything is built on them: a quiet layout or padding mismatch
 # here surfaces as a subtly wrong image fifty diffusion steps later.
@@ -182,6 +193,57 @@ elif [ "${MLXTS_SD:-0}" = "1" ]; then
 else
   echo "  ⏭  Stable Diffusion checks skipped (VAE, CLIP x2, UNet, scheduler)."
   echo "     They load the 3.2 GB UNet twice; run them with MLXTS_SD=1."
+fi
+
+# ---- Spark-TTS checks: opt-in with MLXTS_TTS=1 -------------------------------
+#
+#   MLXTS_TTS=1 bash scripts/validate-all.sh
+#
+# Gated for the same reason as the SD block: the oracle and our side each load
+# the 0.5B LM plus BiCodec, and the roundtrip adds Whisper on top.
+#
+# The oracle needs mlx-audio in the same venv:
+#   /tmp/sdvenv/bin/pip install mlx-audio tokenizers
+if [ "${MLXTS_TTS:-0}" = "1" ] && [ -x /tmp/sdvenv/bin/python ] \
+   && /tmp/sdvenv/bin/python -c "import mlx_audio" >/dev/null 2>&1; then
+  # BiCodec's decode path: quantizer -> speaker FSQ -> prenet -> wave generator.
+  # Compared on mean and absmean, which are layout-invariant: our tensors are
+  # channels-last where mlx-audio's are channels-first, so first4 differs by
+  # layout alone. The waveform length differs too, and that one is theirs:
+  # WNConvTranspose1d passes `groups` positionally into conv_transpose1d's
+  # output_padding slot, so every stage emits one extra sample (5171 for 16
+  # frames rather than 320*16 = 5120). We follow PyTorch, which is what the
+  # checkpoint was trained as.
+  /tmp/sdvenv/bin/python reference/reference-bicodec.py >/tmp/v_bic_p.txt 2>&1
+  bun validation/bicodec-decode.ts >/tmp/v_bic_t.txt 2>&1
+  bicvals(){ grep -E "^(z_q|d_vector|prenet)" | grep -oE "(absmean|mean)=-?[0-9]+\.[0-9]{6}" | tr "\n" " "; }
+  cmp_pair "BiCodec decode vs mlx-audio (3 stages)" /tmp/v_bic_t.txt /tmp/v_bic_p.txt bicvals
+
+  # The prompt and the LM. Prompt ids must match exactly. Logits are compared as
+  # a top-5 ordering rather than by value: the checkpoint is bf16, one ulp at
+  # layer 9 is amplified by cancellation in layer 23 (+3700 -> -800), and greedy
+  # ids then diverge at the first exact bf16 tie between two audio tokens.
+  /tmp/sdvenv/bin/python reference/reference-spark.py >/tmp/v_spk_p.txt 2>&1
+  bun validation/spark-lm.ts >/tmp/v_spk_t.txt 2>&1
+  promptids(){ grep "^prompt ids:" | grep -oE "[0-9]+" | tr "\n" " "; }
+  cmp_pair "Spark-TTS prompt ids vs mlx-audio" /tmp/v_spk_t.txt /tmp/v_spk_p.txt promptids
+  top5(){ grep "^top5:" | grep -oE "(1[0-9]{5}|[0-9]{1,5})," | tr "\n" " "; }
+  cmp_pair "Spark-TTS logit ranking vs mlx-audio" /tmp/v_spk_t.txt /tmp/v_spk_p.txt top5
+
+  # Speak a sentence and transcribe it back. Nothing else in the suite says the
+  # output is *speech*: every stage can match its oracle and still produce noise
+  # if the stages are joined wrong. No Python involved.
+  if bun validation/spark-roundtrip.ts >/tmp/v_rt.txt 2>&1 && grep -q "roundtrip: ok" /tmp/v_rt.txt; then
+    ok "Spark-TTS speaks and Whisper reads it back ($(grep -oE "^spoke [0-9.]+s" /tmp/v_rt.txt))"
+  else
+    no "Spark-TTS roundtrip" "$(grep -E "^heard:" /tmp/v_rt.txt | head -1)"
+  fi
+elif [ "${MLXTS_TTS:-0}" = "1" ]; then
+  echo "  ⏭  Spark-TTS checks: MLXTS_TTS=1 set but mlx-audio is missing —"
+  echo "     /tmp/sdvenv/bin/pip install mlx-audio tokenizers"
+else
+  echo "  ⏭  Spark-TTS checks skipped (BiCodec, prompt/LM, speech roundtrip)."
+  echo "     They load the LM and BiCodec twice, plus Whisper; run with MLXTS_TTS=1."
 fi
 
 # The MLX repo layout (medium/large) reaches the weights through a name rewrite.

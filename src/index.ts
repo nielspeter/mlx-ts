@@ -4,19 +4,39 @@
 //
 //   import { MX, tidy, Tokenizer, generate } from "mlx-ts";
 
-
 // --- audio: the Whisper front-end (ffmpeg decode -> log-Mel) ----------------
-export { decodeAudio, loadMelFilters, logMel, padOrTrim, playAudio, SR  } from "./audio/mel.ts";
+export { decodeAudio, loadMelFilters, logMel, padOrTrim, playAudio, SR } from "./audio/mel.ts";
 export { saveAudio } from "./audio/wav.ts";
 // --- arrays and memory ---------------------------------------------------
 // `tidy()` is not optional on a hot path: a FinalizationRegistry only runs
 // after a GC, which never happens inside a tight synchronous decode loop.
 export {
-  activeMemoryMB, applyRepetitionPenalty, asyncEval, cacheMemoryMB, clearCache, dropout, escape,evalAll, freeAll,fromF32, fromI32, fromU32, 
-  MX, Owned, peakMemoryMB, 
-  randomNormal,resetPeakMemory,sample, 
-  saveSafetensors, scalar, seed,setCacheLimit,
-  setMemoryLimit, setWiredLimit, stack, tidy, 
+  activeMemoryMB,
+  applyRepetitionPenalty,
+  asyncEval,
+  cacheMemoryMB,
+  clearCache,
+  dropout,
+  escape,
+  evalAll,
+  freeAll,
+  fromF32,
+  fromI32,
+  fromU32,
+  MX,
+  Owned,
+  peakMemoryMB,
+  randomNormal,
+  resetPeakMemory,
+  sample,
+  saveSafetensors,
+  scalar,
+  seed,
+  setCacheLimit,
+  setMemoryLimit,
+  setWiredLimit,
+  stack,
+  tidy,
 } from "./core/mx.ts";
 export { type Tree, treeFlatten, treeMap, treeUnflattenLike } from "./core/pytree.ts";
 // --- runtime / FFI -------------------------------------------------------
@@ -34,10 +54,27 @@ export { CLIP_MEAN, CLIP_STD, type LoadImageOptions, loadImage } from "./image/l
 export { savePng } from "./image/png.ts";
 export { cacheDir, type FetchOptions, hubFile, isCached } from "./io/hub.ts";
 // --- weights -------------------------------------------------------------
-export {entries, freeMap,
-  get, 
-  loadSafetensors, shapeOf, shardedWeights, singleFileWeights, type WeightMap,type Weights, 
+export {
+  entries,
+  freeMap,
+  get,
+  loadSafetensors,
+  shapeOf,
+  shardedWeights,
+  singleFileWeights,
+  type WeightMap,
+  type Weights,
 } from "./io/loader.ts";
+// BiCodec's decode path: audio tokens -> a 16 kHz waveform, the second half
+// of Spark-TTS.
+export {
+  BiCodecPrenet,
+  BiCodecQuantizer,
+  SpeakerDetokenizer,
+  WaveGenerator,
+  weightNormConv,
+  weightNormConvTranspose,
+} from "./models/bicodec.ts";
 export { type ClipConfig, ClipTextEncoder } from "./models/clip.ts";
 export { type ClipVisionConfig, ClipVisionEncoder } from "./models/clip-vision.ts";
 // Stable Diffusion: prompt -> image. The pieces are exported too, so a caller
@@ -48,7 +85,13 @@ export { type EncodecConfig, EncodecDecoder } from "./models/encodec.ts";
 // and a token.
 export { type Loaded, load } from "./models/load.ts";
 // Text -> music. T5 conditioning, a codebook LM, EnCodec back to a waveform.
-export { type GenerateOptions, type LayerKV, MusicGen, type MusicGenConfig, MusicGenLM } from "./models/musicgen.ts";
+export {
+  type GenerateOptions,
+  type LayerKV,
+  MusicGen,
+  type MusicGenConfig,
+  MusicGenLM,
+} from "./models/musicgen.ts";
 // Namespaced: its `generate`/`forward` would collide with the ones above.
 export * as nanogpt from "./models/nanogpt-model.ts";
 export { OLMoE } from "./models/olmoe.ts";
@@ -56,6 +99,17 @@ export { OLMoE } from "./models/olmoe.ts";
 // takes one as its first argument, so exporting the function without the class
 // gave consumers a signature they could not satisfy.
 export { generateBatch, Qwen3, stepTidy } from "./models/qwen-nn.ts";
+// Qwen2 / Qwen2.5 at full precision — the backbone under Spark-TTS and many others.
+export { Qwen2, type Qwen2Config } from "./models/qwen2.ts";
+// Text -> speech. A Qwen2 LM predicts audio tokens; BiCodec renders them.
+export {
+  type Gender,
+  type Level,
+  SPARK_SAMPLE_RATE,
+  SparkTTS,
+  type SpeechOptions,
+  splitAudioTokens,
+} from "./models/spark-tts.ts";
 export { type ImageOptions, StableDiffusion } from "./models/stable-diffusion.ts";
 export { type T5Config, T5Encoder } from "./models/t5.ts";
 export { timestepEmbedding, Unet, type UnetConfig } from "./models/unet.ts";
@@ -70,11 +124,17 @@ export { loadWhisper, Whisper } from "./models/whisper.ts";
 export { valueAndGrad } from "./nn/autograd.ts";
 export { crossEntropy, maskedCrossEntropy } from "./nn/loss.ts";
 // --- modules, optimizers, losses ----------------------------------------
-export {Embedding, type Experts,
-  GroupNorm,Linear, 
-  LoraDelta, 
+export {
+  Embedding,
+  type Experts,
+  GroupNorm,
+  Linear,
+  LoraDelta,
   Module,
-  MoE, QuantizedEmbedding,QuantizedLinear, RMSNorm, 
+  MoE,
+  QuantizedEmbedding,
+  QuantizedLinear,
+  RMSNorm,
 } from "./nn/nn.ts";
 export { Adam } from "./nn/optim.ts";
 export { ChatTemplate, type Message } from "./text/chat-template.ts";

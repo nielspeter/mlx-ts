@@ -11,8 +11,9 @@
 A TypeScript MLX SDK over **`mlx-c`** (Apple's official C API) via FFI, with
 **zero custom C/C++** and no build step — running on **Bun, Deno and Node**, and
 **numerically identical** to MLX's Python reference (`scripts/validate-all.sh`:
-**61/61**, of which 5 Stable Diffusion checks are opt-in via `MLXTS_SD=1`).
-Test coverage over `src/` is measured and gated at **66% of functions / 74% of
+**66/66**, of which 5 Stable Diffusion checks are opt-in via `MLXTS_SD=1` and
+4 Spark-TTS checks via `MLXTS_TTS=1`).
+Test coverage over `src/` is measured and gated at **67% of functions / 74% of
 lines**.
 
 Read `docs/FINDINGS.md` for what was proven and how. Apple Silicon + Metal only.
@@ -94,6 +95,19 @@ const img = sd.generate("a photo of an astronaut riding a horse", {
 await savePng("out.png", img.toF32(), 384, 384);
 ```
 
+**Text to speech.** Spark-TTS: a Qwen2 LM predicts audio tokens, BiCodec
+renders them. The voice is described, not cloned — no reference clip needed.
+
+```ts
+import { SPARK_SAMPLE_RATE, SparkTTS, saveAudio } from "@nielspeter/mlx-ts";
+
+const tts = await SparkTTS.fromPretrained();
+const wav = await tts.generate("MLX runs on the GPU of your Mac.", {
+  gender: "female", pitch: "moderate", speed: "moderate", seed: 42,
+});
+await saveAudio("speech.wav", wav.toF32(), SPARK_SAMPLE_RATE);   // 16 kHz
+```
+
 **Images and text in one space.** CLIP's two towers project into the same 768
 dimensions, so cosine similarity classifies without any training.
 
@@ -166,7 +180,7 @@ const [hidden, cellOut] = tidy(() => lstm.apply(
 Runnable versions live in `examples/`: `examples/chat.ts`, `examples/stream.ts`,
 `examples/musicgen.ts`, `examples/train.ts`, `examples/metal-kernel.ts`,
 `examples/hub.ts`, `examples/stable-diffusion.ts`, `examples/clip-zeroshot.ts`,
-and `examples/server.ts` — an OpenAI-compatible endpoint with
+`examples/spark-tts.ts`, and `examples/server.ts` — an OpenAI-compatible endpoint with
 a chat page and a live mic. CI runs them on Bun, Deno and Node.
 
 ## When you'd want something else
@@ -558,8 +572,8 @@ base, packed into a u64), `mlx_fast_scaled_dot_product_attention` with
 ## What you can build with it
 
 mlx-ts today is a **local runtime for text LLMs, Whisper speech-to-text,
-MusicGen text-to-music, Stable Diffusion text-to-image and CLIP image
-embeddings**, plus training (LoRA, full fine-tuning, a GRPO loss path) and
+Spark-TTS text-to-speech, MusicGen text-to-music, Stable Diffusion text-to-image
+and CLIP image embeddings**, plus training (LoRA, full fine-tuning, a GRPO loss path) and
 custom Metal kernels — Apple-Silicon-only, published as
 `@nielspeter/mlx-ts` and also runnable as scripts in this repo. The library
 under `src/` runs on Bun, Deno and Node, as do all of `examples/`; only
@@ -588,6 +602,17 @@ temperature, top-p, **top-k**, and **repetition penalty**
   kernel). LM logits match Hugging Face's own implementation. `-small` is the
   default; `jasonvassallo/mlx-musicgen-{medium,large}` are the larger sizes,
   since Facebook ships those only as PyTorch pickles.
+
+- **Text-to-speech (Spark-TTS)** — `examples/spark-tts.ts`: a sentence in, a
+  `.wav` out, no phonemizer and no `espeak-ng`. A **Qwen2-0.5B** LM
+  (`src/models/qwen2.ts`) predicts audio tokens out of a 166k vocabulary, and
+  **BiCodec** (`src/models/bicodec.ts`) renders them: a codebook quantizer, an
+  FSQ speaker decoder, a 12-layer Vocos prenet conditioned on the speaker
+  through AdaLayerNorm, and a Snake-activation wave generator that upsamples
+  320x to 16 kHz. The voice is *described* — gender, pitch, speed — rather than
+  cloned. Verified two ways: stage by stage against mlx-audio, and end to end by
+  speaking a sentence and transcribing it back with our own Whisper
+  (`validation/spark-roundtrip.ts`). ~2x realtime on an M-series Mac.
 
 - **Multilingual chat** — the server injects a system prompt so replies come back
   in the user's language (Danish in → Danish out).
@@ -689,13 +714,10 @@ bun src/models/gpt2.ts "The capital of France is"   # greedy; TEMP/TOP_K/TOP_P/R
   current mean-pooled base-LLM vectors.
 
 ### ❌ Not yet (substantial new code or a real gap)
-- **Text-to-speech** — **de-risked, not built**: the novel vocoder step (iSTFT,
-  spectrum → audio) runs in mlx-c/TS, matching mlx-audio to 1.2e-7
-  (`spikes/spike-istft.ts`). A full talking pipeline needs the rest of a vocoder
-  (conv/norm variants — portable) plus a non-MLX grapheme→phoneme step
-  (`espeak-ng`). Scoped as product work — see `docs/FINDINGS.md` §7c. An
-  LLM-based TTS avoids that step entirely by emitting audio codec tokens
-  straight from text, which is the shape MusicGen already proves out.
+- **Voice cloning** — text-to-speech itself ships (see above), but only the
+  *decode* half of BiCodec. Cloning a voice from a reference clip needs its
+  encoder: a mel front end, an ECAPA speaker encoder and a perceiver sampler,
+  some 400 tensors that generation never touches.
 - **Cross-platform** — Apple-Silicon + Metal only (no Linux/CUDA, Windows,
   Intel). Runtime portability is done: see "Runtimes" above.
 - **Multimodal LLMs** (LLaVA and friends) — the vision half exists now

@@ -28,6 +28,7 @@ export {
   dropout,
   escape,
   evalAll,
+  FLOAT32,
   freeAll,
   fromF32,
   fromI32,
@@ -71,6 +72,7 @@ export {
   shapeOf,
   shardedWeights,
   singleFileWeights,
+  upcastWeights,
   type WeightMap,
   type Weights,
 } from "./io/loader.ts";

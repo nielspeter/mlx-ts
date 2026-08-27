@@ -11,8 +11,8 @@
 A TypeScript MLX SDK over **`mlx-c`** (Apple's official C API) via FFI, with
 **zero custom C/C++** and no build step — running on **Bun, Deno and Node**, and
 **numerically identical** to MLX's Python reference (`scripts/validate-all.sh`:
-**69/69**, of which 5 Stable Diffusion checks are opt-in via `MLXTS_SD=1` and
-7 Spark-TTS checks via `MLXTS_TTS=1`).
+**71/71**, of which 5 Stable Diffusion checks are opt-in via `MLXTS_SD=1` and
+9 Spark-TTS checks via `MLXTS_TTS=1`).
 Test coverage over `src/` is measured and gated at **67% of functions / 74% of
 lines**.
 

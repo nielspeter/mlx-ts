@@ -202,33 +202,48 @@ fi
 # Gated for the same reason as the SD block: the oracle and our side each load
 # the 0.5B LM plus BiCodec, and the roundtrip adds Whisper on top.
 #
-# The oracle needs mlx-audio in the same venv:
-#   /tmp/sdvenv/bin/pip install mlx-audio tokenizers
+# Every oracle here is the ORIGINAL PyTorch Spark-TTS, not another MLX port.
+# Comparing two ports can only show they agree — and the port used first
+# (mlx-audio) turned out to be wrong three times over: a left-aligned STFT window
+# where torch.stft centres it, `groups` passed positionally into
+# conv_transpose1d's `output_padding` slot, and never leaving training mode. The
+# first two changed our numbers; the third makes its own cloning path throw.
+#
+# Setup is documented in the header of reference/reference-speaker.py.
 if [ "${MLXTS_TTS:-0}" = "1" ] && [ -x /tmp/sdvenv/bin/python ] \
-   && /tmp/sdvenv/bin/python -c "import mlx_audio" >/dev/null 2>&1; then
+   && /tmp/sdvenv/bin/python -c "import torch, transformers" >/dev/null 2>&1 \
+   && [ -d "${MLX_SPARK:-/tmp/sparktts}/sparktts" ]; then
+  export MLX_SPARK="${MLX_SPARK:-/tmp/sparktts}"
   # BiCodec's decode path: quantizer -> speaker FSQ -> prenet -> wave generator.
-  # Compared on mean and absmean, which are layout-invariant: our tensors are
-  # channels-last where mlx-audio's are channels-first, so first4 differs by
-  # layout alone. The waveform length differs too, and that one is theirs:
-  # WNConvTranspose1d passes `groups` positionally into conv_transpose1d's
-  # output_padding slot, so every stage emits one extra sample (5171 for 16
-  # frames rather than 320*16 = 5120). We follow PyTorch, which is what the
-  # checkpoint was trained as.
+  # All four stages now, waveform included — the reference emits 5120 samples,
+  # the same as us. Compared on mean and absmean, which are layout-invariant:
+  # our tensors are channels-last where PyTorch's are channels-first, so first4
+  # differs by layout on the 3-D ones.
   /tmp/sdvenv/bin/python reference/reference-bicodec.py >/tmp/v_bic_p.txt 2>&1
   bun validation/bicodec-decode.ts >/tmp/v_bic_t.txt 2>&1
-  bicvals(){ grep -E "^(z_q|d_vector|prenet)" | grep -oE "(absmean|mean)=-?[0-9]+\.[0-9]{6}" | tr "\n" " "; }
-  cmp_pair "BiCodec decode vs mlx-audio (3 stages)" /tmp/v_bic_t.txt /tmp/v_bic_p.txt bicvals
+  bicvals(){ grep -E "^(z_q|d_vector|prenet|wav)" | grep -oE "(absmean|mean)=-?[0-9]+\.[0-9]{6}" | tr "\n" " "; }
+  cmp_pair "BiCodec decode vs PyTorch Spark-TTS (4 stages)" /tmp/v_bic_t.txt /tmp/v_bic_p.txt bicvals
+  # The waveform flattens the same either way ([1,N,1] vs [1,1,N]), so these are
+  # the samples themselves, not a summary of them.
+  wavhead(){ grep -E "^wav" | grep -oE "first4=\[[^]]*\]"; }
+  cmp_pair "BiCodec waveform samples vs PyTorch" /tmp/v_bic_t.txt /tmp/v_bic_p.txt wavhead
 
-  # The prompt and the LM. Prompt ids must match exactly. Logits are compared as
-  # a top-5 ordering rather than by value: the checkpoint is bf16, one ulp at
-  # layer 9 is amplified by cancellation in layer 23 (+3700 -> -800), and greedy
-  # ids then diverge at the first exact bf16 tie between two audio tokens.
+  # The prompt and the LM, both at float32, which makes this an exact check
+  # rather than a ranking one. In bf16 it could only ever be the latter: the
+  # model carries outlier channels in the thousands that cancel in the last
+  # layer, so one ulp at layer 9 becomes a percent at the logits — PyTorch's own
+  # bf16 diverges from its float32 after 5 greedy tokens.
   /tmp/sdvenv/bin/python reference/reference-spark.py >/tmp/v_lm_p.txt 2>&1
   bun validation/spark-lm.ts >/tmp/v_lm_t.txt 2>&1
   promptids(){ grep "^prompt ids:" | grep -oE "[0-9]+" | tr "\n" " "; }
-  cmp_pair "Spark-TTS prompt ids vs mlx-audio" /tmp/v_lm_t.txt /tmp/v_lm_p.txt promptids
-  top5(){ grep "^top5:" | grep -oE "(1[0-9]{5}|[0-9]{1,5})," | tr "\n" " "; }
-  cmp_pair "Spark-TTS logit ranking vs mlx-audio" /tmp/v_lm_t.txt /tmp/v_lm_p.txt top5
+  cmp_pair "Spark-TTS prompt ids vs PyTorch" /tmp/v_lm_t.txt /tmp/v_lm_p.txt promptids
+  # NOT named genids: that is a global helper defined at the top of this script
+  # and used by the Qwen3 checks below, and a redefinition here silently breaks
+  # them — which is exactly what happened.
+  sparkgen(){ grep "^gen ids:" | grep -oE "[0-9]+" | tr "\n" " "; }
+  cmp_pair "Spark-TTS greedy ids vs PyTorch (16 tokens)" /tmp/v_lm_t.txt /tmp/v_lm_p.txt sparkgen
+  top5ids(){ grep "^top5:" | grep -oE "(1[0-9]{5}|[0-9]{1,5})," | tr "\n" " "; }
+  cmp_pair "Spark-TTS logit ranking vs PyTorch" /tmp/v_lm_t.txt /tmp/v_lm_p.txt top5ids
 
   # The speaker encoder: mel -> ECAPA -> perceiver -> FSQ -> 32 tokens.
   #
@@ -237,9 +252,8 @@ if [ "${MLXTS_TTS:-0}" = "1" ] && [ -x /tmp/sdvenv/bin/python ] \
   # torch.stft centres it) and never leaves training mode. See the header of
   # reference-speaker.py for both, and for the one-off setup this needs. Skipped
   # rather than failed when that setup is absent.
-  if /tmp/sdvenv/bin/python -c "import torchaudio, einx" >/dev/null 2>&1 \
-     && [ -d "${MLX_SPARK:-/tmp/sparktts}/sparktts" ]; then
-    MLX_SPARK="${MLX_SPARK:-/tmp/sparktts}" /tmp/sdvenv/bin/python reference/reference-speaker.py >/tmp/v_spk_p.txt 2>&1
+  if /tmp/sdvenv/bin/python -c "import torchaudio, einx" >/dev/null 2>&1; then
+    /tmp/sdvenv/bin/python reference/reference-speaker.py >/tmp/v_spk_p.txt 2>&1
     bun validation/speaker-encode.ts >/tmp/v_spk_t.txt 2>&1
     spkvals(){ grep -oE "(absmean|mean)=-?[0-9]+\.[0-9]{4}"; }
     cmp_pair "speaker encoder vs PyTorch Spark-TTS (4 stages)" /tmp/v_spk_t.txt /tmp/v_spk_p.txt spkvals
@@ -268,8 +282,8 @@ if [ "${MLXTS_TTS:-0}" = "1" ] && [ -x /tmp/sdvenv/bin/python ] \
     no "Spark-TTS roundtrip" "$(grep -E "^heard:" /tmp/v_rt.txt | head -1)"
   fi
 elif [ "${MLXTS_TTS:-0}" = "1" ]; then
-  echo "  ⏭  Spark-TTS checks: MLXTS_TTS=1 set but mlx-audio is missing —"
-  echo "     /tmp/sdvenv/bin/pip install mlx-audio tokenizers"
+  echo "  ⏭  Spark-TTS checks: MLXTS_TTS=1 set but the PyTorch oracle is missing —"
+  echo "     see the header of reference/reference-speaker.py for the setup"
 else
   echo "  ⏭  Spark-TTS checks skipped (BiCodec, speaker encoder, prompt/LM,"
   echo "     speech roundtrip, voice cloning)."

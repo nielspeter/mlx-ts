@@ -1,21 +1,20 @@
-# Oracle for the Spark-TTS prompt and LM, using mlx-audio's own Qwen2 port.
+# Oracle for the Spark-TTS prompt and LM, using Hugging Face transformers' own
+# Qwen2 — the implementation this checkpoint was published for.
 #
-# Greedy (temperature 0), so the token sequence is deterministic and can be
-# compared id for id — sampling would only ever agree by luck.
+# Run in float32, not the checkpoint's bf16, which makes the comparison exact
+# rather than approximate. bf16 has eight mantissa bits, and this model carries
+# outlier channels in the thousands that cancel in the last layer (+3700 -> -800
+# at the final position), so a one-ulp difference at layer 9 becomes a percent at
+# the logits. In bf16 no two implementations agree for long — PyTorch's own bf16
+# diverges from its float32 after 5 greedy tokens. In float32 they agree exactly.
 #
-# The audio half is checked separately by reference-bicodec.py. mlx-audio's own
-# Model.post_load_hook is bypassed here because it also builds a BiCodec
-# *encoder*, which wants an audio_tokenizer_config.yaml the repo does not ship.
-#
+#   /tmp/sdvenv/bin/pip install torch transformers tokenizers
 #   /tmp/sdvenv/bin/python reference/reference-spark.py
 import os
 
-import mlx.core as mx
-from mlx_audio.lm.generate import stream_generate
-from mlx_audio.lm.models.qwen2 import Model as Qwen2Model
-from mlx_audio.lm.sample_utils import make_logits_processors, make_sampler
-from mlx_audio.tts.models.spark.spark import ModelConfig
+import torch
 from tokenizers import Tokenizer
+from transformers import Qwen2ForCausalLM
 
 DIR = os.path.expanduser("~/.cache/mlx-ts/mlx-community/Spark-TTS-0.5B-bf16")
 TEXT = "MLX runs on the GPU of your Mac."
@@ -24,40 +23,21 @@ TEXT = "MLX runs on the GPU of your Mac."
 prompt = ("<|task_controllable_tts|><|start_content|>" + TEXT + "<|end_content|>"
           "<|start_style_label|><|gender_0|><|pitch_label_2|><|speed_label_2|><|end_style_label|>")
 
-tok = Tokenizer.from_file(f"{DIR}/tokenizer.json")
-ids = tok.encode(prompt, add_special_tokens=False).ids
+ids = Tokenizer.from_file(f"{DIR}/tokenizer.json").encode(prompt, add_special_tokens=False).ids
 print("prompt ids:", ids)
 
-model = Qwen2Model(ModelConfig())
-weights = mx.load(f"{DIR}/model.safetensors")
-model.load_weights(list(model.sanitize(weights).items()))
+model = Qwen2ForCausalLM.from_pretrained(DIR, dtype=torch.float32)
 model.eval()
 
+with torch.no_grad():
+    last = model(torch.tensor([ids])).logits[0, -1]
+    top = last.topk(5)
+    print("top5:", [(int(i), round(float(v), 3)) for v, i in zip(top.values, top.indices)])
 
-class Detok:  # stream_generate only needs a detokenizer, not a real tokenizer
-    def __init__(self, tok):
-        self.tok = tok
-        self.eos_token_ids = {151645}
-
-    def decode(self, ids): return self.tok.decode(ids)
-
-    @property
-    def detokenizer(self): return self
-
-
-# The primary comparison. Greedy ids are tie-sensitive: the checkpoint is bf16,
-# and adjacent audio tokens routinely land on the *same* bf16 logit, where the
-# two runtimes break the tie differently and the sequences then re-converge.
-# Logits have no such ambiguity.
-out0 = model(mx.array([ids]))
-last = (out0[0] if isinstance(out0, tuple) else out0)[0, -1].astype(mx.float32)
-mx.eval(last)
-top = mx.argsort(-last)[:5].tolist()
-print("top5:", [(int(t), round(float(last[t]), 4)) for t in top])
-
-out = []
-for r in stream_generate(model, tokenizer=Detok(tok), prompt=mx.array(ids), max_tokens=16,
-                         sampler=make_sampler(0.0),
-                         logits_processors=make_logits_processors(None, 1.3, 20)):
-    out.append(r.token)
+    # Greedy, so the sequence is deterministic and can be compared id for id.
+    cur, out = list(ids), []
+    for _ in range(16):
+        nxt = int(model(torch.tensor([cur])).logits[0, -1].argmax())
+        out.append(nxt)
+        cur.append(nxt)
 print("gen ids:", out)

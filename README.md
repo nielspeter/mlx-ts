@@ -194,9 +194,14 @@ token-for-token. Everything below is the validated machinery underneath it.
 ## Install
 
 ```sh
-brew install mlx-c            # the native runtime
 npm i @nielspeter/mlx-ts      # or: bun add / deno add npm:
 ```
+
+That is the whole install. The native runtime arrives as
+[`@nielspeter/mlx-ts-darwin-arm64`](https://www.npmjs.com/package/@nielspeter/mlx-ts-darwin-arm64),
+an `optionalDependency` carrying Apple's own `libmlx` + `mlx.metallib` next to
+our `libmlxc` (199 MB unpacked). The parity suite is **54/54 forced onto it**,
+matching Homebrew's build exactly.
 
 ```ts
 import { load, streamText } from "@nielspeter/mlx-ts";
@@ -213,29 +218,23 @@ Supported today: 4-bit `qwen3` and `olmoe` checkpoints.
 
 macOS on Apple Silicon only. Bun and Deno work as-is; Node needs 24+ (the
 package ships compiled JS, because Node refuses to type-strip inside
-`node_modules`) and pulls in `koffi` for FFI. The package itself carries no
-weights and no binaries — 96 KB.
+`node_modules`) and pulls in `koffi` for FFI. The library package carries no
+weights and no binaries — 135 kB packed; the native runtime is the separate
+platform package above, pulled in automatically.
 
-The project publishes two packages: [`@nielspeter/mlx-ts`](https://www.npmjs.com/package/@nielspeter/mlx-ts)
-(the library, 105 kB) and
-[`@nielspeter/mlx-ts-darwin-arm64`](https://www.npmjs.com/package/@nielspeter/mlx-ts-darwin-arm64)
-(the native runtime, an `optionalDependency`).
-
-**On the Homebrew step.** It is required today. A platform package
-(`@nielspeter/mlx-ts-darwin-arm64`, an `optionalDependency` carrying Apple's own
-`libmlx` + `mlx.metallib` alongside our `libmlxc`) is assembled by
-`bun run build:platform` and verified end to end on all three runtimes, but is
-not published yet — so for now, install mlx-c. The resolver already prefers, in
-order: `MLXTS_LIB`, a Homebrew install, the platform package, a local
-`prebuilds/`. `LIB_CANDIDATES` shows what it considered and what it found.
+**On Homebrew.** `brew install mlx-c` is optional, and takes precedence when
+present — useful if you already track mlx-c yourself, or want to test against a
+different build. The resolver prefers, in order: `MLXTS_LIB`, a Homebrew
+install, the platform package, a local `prebuilds/`. `LIB_CANDIDATES` shows what
+it considered and what it found.
 
 The repo itself is not the package: clone it for the examples, the parity suite
 against MLX-Python, and `docs/FINDINGS.md`.
 
 ## Try it without downloading anything
 
-Three of the examples need no model files at all — after `brew install mlx-c`
-and `bun install` they run immediately:
+Four of the examples need no model files at all — after `bun install` they run
+immediately:
 
 ```sh
 bun examples/basics.ts     # arrays, ops, and why tidy() is not optional
@@ -278,10 +277,12 @@ addresses fit in 2^48, inside a double — so `type Arr = number` holds and no
 model code is runtime-aware. Node runs `.ts` by stripping types only, so the
 source stays free of enums and parameter properties.
 
-**Careful with `prebuilds/`:** the bundled `libmlxc` and Homebrew's are
-different MLX builds and do **not** agree numerically — the bundle diverges from
-MLX-Python on real Qwen3 and on LoRA training. `scripts/validate-all.sh` prints
-which one it resolved. Set `MLXTS_LIB` to choose.
+**Careful with a hand-rolled `prebuilds/`:** a `libmlxc` built against a
+different MLX than Homebrew's does **not** agree numerically — an earlier local
+bundle diverged from MLX-Python on real Qwen3 and on LoRA training. That is not
+true of the published platform package, which is built from Apple's own
+`mlx-metal` binaries and passes the suite 54/54. `scripts/validate-all.sh`
+prints which library it resolved; set `MLXTS_LIB` to choose.
 
 ## Repo layout
 
@@ -491,9 +492,10 @@ wrappers 242 typed op wrappers (from ops.h, fast.h)
 skipped  47:  (all reported by name)
 ```
 
-Skipped functions are exotic only — nested-vector / `char**` / device handles
-(one-line FFI-map additions) and the metal/cuda **kernel-builder** API (opaque
-builder structs, irrelevant to inference). Every standard tensor op is wrapped.
+Skipped functions are exotic only — nested-vector / `char**` / device handles,
+each a one-line FFI-map addition. Every standard tensor op is wrapped. The metal
+**kernel-builder** symbols are in the table too; `src/ffi/kernel.ts` puts an
+ergonomic `metalKernel()` on top of them, which is what EnCodec's LSTM runs on.
 
 The generator maps each C type to an FFI type, auto-supplies the trailing
 `mlx_stream`, collapses `const int* x, size_t x_num` pairs into a single
@@ -522,8 +524,9 @@ base, packed into a u64), `mlx_fast_scaled_dot_product_attention` with
 
 ## What you can build with it
 
-mlx-ts today is a **local inference runtime for text LLMs *and* Whisper
-speech-to-text** (plus LoRA training) — Apple-Silicon-only, published as
+mlx-ts today is a **local runtime for text LLMs, Whisper speech-to-text and
+MusicGen text-to-music**, plus training (LoRA, full fine-tuning, a GRPO loss
+path) and custom Metal kernels — Apple-Silicon-only, published as
 `@nielspeter/mlx-ts` and also runnable as scripts in this repo. The library
 under `src/` runs on Bun, Deno and Node, as do all of `examples/`; only
 `training/` is still Bun-only. Sampling supports greedy,
@@ -606,8 +609,11 @@ W=https://huggingface.co/mlx-community/whisper-large-v3-turbo/resolve/main
 mkdir -p models
 curl -sL $W/config.json -o models/config-turbo.json
 curl -sL $W/weights.safetensors -o models/whisper-turbo.safetensors
-pip install mlx-whisper   # validation oracle; ships the mel filterbank + tiktoken vocab (use a venv)
-WA=$(python3 -c 'import mlx_whisper,os;print(os.path.dirname(mlx_whisper.__file__))')/assets
+# The validation oracle. Its own venv, because it pins dependencies the other
+# reference scripts do not want — and /tmp/wvenv is where validate-all.sh looks.
+python3 -m venv /tmp/wvenv && /tmp/wvenv/bin/pip install mlx-whisper
+curl -sL -o /tmp/jfk.flac https://github.com/openai/whisper/raw/main/tests/jfk.flac  # transcription fixture
+WA=$(/tmp/wvenv/bin/python -c 'import mlx_whisper,os;print(os.path.dirname(mlx_whisper.__file__))')/assets
 cp "$WA/multilingual.tiktoken" models/whisper-multilingual.tiktoken
 python3 -c "import mlx.core as mx,numpy as np;np.array(mx.load('$WA/mel_filters.npz')['mel_128']).astype('float32').tofile('models/whisper-mel-filters-128.f32')"
 bun src/models/whisper.ts audio.flac          # auto-detects language; any ffmpeg-decodable file
@@ -647,13 +653,6 @@ bun src/models/gpt2.ts "The capital of France is"   # greedy; TEMP/TOP_K/TOP_P/R
 - **Better embeddings** — a *dedicated* embedding model (BERT encoder + WordPiece,
   or Qwen3-Embedding with last-token pooling) for stronger retrieval than the
   current mean-pooled base-LLM vectors.
-- **Shipping the native dependency** — the published package still requires
-  `brew install mlx-c`. The blocker is gone: `tools/fetch-prebuilds.sh` builds
-  `prebuilds/` from Apple's own `mlx-metal` binaries and the suite is 54/54
-  forced onto that path (`docs/FINDINGS.md` §7f). What remains is publishing it
-  as a platform package — `@nielspeter/mlx-ts-darwin-arm64` under
-  `optionalDependencies`, the shape Apple uses — and deciding whether ~50 MB
-  compressed is a trade you want.
 
 ### ❌ Not yet (substantial new code or a real gap)
 - **Text-to-speech** — **de-risked, not built**: the novel vocoder step (iSTFT,
@@ -669,8 +668,9 @@ bun src/models/gpt2.ts "The capital of France is"   # greedy; TEMP/TOP_K/TOP_P/R
 - **Broad model compatibility** — only affine 4-bit quant (no AWQ/GPTQ), so many
   HF quantized checkpoints won't load.
 - **Constrained/JSON decoding, beam search, speculative decoding** — none yet.
-- **Full/large-scale training** — only minibatch LoRA is proven; per-sample
-  gradients need `vmap`, the one genuine mlx-c capability gap.
+- **Per-sample gradients** — need `vmap`, the one genuine mlx-c capability gap.
+  Minibatch training is proven well past LoRA: a full fine-tune of GPT-2-124M
+  and nanoGPT from scratch both match the Python reference.
 
 ## License
 

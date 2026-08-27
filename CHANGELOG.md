@@ -2,6 +2,46 @@
 
 Notable changes, newest first. Hand-written.
 
+## [0.2.2]
+
+Documentation only — no runtime change since 0.2.1. Cut because the install
+instructions shipped inside the package were wrong, so every visitor to the npm
+page was told to install Homebrew first.
+
+### Fixed
+
+- **`brew install mlx-c` is not required.** `npm i @nielspeter/mlx-ts` is the
+  whole install: the native runtime comes from
+  `@nielspeter/mlx-ts-darwin-arm64`, an `optionalDependency` published since
+  0.1.0 and already declared here. The README still said it was "not published
+  yet". Homebrew is still honoured, and still takes precedence when present.
+
+  Verified rather than assumed — a plain clean-install test proves nothing here,
+  because Homebrew comes first in the resolver and gets used silently. Forced
+  onto the platform package with `MLXTS_LIB`, real Qwen3-0.6B produces identical
+  token ids and the parity suite is 54/54.
+- **The two Whisper checks had been skipping, not passing.** The suite invoked
+  `reference/reference-whisper.py` by a bare filename left behind when the
+  reference scripts moved into `reference/`, and silenced the call with
+  `>/dev/null`, so it failed quietly and the test then died on the fixture it
+  never wrote. The suite is 54/54, not 52/52,
+  and the setup it needs — a venv at `/tmp/wvenv`, plus `/tmp/jfk.flac` — is now
+  written down instead of being folklore.
+- Nine further README corrections: the package size was given twice, as two
+  different stale figures; "three examples" listed four; the summary of what
+  mlx-ts does predated MusicGen, full fine-tuning and `metalKernel()`; the
+  codegen notes still called the metal kernel-builder API "irrelevant to
+  inference", when EnCodec's LSTM runs on it.
+
+### Added
+
+- **README: "What that looks like"** — chat, speech-to-text, text-to-music,
+  embeddings, training and a custom Metal kernel, in a few lines each. The
+  snippets are taken from the runnable files in `examples/`, and
+  `validation/readme-snippets.ts` mirrors them so `tsc --noEmit` fails when the
+  API moves under the docs. The first draft, written from memory, used five
+  functions that do not exist.
+
 ## [0.2.1]
 
 A patch for a bug that made 0.2.0 effectively single-shot.

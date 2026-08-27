@@ -144,6 +144,16 @@ if [ -x /tmp/sdvenv/bin/python ] && [ -d "${MLX_SD:-/tmp/mlxsd_pkg}/stable_diffu
   bun validation/clip-tokenizer.ts >/tmp/v_ctok_t.txt 2>&1
   ctokvals(){ grep -oE "\[[0-9, ]+\]"; }
   cmp_pair "CLIP tokenizer vs mlx-examples (7 cases)" /tmp/v_ctok_t.txt /tmp/v_ctok_p.txt ctokvals
+
+  # The UNet: fixed latents, timestep and conditioning, so this is the denoiser
+  # alone. 16x16 latents keep it cheap — the architecture is identical at SD's
+  # native 64 — but it still needs the 3.2 GB checkpoint cached.
+  if [ -f "$HOME/.cache/mlx-ts/stable-diffusion-v1-5/stable-diffusion-v1-5/unet/diffusion_pytorch_model.safetensors" ]; then
+    MLX_SD="${MLX_SD:-/tmp/mlxsd_pkg}" /tmp/sdvenv/bin/python reference/reference-unet.py >/tmp/v_unet_p.txt 2>&1
+    bun validation/unet-forward.ts >/tmp/v_unet_t.txt 2>&1
+    unetvals(){ grep -oE "shape=\[[^]]*\]|mean=-?[0-9]+\.[0-9]{6}|first4=\[[^]]*\]"; }
+    cmp_pair "UNet vs mlx-examples" /tmp/v_unet_t.txt /tmp/v_unet_p.txt unetvals
+  fi
 fi
 
 # The MLX repo layout (medium/large) reaches the weights through a name rewrite.

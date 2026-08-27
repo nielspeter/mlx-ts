@@ -127,6 +127,14 @@ if [ -x /tmp/sdvenv/bin/python ] && [ -d "${MLX_SD:-/tmp/mlxsd_pkg}/stable_diffu
   bun validation/vae-decode.ts >/tmp/v_vae_t.txt 2>&1
   vaevals(){ grep -oE "shape=\[[^]]*\]|mean=-?[0-9]+\.[0-9]{5}|first4=\[[^]]*\]"; }
   cmp_pair "VAE decoder vs mlx-examples" /tmp/v_vae_t.txt /tmp/v_vae_p.txt vaevals
+
+  # CLIP's text encoder on fixed ids, so this is the transformer alone — the
+  # tokenizer is checked separately. Causal masking is the detail that matters:
+  # without it the conditioning is plausible but wrong.
+  MLX_SD="${MLX_SD:-/tmp/mlxsd_pkg}" /tmp/sdvenv/bin/python reference/reference-clip.py >/tmp/v_clip_p.txt 2>&1
+  bun validation/clip-encode.ts >/tmp/v_clip_t.txt 2>&1
+  clipvals(){ grep -oE "shape=\[[^]]*\]|mean=-?[0-9]+\.[0-9]{6}|first4=\[[^]]*\]"; }
+  cmp_pair "CLIP text encoder vs mlx-examples" /tmp/v_clip_t.txt /tmp/v_clip_p.txt clipvals
 fi
 
 # The MLX repo layout (medium/large) reaches the weights through a name rewrite.

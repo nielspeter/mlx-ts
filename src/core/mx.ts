@@ -219,6 +219,7 @@ export class MX {
   greater(o: MX) { return this.r(m.mlx_greater, this.h, o.h, stream); }
   where(a: MX, b: MX) { return this.r(m.mlx_where, this.h, a.h, b.h, stream); } // this=cond
   divScalar(x: number) { return this.div(scalar(x)); }
+  mulScalar(x: number) { return this.mul(scalar(x)); }
 
   // cache concat (this ++ o along axis)
   concat(o: MX, axis: number) {

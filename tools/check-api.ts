@@ -17,6 +17,9 @@ const INTERNAL = new Set([
   "EN", "EOT", "NO_TIMESTAMPS", "SOT", "TRANSCRIBE", "TRANSLATE",
   "HOP", "N_FFT", "N_MELS", "N_SAMPLES",
   "forward", "freeParams", "loadCkpt", "saveCkpt", "generate",
+  // The transformer stack shared by CLIP's two towers — an implementation
+  // detail of clip.ts and clip-vision.ts, not something a consumer assembles.
+  "clipBlocks",
 ]);
 
 // qwen.ts and gpt2.ts are CLI scripts, not modules — importing them runs them.
@@ -26,7 +29,7 @@ const MODULES = [
   "io/loader", "io/fs", "audio/mel",
   "models/whisper", "models/olmoe", "models/qwen-nn", "models/nanogpt-model",
   "models/vae", "models/clip", "models/unet", "models/diffusion", "models/stable-diffusion",
-  "text/clip-tokenizer", "image/png",
+  "text/clip-tokenizer", "image/png", "image/load", "models/clip-vision", "models/clip-layers",
   "ffi/index",
 ];
 

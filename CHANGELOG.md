@@ -2,6 +2,45 @@
 
 Notable changes, newest first. Hand-written.
 
+## [0.2.1]
+
+A patch for a bug that made 0.2.0 effectively single-shot.
+
+### Fixed
+
+- **`MusicGen.generate()` worked once per process** and then failed with
+  `expected a non-empty mlx_array`. `T5Encoder` caches a constant on the
+  instance but created it lazily *inside* `encode()`'s `tidy()`, so the arena
+  freed it at scope exit while the field still pointed at the handle, and the
+  next call read freed memory. Anyone writing a loop, a server, or a batch of
+  variations hit it immediately.
+
+  Lazy creation is what hid it: the first call always works, and every test
+  called `generate()` exactly once — so neither the suite nor CI saw it. This
+  is the same defect as `docs/FINDINGS.md` §6.6, and the only lazily-cached
+  `MX` in the codebase. `validation/musicgen-e2e.ts` now generates twice, and
+  the check was confirmed to fail with the fix reverted.
+- **A clip too short for EnCodec** died inside MLX with `[conv] Spatial
+  dimensions of input after padding cannot be smaller than weight spatial
+  dimensions`. The delay pattern consumes one frame per codebook and the
+  decoder needs three more; below that the error now names the minimum.
+  Measured: 6 steps fails, 7 is the shortest that decodes.
+
+### Added
+
+- **`--seed`** on `examples/musicgen.ts`. Sampling draws from MLX's RNG, so a
+  seeded prompt reproduces its take exactly — two CLI runs at `--seed 1234`
+  produce byte-identical `.wav` files. Without it every run was a different
+  take with no way back to one you liked.
+
+### Changed
+
+- CI fails when `package-lock.json` drifts from `package.json`. It had been
+  stale since Biome was added, which only surfaced when the 0.2.0 publish
+  aborted at `npm ci`; CI installs with `bun install --frozen-lockfile` and
+  reads `bun.lock`, so nothing validated the npm lockfile. (`npm ci --dry-run`
+  does not detect this — it exits 0 either way.)
+
 ## [0.2.0]
 
 Text-to-music. The headline is `MusicGen`, which makes this the first release

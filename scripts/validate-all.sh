@@ -102,6 +102,14 @@ bun validation/conv2d.ts >/tmp/v_cv_t.txt 2>&1
 cvvals(){ grep -oE "shape=\[[^]]*\] sum=-?[0-9]+\.[0-9]{4}|first4=\[[^]]*\]"; }
 cmp_pair "conv2d / convTranspose2d vs MLX Python" /tmp/v_cv_t.txt /tmp/v_cv_p.txt cvvals
 
+# GroupNorm — SD normalises with it at every block, and its weights come from
+# PyTorch, so this has to match mlx.nn.GroupNorm's pytorch_compatible grouping
+# rather than the other one. The two differ only in how channels are split.
+python3 reference/reference-groupnorm.py >/tmp/v_gn_p.txt 2>&1
+bun validation/groupnorm.ts >/tmp/v_gn_t.txt 2>&1
+gnvals(){ grep -oE "sum=-?[0-9]+\.[0-9]{4}|first4=\[[^]]*\]"; }
+cmp_pair "GroupNorm vs MLX Python" /tmp/v_gn_t.txt /tmp/v_gn_p.txt gnvals
+
 # The MLX repo layout (medium/large) reaches the weights through a name rewrite.
 # Headers only — no weights downloaded — so this is cheap enough to always run.
 if bun validation/musicgen-mlx-layout.ts >/tmp/v_mgl.txt 2>&1 && grep -q "verdict : OK" /tmp/v_mgl.txt; then

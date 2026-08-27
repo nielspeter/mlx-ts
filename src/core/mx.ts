@@ -178,7 +178,13 @@ export class MX {
 
   // fast ops
   rmsNorm(w: MX, eps: number) { return this.r(m.mlx_fast_rms_norm, this.h, w.h, eps, stream); }
-  layerNorm(w: MX, b: MX, eps: number) { const s = slot(); m.mlx_fast_layer_norm(ptr(s), this.h, w.h, b.h, eps, stream); return new MX(Number(s[0])); }
+  // w/b are optional: mlx-c reads an empty handle (0) as "not provided", which is
+  // how GroupNorm normalises before applying its own affine parameters.
+  layerNorm(w: MX | null, b: MX | null, eps: number) {
+    const s = slot();
+    m.mlx_fast_layer_norm(ptr(s), this.h, w ? w.h : 0, b ? b.h : 0, eps, stream);
+    return new MX(Number(s[0]));
+  }
   rope(dims: number, base: number, offset: number) { return this.r(m.mlx_fast_rope, this.h, dims, false, optF(base), 1.0, offset, 0, stream); }
   static sdpa(q: MX, k: MX, v: MX, scale: number, causal: boolean) {
     const s = slot(); m.mlx_fast_scaled_dot_product_attention(ptr(s), q.h, k.h, v.h, scale, ptr(causal ? CAUSAL : NONE), 0, 0, stream); return new MX(Number(s[0]));

@@ -63,6 +63,7 @@ export {Embedding, type Experts,Linear,
   LoraDelta, 
   Module,
   MoE, QuantizedEmbedding,QuantizedLinear, RMSNorm, 
+  GroupNorm,
 } from "./nn/nn.ts";
 export { Adam } from "./nn/optim.ts";
 export { ChatTemplate, type Message } from "./text/chat-template.ts";

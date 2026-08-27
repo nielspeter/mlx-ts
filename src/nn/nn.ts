@@ -101,3 +101,41 @@ export class QuantizedEmbedding extends Module {
   }
   asLinear(x: MX) { return x.qmm(this.wq, this.scales, this.biases, this.gs, this.bits); }
 }
+
+/**
+ * GroupNorm over channels-last input, `[N, ..., C]`.
+ *
+ * Mirrors `mlx.nn.GroupNorm(pytorch_compatible=True)` exactly, because Stable
+ * Diffusion's weights come from PyTorch: split the channels into groups,
+ * normalise each group over spatial positions *and* its own channels, then
+ * apply the affine parameters. The normalisation itself is `fast.layer_norm`
+ * with no weight or bias, which is what MLX does.
+ *
+ * The non-PyTorch variant groups differently; getting that wrong is invisible
+ * until the image is subtly wrong, so this follows the compatible path only.
+ */
+export class GroupNorm extends Module {
+  // Plain fields, not parameter properties: Node strips types rather than
+  // compiling them, so `erasableSyntaxOnly` rules those out repo-wide.
+  groups: number;
+  eps: number;
+  constructor(groups: number, eps = 1e-5) { super(); this.groups = groups; this.eps = eps; }
+
+  forward(x: MX, weight: MX, bias: MX): MX {
+    const shape = x.shape;
+    const N = shape[0], C = shape[shape.length - 1];
+    const groupSize = C / this.groups;
+
+    // [N, ..., C] -> [N, G, spatial * C/G], so one layer_norm covers a group.
+    const flat = x.reshape([N, -1, this.groups, groupSize])
+      .transpose([0, 2, 1, 3])
+      .reshape([N, this.groups, -1]);
+
+    const normed = flat.layerNorm(null, null, this.eps);
+
+    return normed.reshape([N, this.groups, -1, groupSize])
+      .transpose([0, 2, 1, 3])
+      .reshape(shape)
+      .mul(weight).add(bias);
+  }
+}

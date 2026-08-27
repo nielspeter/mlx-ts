@@ -264,12 +264,20 @@ if [ -f models/gpt2-model.safetensors ]; then  # own temp files: the sharded-OLM
 fi
 # Whisper needs mlx_whisper for the oracle + the converted weights; run it only
 # when both are present (skipped gracefully otherwise — not a hard failure).
+#
+# That skip hid two real failures for a while, so the setup is written down:
+#
+#   python3 -m venv /tmp/wvenv && /tmp/wvenv/bin/pip install mlx-whisper
+#   curl -sL -o /tmp/jfk.flac https://github.com/openai/whisper/raw/main/tests/jfk.flac
+#
+# mlx_whisper goes in its own venv because it pins dependencies the rest of the
+# reference scripts do not want. Without both, the totals below read 52, not 54.
 PYW=""; for c in /tmp/wvenv/bin/python python3; do "$c" -c "import mlx_whisper" >/dev/null 2>&1 && { PYW=$c; break; }; done
 if [ -n "$PYW" ] && [ -f models/whisper-tiny.safetensors ]; then
-  "$PYW" reference-whisper.py >/dev/null 2>&1
+  "$PYW" reference/reference-whisper.py >/dev/null 2>&1
   bun tests/whisper-test.ts 2>&1 | grep -q "WHISPER OK" && ok "Whisper-tiny encoder+decoder vs mlx_whisper" || no "whisper" "parity"
   if [ -f models/whisper-mel-filters-80.f32 ] && [ -f models/whisper-multilingual.tiktoken ] && [ -f /tmp/jfk.flac ]; then
-    "$PYW" reference-whisper-transcribe.py >/dev/null 2>&1
+    "$PYW" reference/reference-whisper-transcribe.py >/dev/null 2>&1
     bun tests/whisper-transcribe-test.ts 2>&1 | grep -q "TRANSCRIBE OK" && ok "Whisper transcription token-exact vs mlx_whisper" || no "whisper-transcribe" "tokens"
   fi
 fi

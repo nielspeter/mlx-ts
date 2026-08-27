@@ -11,7 +11,7 @@
 A TypeScript MLX SDK over **`mlx-c`** (Apple's official C API) via FFI, with
 **zero custom C/C++** and no build step — running on **Bun, Deno and Node**, and
 **numerically identical** to MLX's Python reference (`scripts/validate-all.sh`:
-52/52).
+54/54).
 
 Read `docs/FINDINGS.md` for what was proven and how. Apple Silicon + Metal only.
 
@@ -32,6 +32,115 @@ sidecar. Concretely, when you need:
   to a full fine-tune of GPT-2-124M.
 - **MLX specifically** — Apple's own kernels and unified memory, and output that
   matches `mlx-lm` token-for-token, so a Python prototype ports without drift.
+
+## What that looks like
+
+Each of these is exercised by a check in `scripts/validate-all.sh` and matched
+against the Python reference — the code below is taken from the runnable files
+in `examples/`, not written for the README.
+
+**Chat and streaming, in your process.** No HTTP hop, no subprocess.
+
+```ts
+import { load, streamText } from "@nielspeter/mlx-ts";
+
+const { model, tokenizer } = await load("mlx-community/Qwen3-0.6B-4bit");
+const ids = tokenizer.encode("The capital of France is");
+for await (const chunk of streamText(model, tokenizer, ids, { max: 64, temp: 0.7 }))
+  process.stdout.write(chunk);
+```
+
+`ChatTemplate.render([{ role: "user", content: "..." }])` turns messages into the
+prompt string first when you want multi-turn — that is `examples/chat.ts`.
+
+**Speech to text.** Token-exact against `mlx_whisper`, with language
+auto-detection and a sliding window for unbounded audio.
+
+```ts
+import { loadWhisper, WhisperTokenizer, loadMelFilters, decodeAudio } from "@nielspeter/mlx-ts";
+
+const model = await loadWhisper("models/config-turbo.json", "models/whisper-turbo.safetensors");
+const tok = await WhisperTokenizer.fromFile();
+const filters = await loadMelFilters("models/whisper-mel-filters-128.f32", 128);
+
+const ids = model.transcribe(await decodeAudio("interview.flac"), filters);
+console.log(tok.decode(ids).trim());
+```
+
+**Text to music.** T5 conditioning, a codebook LM, EnCodec back to a waveform —
+all of it TypeScript.
+
+```ts
+import { MusicGen, saveAudio, seed } from "@nielspeter/mlx-ts";
+
+const model = await MusicGen.fromPretrained();
+seed(1234);                                        // same seed -> same take
+const audio = model.generate("trance", { maxSteps: 500 });   // 50 frames = 1s
+await saveAudio("out.wav", audio.toF32(), model.samplingRate);
+```
+
+**Embeddings for local RAG.** Vectors, not a chat completion.
+
+```ts
+import { Qwen3, Tokenizer, loadSafetensors, fromI32, tidy } from "@nielspeter/mlx-ts";
+
+const model = new Qwen3(cfg, loadSafetensors("models/model-q4.safetensors"));
+const tokenizer = await Tokenizer.fromFile("models/tokenizer.json");
+
+const ids = tokenizer.encode("a passage to index");
+const vec = tidy(() => model.embeddingMX(fromI32(Int32Array.from(ids), [1, ids.length]), 1, ids.length));
+const embedding = Array.from(vec.toF32());          // L2-normalized; pair with any JS vector store
+```
+
+`embeddingMX` is on the concrete model rather than the `Decoder` interface, so
+this one takes `Qwen3` directly instead of the `load()` helper — that is what
+`examples/server.ts` does behind `/v1/embeddings`.
+
+**Training, from TypeScript.** Real `value_and_grad` over a pytree of
+parameters — the part an HTTP endpoint cannot give you at all.
+
+```ts
+import { Adam, crossEntropy, tidy, valueAndGrad, type MX, type Tree } from "@nielspeter/mlx-ts";
+
+const forward = (p: Tree, x: MX) => { const { w, b } = p as { w: MX; b: MX }; return x.matmul(w).add(b); };
+const lossFn = (p: Tree, x: MX, y: MX) => crossEntropy(forward(p, x), y);
+
+const step = valueAndGrad(params, lossFn);
+const opt = new Adam(0.1);
+for (let i = 0; i <= STEPS; i++) {
+  const { loss, next } = tidy(() => {
+    const { loss, grads } = step(params, X, Y);
+    return { loss, next: opt.update(params, grads) };
+  });
+  params = next;
+}
+```
+
+**A custom Metal kernel, written inline.** EnCodec's LSTM is one of these, not a
+demo — `examples/metal-kernel.ts` is Apple's own LSTM kernel, verbatim.
+
+```ts
+import { metalKernel, scalarI32, tidy } from "@nielspeter/mlx-ts";
+
+const lstm = metalKernel({
+  name: "lstm",
+  inputNames: ["x", "h_in", "cell", "hidden_size", "time_step", "num_time_steps"],
+  outputNames: ["hidden_state", "cell_state"],
+  source: `/* Metal, compiled at first call */`,
+});
+
+const [hidden, cellOut] = tidy(() => lstm.apply(
+  [x, hIn, cell, scalarI32(H), scalarI32(0), scalarI32(T)],
+  [{ shape: [B, H] }, { shape: [B, H] }],   // output shapes
+  [B, B * H, 1],                            // grid
+  [256, 1, 1],                              // threadgroup
+));
+```
+
+Runnable versions live in `examples/`: `examples/chat.ts`, `examples/stream.ts`,
+`examples/musicgen.ts`, `examples/train.ts`, `examples/metal-kernel.ts`,
+`examples/hub.ts`, and `examples/server.ts` — an OpenAI-compatible endpoint with
+a chat page and a live mic. CI runs them on Bun, Deno and Node.
 
 ## When you'd want something else
 
@@ -540,7 +649,7 @@ bun src/models/gpt2.ts "The capital of France is"   # greedy; TEMP/TOP_K/TOP_P/R
   current mean-pooled base-LLM vectors.
 - **Shipping the native dependency** — the published package still requires
   `brew install mlx-c`. The blocker is gone: `tools/fetch-prebuilds.sh` builds
-  `prebuilds/` from Apple's own `mlx-metal` binaries and the suite is 52/52
+  `prebuilds/` from Apple's own `mlx-metal` binaries and the suite is 54/54
   forced onto that path (`docs/FINDINGS.md` §7f). What remains is publishing it
   as a platform package — `@nielspeter/mlx-ts-darwin-arm64` under
   `optionalDependencies`, the shape Apple uses — and deciding whether ~50 MB

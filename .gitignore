@@ -46,3 +46,6 @@ chat-ckpt-config.json
 
 # generated audio
 *.wav
+
+# generated images
+*.png

@@ -13,7 +13,8 @@ export { saveAudio } from "./audio/wav.ts";
 // after a GC, which never happens inside a tight synchronous decode loop.
 export {
   activeMemoryMB, applyRepetitionPenalty, asyncEval, cacheMemoryMB, clearCache, dropout, escape,evalAll, freeAll,fromF32, fromI32, fromU32, 
-  MX, Owned, peakMemoryMB, resetPeakMemory,sample, 
+  MX, Owned, peakMemoryMB, 
+  randomNormal,resetPeakMemory,sample, 
   saveSafetensors, scalar, seed,setCacheLimit,
   setMemoryLimit, setWiredLimit, stack, tidy, 
 } from "./core/mx.ts";
@@ -29,12 +30,17 @@ export { backend, callback, cstring, open, ptr, view } from "./ffi/index.ts";
 export { metalKernel, scalarI32 } from "./ffi/kernel.ts";
 export { LIB_CANDIDATES, LIBMLXC } from "./ffi/native-lib.ts";
 export type { Backend, Callback, CType, SymbolSpec, SymbolTable } from "./ffi/types.ts";
+export { savePng } from "./image/png.ts";
 export { cacheDir, type FetchOptions, hubFile, isCached } from "./io/hub.ts";
 // --- weights -------------------------------------------------------------
 export {entries, freeMap,
   get, 
   loadSafetensors, shapeOf, shardedWeights, singleFileWeights, type WeightMap,type Weights, 
 } from "./io/loader.ts";
+export { type ClipConfig, ClipTextEncoder } from "./models/clip.ts";
+// Stable Diffusion: prompt -> image. The pieces are exported too, so a caller
+// can drive the loop themselves.
+export { type DiffusionConfig, EulerSampler } from "./models/diffusion.ts";
 export { type EncodecConfig, EncodecDecoder } from "./models/encodec.ts";
 // Fetch-and-construct from a Hugging Face repo id — the step between `npm i`
 // and a token.
@@ -48,7 +54,9 @@ export { OLMoE } from "./models/olmoe.ts";
 // takes one as its first argument, so exporting the function without the class
 // gave consumers a signature they could not satisfy.
 export { generateBatch, Qwen3, stepTidy } from "./models/qwen-nn.ts";
+export { type ImageOptions, StableDiffusion } from "./models/stable-diffusion.ts";
 export { type T5Config, T5Encoder } from "./models/t5.ts";
+export { timestepEmbedding, Unet, type UnetConfig } from "./models/unet.ts";
 export { upsampleNearest, type VaeConfig, VaeDecoder } from "./models/vae.ts";
 // --- models --------------------------------------------------------------
 // Assembled models that are importable as modules. qwen.ts and gpt2.ts are
@@ -68,6 +76,7 @@ export {Embedding, type Experts,
 } from "./nn/nn.ts";
 export { Adam } from "./nn/optim.ts";
 export { ChatTemplate, type Message } from "./text/chat-template.ts";
+export { type ClipEncodeOptions, ClipTokenizer } from "./text/clip-tokenizer.ts";
 export { type Decoder, type GenOptions, generate, type KV, streamText, streamTokens } from "./text/lm.ts";
 // --- text: tokenizing, chat templates, generation ------------------------
 export { GPT2_SPLIT, Tokenizer } from "./text/tokenizer.ts";

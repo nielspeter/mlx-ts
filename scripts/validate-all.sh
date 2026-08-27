@@ -154,6 +154,19 @@ if [ -x /tmp/sdvenv/bin/python ] && [ -d "${MLX_SD:-/tmp/mlxsd_pkg}/stable_diffu
     unetvals(){ grep -oE "shape=\[[^]]*\]|mean=-?[0-9]+\.[0-9]{6}|first4=\[[^]]*\]"; }
     cmp_pair "UNet vs mlx-examples" /tmp/v_unet_t.txt /tmp/v_unet_p.txt unetvals
   fi
+
+  # The noise schedule. No weights, so a mismatch is pure arithmetic — and this
+  # is where a diffusion port quietly goes wrong: SD trains on "scaled_linear"
+  # betas, linear in sqrt(beta), and the plain linear one still makes an image,
+  # just a worse one. Compared at 3-4 decimals because MLX builds the schedule
+  # in float32 and TypeScript in float64.
+  MLX_SD="${MLX_SD:-/tmp/mlxsd_pkg}" /tmp/sdvenv/bin/python reference/reference-scheduler.py >/tmp/v_sch_p.txt 2>&1
+  bun validation/scheduler.ts >/tmp/v_sch_t.txt 2>&1
+  if diff -q /tmp/v_sch_t.txt /tmp/v_sch_p.txt >/dev/null 2>&1; then
+    ok "noise schedule vs mlx-examples"
+  else
+    no "scheduler" "$(diff /tmp/v_sch_t.txt /tmp/v_sch_p.txt | head -2 | tr '\n' ' ')"
+  fi
 fi
 
 # The MLX repo layout (medium/large) reaches the weights through a name rewrite.

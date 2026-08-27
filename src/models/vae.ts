@@ -109,25 +109,38 @@ export class VaeDecoder {
     return tidy(() => {
       const { block_out_channels: ch, layers_per_block: L, scaling_factor } = this.cfg;
 
+      // Each stage runs in its own tidy() and the previous output is freed as
+      // soon as it is consumed. One tidy around the whole decoder would hold
+      // every intermediate at every resolution until the end — which is several
+      // GB by the time it reaches full size, and how this first fell over.
       let x = latents;
-      if (scaling_factor) x = x.divScalar(scaling_factor);
-      x = this.conv("post_quant_conv", x, 0);
-      x = this.conv("decoder.conv_in", x);
+      const stage = (fn: (h: MX) => MX) => {
+        const prev = x;
+        x = tidy(() => fn(prev));
+        if (prev !== latents) prev.free();
+      };
 
-      x = this.resnet("decoder.mid_block.resnets.0", x);
-      x = this.attention("decoder.mid_block.attentions.0", x);
-      x = this.resnet("decoder.mid_block.resnets.1", x);
+      stage((h) => {
+        const z = scaling_factor ? h.divScalar(scaling_factor) : h;
+        return this.conv("decoder.conv_in", this.conv("post_quant_conv", z, 0));
+      });
+
+      stage((h) => this.resnet("decoder.mid_block.resnets.0", h));
+      stage((h) => this.attention("decoder.mid_block.attentions.0", h));
+      stage((h) => this.resnet("decoder.mid_block.resnets.1", h));
 
       // Up blocks run coarse to fine, and every one but the last upsamples.
       for (let i = 0; i < ch.length; i++) {
-        for (let j = 0; j < L + 1; j++) x = this.resnet(`decoder.up_blocks.${i}.resnets.${j}`, x);
+        for (let j = 0; j < L + 1; j++) {
+          stage((h) => this.resnet(`decoder.up_blocks.${i}.resnets.${j}`, h));
+        }
         if (i < ch.length - 1) {
-          x = this.conv(`decoder.up_blocks.${i}.upsamplers.0.conv`, upsampleNearest(x));
+          stage((h) => this.conv(`decoder.up_blocks.${i}.upsamplers.0.conv`, upsampleNearest(h)));
         }
       }
 
-      x = this.norm("decoder.conv_norm_out", x).silu();
-      return this.conv("decoder.conv_out", x);
+      stage((h) => this.conv("decoder.conv_out", this.norm("decoder.conv_norm_out", h).silu()));
+      return x;
     });
   }
 }

@@ -220,6 +220,7 @@ export class MX {
   where(a: MX, b: MX) { return this.r(m.mlx_where, this.h, a.h, b.h, stream); } // this=cond
   divScalar(x: number) { return this.div(scalar(x)); }
   mulScalar(x: number) { return this.mul(scalar(x)); }
+  addScalar(x: number) { return this.add(scalar(x)); }
 
   // cache concat (this ++ o along axis)
   concat(o: MX, axis: number) {
@@ -282,6 +283,22 @@ export function asyncEval(...xs: MX[]) {
   m.mlx_async_eval(vh); m.mlx_vector_array_free(vh);
 }
 export function seed(s: number) { if (m.mlx_random_seed) m.mlx_random_seed(BigInt(s)); }
+
+/**
+ * Standard-normal noise of the given shape — where a diffusion sample starts.
+ * With `seedNum` the draw comes from an explicit key, so a prompt reproduces;
+ * without one it advances MLX's global RNG like any other random op.
+ */
+export function randomNormal(shape: number[], seedNum?: number): MX {
+  const r = slot();
+  let key = 0;
+  if (seedNum !== undefined) {
+    const ks = slot(); m.mlx_random_key(ptr(ks), BigInt(seedNum)); key = Number(ks[0]);
+  }
+  m.mlx_random_normal(ptr(r), ptr(new Int32Array(shape)), BigInt(shape.length), FLOAT32, 0, 1, key, stream);
+  if (key) m.mlx_array_free(key);
+  return new MX(Number(r[0]));
+}
 
 // Write a {name -> MX} record to a .safetensors file (the save side of loader.ts).
 // Keys become tensor names; pass a flattened param tree (e.g. "blocks.0.wq").

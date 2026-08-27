@@ -25,6 +25,8 @@ const MODULES = [
   "text/tokenizer", "text/chat-template", "text/lm", "text/whisper-tokenizer",
   "io/loader", "io/fs", "audio/mel",
   "models/whisper", "models/olmoe", "models/qwen-nn", "models/nanogpt-model",
+  "models/vae", "models/clip", "models/unet", "models/diffusion", "models/stable-diffusion",
+  "text/clip-tokenizer", "image/png",
   "ffi/index",
 ];
 

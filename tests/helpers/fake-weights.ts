@@ -27,15 +27,18 @@ export function detTensor(name: string, shape: number[]): MX {
  * optional tensors such as a missing bias or residual shortcut.
  */
 export function fakeWeights(spec: Record<string, number[]>): Weights {
+  // A fresh MX per call, like singleFileWeights, which hands out a new
+  // (refcounted) view each time. Caching and returning the *same* object breaks
+  // as soon as a model reads a weight inside tidy(): the arena frees it on the
+  // way out, and the next call gets a freed handle. Real checkpoints never see
+  // this because the buffer outlives the view.
   const cache = new Map<string, MX>();
   return {
     mx(name: string): MX {
-      const hit = cache.get(name);
-      if (hit) return hit;
       const shape = spec[name];
       if (!shape) throw new Error(`missing tensor '${name}'`);
       const t = detTensor(name, shape);
-      cache.set(name, t);
+      cache.set(name, t);   // last handout, so done() has something to free
       return t;
     },
     done() {

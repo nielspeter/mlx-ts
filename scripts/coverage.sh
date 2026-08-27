@@ -12,7 +12,7 @@
 # unreached half says nothing about code anyone wrote.
 #
 # Thresholds are a ratchet, not a target. They sit just under the measured
-# figure — 37% of functions and 52% of lines at the time of writing — so a real
+# figure — 53% of functions and 63% of lines at the time of writing — so a real
 # regression fails while noise does not. Raise them when coverage rises.
 #
 #   scripts/coverage.sh            # report and enforce
@@ -20,8 +20,8 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
-MIN_FUNCS=${MIN_FUNCS:-35}
-MIN_LINES=${MIN_LINES:-50}
+MIN_FUNCS=${MIN_FUNCS:-50}
+MIN_LINES=${MIN_LINES:-61}
 REPORT_ONLY=0
 [ "${1:-}" = "--report" ] && REPORT_ONLY=1
 

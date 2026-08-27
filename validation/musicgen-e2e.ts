@@ -18,7 +18,7 @@
 // the model loads: the first steps materialise GBs of lazily-mmapped weights,
 // which is not a leak and would swamp the signal.
 //   bun validation/musicgen-e2e.ts
-import { MusicGen } from "../src/index.ts";
+import { MusicGen, seed } from "../src/index.ts";
 import { activeMemoryMB, cacheMemoryMB } from "../src/core/mx.ts";
 
 const total = () => activeMemoryMB() + cacheMemoryMB();
@@ -38,6 +38,26 @@ const audio = model.generate("trance", {
 });
 
 const s = audio.toF32();
+
+// Calling generate() a second time on the same model used to die with
+// "expected a non-empty mlx_array": T5 caches a constant on the instance but
+// created it lazily inside encode()'s tidy(), so the arena freed it while the
+// field still pointed at the handle. Lazy creation is what hid it — the first
+// call always worked, and every test called generate() exactly once.
+const reuse = model.generate("trance", { maxSteps: 20 }).toF32();
+const reuseOk = reuse.length > 0;
+
+// ...and with the RNG seeded, a prompt reproduces its take exactly. That is
+// the whole point of --seed: keeping a generation you liked.
+const fp = (a: ArrayLike<number>) => {
+  let h = 0;
+  for (let i = 0; i < a.length; i += 97) h = (h * 31 + Math.round(a[i] * 1e6)) | 0;
+  return h;
+};
+seed(1234); const s1 = fp(model.generate("trance", { maxSteps: 20 }).toF32());
+seed(1234); const s2 = fp(model.generate("trance", { maxSteps: 20 }).toF32());
+seed(99);   const s3 = fp(model.generate("trance", { maxSteps: 20 }).toF32());
+const seedOk = s1 === s2 && s1 !== s3;
 const rms = Math.sqrt(s.reduce((t, v) => t + v * v, 0) / s.length);
 const perStep = (atEnd - atWarm) / (TOTAL - WARM);
 
@@ -52,4 +72,7 @@ console.log(`  leak    : active ${atWarm.toFixed(0)} -> ${atEnd.toFixed(0)} MB o
             `(${perStep.toFixed(2)} MB/step, under 1.0 required)`);
 console.log(`  peak    : ${peak.toFixed(0)} MB of ${CEILING} allowed (active + cache)`);
 const ok = s.length > 0 && rms > 0.001 && perStep < 1.0 && peak < CEILING;
-console.log(`  verdict : ${ok ? "OK" : "FAIL"}`);
+console.log(`  reuse   : ${reuseOk ? "generate() twice OK" : "FAILED on the second call"}`);
+console.log(`  seed    : same seed ${s1 === s2 ? "reproduces" : "DIVERGES"}, ` +
+            `different seed ${s1 !== s3 ? "differs" : "COLLIDES"}`);
+console.log(`  verdict : ${ok && reuseOk && seedOk ? "OK" : "FAIL"}`);

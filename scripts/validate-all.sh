@@ -86,6 +86,89 @@ if bun -e 'import {isCached} from "./src/io/hub.ts"; process.exit(await isCached
                  *) no "hub load()" "$OUT" ;; esac
 fi
 
+# conv2d / convTranspose2d — the primitives a UNet and a VAE are built from.
+# Pinned before anything is built on them: a quiet layout or padding mismatch
+# here surfaces as a subtly wrong image fifty diffusion steps later.
+#
+# Needs Bun >= 1.4.0. These are the first ops in the binding whose arguments
+# spill past the arm64 register set as int32, and bun:ffi 1.3.x mis-marshalled
+# that — a segfault at 0x1, with `groups` landing where the stream pointer is
+# read. Node and Deno were always correct. See docs/FINDINGS.md.
+#
+# Sums are compared rounded: float addition order differs between the two, so
+# convTranspose2d lands on -4.333644 here and -4.333647 there.
+python3 reference/reference-conv2d.py >/tmp/v_cv_p.txt 2>&1
+bun validation/conv2d.ts >/tmp/v_cv_t.txt 2>&1
+cvvals(){ grep -oE "shape=\[[^]]*\] sum=-?[0-9]+\.[0-9]{4}|first4=\[[^]]*\]"; }
+cmp_pair "conv2d / convTranspose2d vs MLX Python" /tmp/v_cv_t.txt /tmp/v_cv_p.txt cvvals
+
+# GroupNorm — SD normalises with it at every block, and its weights come from
+# PyTorch, so this has to match mlx.nn.GroupNorm's pytorch_compatible grouping
+# rather than the other one. The two differ only in how channels are split.
+python3 reference/reference-groupnorm.py >/tmp/v_gn_p.txt 2>&1
+bun validation/groupnorm.ts >/tmp/v_gn_t.txt 2>&1
+gnvals(){ grep -oE "sum=-?[0-9]+\.[0-9]{4}|first4=\[[^]]*\]"; }
+cmp_pair "GroupNorm vs MLX Python" /tmp/v_gn_t.txt /tmp/v_gn_p.txt gnvals
+
+# The VAE decoder against mlx-examples' own Stable Diffusion port. Both sides
+# load stabilityai/sd-vae-ft-mse, so a difference is our decoder, not the
+# checkpoint. Needs their package and an MLX python; setup is:
+#
+#   python3 -m venv /tmp/sdvenv
+#   /tmp/sdvenv/bin/pip install mlx huggingface_hub httpx safetensors numpy regex
+#   mkdir -p /tmp/mlxsd_pkg/stable_diffusion && cd /tmp/mlxsd_pkg/stable_diffusion
+#   for f in vae unet config model_io __init__ tokenizer clip sampler; do curl -sLO \
+#     "https://raw.githubusercontent.com/ml-explore/mlx-examples/main/stable_diffusion/stable_diffusion/$f.py"; done
+#
+# Compared on mean and the first few pixels, not the total: summing 49k floats
+# is order-dependent and the two land 0.036 apart out of -4788.
+if [ -x /tmp/sdvenv/bin/python ] && [ -d "${MLX_SD:-/tmp/mlxsd_pkg}/stable_diffusion" ]; then
+  MLX_SD="${MLX_SD:-/tmp/mlxsd_pkg}" /tmp/sdvenv/bin/python reference/reference-vae.py >/tmp/v_vae_p.txt 2>&1
+  bun validation/vae-decode.ts >/tmp/v_vae_t.txt 2>&1
+  vaevals(){ grep -oE "shape=\[[^]]*\]|mean=-?[0-9]+\.[0-9]{5}|first4=\[[^]]*\]"; }
+  cmp_pair "VAE decoder vs mlx-examples" /tmp/v_vae_t.txt /tmp/v_vae_p.txt vaevals
+
+  # CLIP's text encoder on fixed ids, so this is the transformer alone — the
+  # tokenizer is checked separately. Causal masking is the detail that matters:
+  # without it the conditioning is plausible but wrong.
+  MLX_SD="${MLX_SD:-/tmp/mlxsd_pkg}" /tmp/sdvenv/bin/python reference/reference-clip.py >/tmp/v_clip_p.txt 2>&1
+  bun validation/clip-encode.ts >/tmp/v_clip_t.txt 2>&1
+  clipvals(){ grep -oE "shape=\[[^]]*\]|mean=-?[0-9]+\.[0-9]{6}|first4=\[[^]]*\]"; }
+  cmp_pair "CLIP text encoder vs mlx-examples" /tmp/v_clip_t.txt /tmp/v_clip_p.txt clipvals
+
+  # CLIP's tokenizer. Character-level BPE with a </w> word-end mark, not the
+  # byte-level kind in src/text/tokenizer.ts. Cases cover where it can quietly
+  # differ: repeated whitespace, casing, punctuation runs, per-digit splitting,
+  # contractions, and words that need several merges.
+  MLX_SD="${MLX_SD:-/tmp/mlxsd_pkg}" /tmp/sdvenv/bin/python reference/reference-clip-tokenizer.py >/tmp/v_ctok_p.txt 2>&1
+  bun validation/clip-tokenizer.ts >/tmp/v_ctok_t.txt 2>&1
+  ctokvals(){ grep -oE "\[[0-9, ]+\]"; }
+  cmp_pair "CLIP tokenizer vs mlx-examples (7 cases)" /tmp/v_ctok_t.txt /tmp/v_ctok_p.txt ctokvals
+
+  # The UNet: fixed latents, timestep and conditioning, so this is the denoiser
+  # alone. 16x16 latents keep it cheap — the architecture is identical at SD's
+  # native 64 — but it still needs the 3.2 GB checkpoint cached.
+  if [ -f "$HOME/.cache/mlx-ts/stable-diffusion-v1-5/stable-diffusion-v1-5/unet/diffusion_pytorch_model.safetensors" ]; then
+    MLX_SD="${MLX_SD:-/tmp/mlxsd_pkg}" /tmp/sdvenv/bin/python reference/reference-unet.py >/tmp/v_unet_p.txt 2>&1
+    bun validation/unet-forward.ts >/tmp/v_unet_t.txt 2>&1
+    unetvals(){ grep -oE "shape=\[[^]]*\]|mean=-?[0-9]+\.[0-9]{6}|first4=\[[^]]*\]"; }
+    cmp_pair "UNet vs mlx-examples" /tmp/v_unet_t.txt /tmp/v_unet_p.txt unetvals
+  fi
+
+  # The noise schedule. No weights, so a mismatch is pure arithmetic — and this
+  # is where a diffusion port quietly goes wrong: SD trains on "scaled_linear"
+  # betas, linear in sqrt(beta), and the plain linear one still makes an image,
+  # just a worse one. Compared at 3-4 decimals because MLX builds the schedule
+  # in float32 and TypeScript in float64.
+  MLX_SD="${MLX_SD:-/tmp/mlxsd_pkg}" /tmp/sdvenv/bin/python reference/reference-scheduler.py >/tmp/v_sch_p.txt 2>&1
+  bun validation/scheduler.ts >/tmp/v_sch_t.txt 2>&1
+  if diff -q /tmp/v_sch_t.txt /tmp/v_sch_p.txt >/dev/null 2>&1; then
+    ok "noise schedule vs mlx-examples"
+  else
+    no "scheduler" "$(diff /tmp/v_sch_t.txt /tmp/v_sch_p.txt | head -2 | tr '\n' ' ')"
+  fi
+fi
+
 # The MLX repo layout (medium/large) reaches the weights through a name rewrite.
 # Headers only — no weights downloaded — so this is cheap enough to always run.
 if bun validation/musicgen-mlx-layout.ts >/tmp/v_mgl.txt 2>&1 && grep -q "verdict : OK" /tmp/v_mgl.txt; then

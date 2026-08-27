@@ -1,0 +1,7 @@
+[test]
+# src/ffi/generated.ts is 1984 lines emitted by tools/codegen.ts from the mlx-c
+# headers — 472 symbols and 242 wrappers, most of which no model reaches for.
+# Counting it drags the figure down without saying anything about the code
+# anyone wrote, so it is excluded and reported separately.
+coveragePathIgnorePatterns = ["src/ffi/generated.ts"]
+coverageSkipTestFiles = true

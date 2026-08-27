@@ -141,6 +141,7 @@ export class MX {
 
   // shape
   reshape(sh: number[]) { return this.r(m.mlx_reshape, this.h, ptr(new Int32Array(sh)), BigInt(sh.length), stream); }
+  broadcastTo(sh: number[]) { return this.r(m.mlx_broadcast_to, this.h, ptr(new Int32Array(sh)), BigInt(sh.length), stream); }
   transpose(ax: number[]) { return this.r(m.mlx_transpose_axes, this.h, ptr(new Int32Array(ax)), BigInt(ax.length), stream); }
   // slice [start, stop) along leading axes (stride 1) — e.g. split a fused QKV weight
   slice(start: number[], stop: number[]) {
@@ -158,9 +159,33 @@ export class MX {
   // conv1d: this=input [N,L,C_in], w=[C_out,K,C_in] -> [N,L',C_out]
   conv1d(w: MX, stride: number, padding: number) { return this.r(m.mlx_conv1d, this.h, w.h, stride, padding, 1, 1, stream); }
 
+  // conv2d: this=input [N,H,W,C_in], w=[C_out,KH,KW,C_in] -> [N,H',W',C_out].
+  // Channels-last, like conv1d and like MLX itself — PyTorch checkpoints are
+  // stored [C_out,C_in,KH,KW], so a port transposes the weights on load.
+  conv2d(w: MX, stride: [number, number] = [1, 1], padding: [number, number] = [0, 0],
+         dilation: [number, number] = [1, 1], groups = 1) {
+    return this.r(m.mlx_conv2d, this.h, w.h, stride[0], stride[1],
+                  padding[0], padding[1], dilation[0], dilation[1], groups, stream);
+  }
+
+  // The upsampling half of a decoder: same layout, plus output padding to pick
+  // between the output sizes a strided convolution leaves ambiguous.
+  convTranspose2d(w: MX, stride: [number, number] = [1, 1], padding: [number, number] = [0, 0],
+                  dilation: [number, number] = [1, 1], outputPadding: [number, number] = [0, 0], groups = 1) {
+    return this.r(m.mlx_conv_transpose2d, this.h, w.h, stride[0], stride[1],
+                  padding[0], padding[1], dilation[0], dilation[1],
+                  outputPadding[0], outputPadding[1], groups, stream);
+  }
+
   // fast ops
   rmsNorm(w: MX, eps: number) { return this.r(m.mlx_fast_rms_norm, this.h, w.h, eps, stream); }
-  layerNorm(w: MX, b: MX, eps: number) { const s = slot(); m.mlx_fast_layer_norm(ptr(s), this.h, w.h, b.h, eps, stream); return new MX(Number(s[0])); }
+  // w/b are optional: mlx-c reads an empty handle (0) as "not provided", which is
+  // how GroupNorm normalises before applying its own affine parameters.
+  layerNorm(w: MX | null, b: MX | null, eps: number) {
+    const s = slot();
+    m.mlx_fast_layer_norm(ptr(s), this.h, w ? w.h : 0, b ? b.h : 0, eps, stream);
+    return new MX(Number(s[0]));
+  }
   rope(dims: number, base: number, offset: number) { return this.r(m.mlx_fast_rope, this.h, dims, false, optF(base), 1.0, offset, 0, stream); }
   static sdpa(q: MX, k: MX, v: MX, scale: number, causal: boolean) {
     const s = slot(); m.mlx_fast_scaled_dot_product_attention(ptr(s), q.h, k.h, v.h, scale, ptr(causal ? CAUSAL : NONE), 0, 0, stream); return new MX(Number(s[0]));
@@ -194,6 +219,8 @@ export class MX {
   greater(o: MX) { return this.r(m.mlx_greater, this.h, o.h, stream); }
   where(a: MX, b: MX) { return this.r(m.mlx_where, this.h, a.h, b.h, stream); } // this=cond
   divScalar(x: number) { return this.div(scalar(x)); }
+  mulScalar(x: number) { return this.mul(scalar(x)); }
+  addScalar(x: number) { return this.add(scalar(x)); }
 
   // cache concat (this ++ o along axis)
   concat(o: MX, axis: number) {
@@ -256,6 +283,22 @@ export function asyncEval(...xs: MX[]) {
   m.mlx_async_eval(vh); m.mlx_vector_array_free(vh);
 }
 export function seed(s: number) { if (m.mlx_random_seed) m.mlx_random_seed(BigInt(s)); }
+
+/**
+ * Standard-normal noise of the given shape — where a diffusion sample starts.
+ * With `seedNum` the draw comes from an explicit key, so a prompt reproduces;
+ * without one it advances MLX's global RNG like any other random op.
+ */
+export function randomNormal(shape: number[], seedNum?: number): MX {
+  const r = slot();
+  let key = 0;
+  if (seedNum !== undefined) {
+    const ks = slot(); m.mlx_random_key(ptr(ks), BigInt(seedNum)); key = Number(ks[0]);
+  }
+  m.mlx_random_normal(ptr(r), ptr(new Int32Array(shape)), BigInt(shape.length), FLOAT32, 0, 1, key, stream);
+  if (key) m.mlx_array_free(key);
+  return new MX(Number(r[0]));
+}
 
 // Write a {name -> MX} record to a .safetensors file (the save side of loader.ts).
 // Keys become tensor names; pass a flattened param tree (e.g. "blocks.0.wq").

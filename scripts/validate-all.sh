@@ -135,6 +135,15 @@ if [ -x /tmp/sdvenv/bin/python ] && [ -d "${MLX_SD:-/tmp/mlxsd_pkg}/stable_diffu
   bun validation/clip-encode.ts >/tmp/v_clip_t.txt 2>&1
   clipvals(){ grep -oE "shape=\[[^]]*\]|mean=-?[0-9]+\.[0-9]{6}|first4=\[[^]]*\]"; }
   cmp_pair "CLIP text encoder vs mlx-examples" /tmp/v_clip_t.txt /tmp/v_clip_p.txt clipvals
+
+  # CLIP's tokenizer. Character-level BPE with a </w> word-end mark, not the
+  # byte-level kind in src/text/tokenizer.ts. Cases cover where it can quietly
+  # differ: repeated whitespace, casing, punctuation runs, per-digit splitting,
+  # contractions, and words that need several merges.
+  MLX_SD="${MLX_SD:-/tmp/mlxsd_pkg}" /tmp/sdvenv/bin/python reference/reference-clip-tokenizer.py >/tmp/v_ctok_p.txt 2>&1
+  bun validation/clip-tokenizer.ts >/tmp/v_ctok_t.txt 2>&1
+  ctokvals(){ grep -oE "\[[0-9, ]+\]"; }
+  cmp_pair "CLIP tokenizer vs mlx-examples (7 cases)" /tmp/v_ctok_t.txt /tmp/v_ctok_p.txt ctokvals
 fi
 
 # The MLX repo layout (medium/large) reaches the weights through a name rewrite.

@@ -2,6 +2,46 @@
 
 Notable changes, newest first. Hand-written.
 
+## [0.3.1]
+
+`npm i @nielspeter/mlx-ts` is now the entire install. No Homebrew, no ffmpeg.
+
+### Changed
+
+- **Audio and images decode through macOS instead of ffmpeg.** MLX is
+  Apple-Silicon-only, so treating `/usr/bin` as unavailable was caution
+  borrowed from a portability problem this project does not have.
+
+      audio     ffmpeg -> afconvert   (built in)
+      images    ffmpeg -> sips        (built in)
+      playback  none   -> afplay      (built in, via playAudio)
+
+  Measured rather than assumed: `afconvert` and ffmpeg return the same 176000
+  samples from the same FLAC and differ by 0.19% rms, which becomes about 1%
+  through the log-Mel front-end. Whisper transcribes both to the same 23
+  tokens, identical to the `mlx_whisper` oracle. On images sips and ffmpeg
+  disagree more — different resamplers — but the zero-shot ranking is unchanged
+  and sips scores the correct label slightly higher.
+
+  The Whisper parity checks still set `MLXTS_AUDIO_DECODER=ffmpeg`: their claim
+  is token-for-token equality with an oracle that decodes that way, and a 1%
+  difference in the mel could flip a token on some other sample. ffmpeg is a
+  dev dependency now, not a user one.
+
+### Added
+
+- **`playAudio()`** — every audio path in this repo wrote a file and nothing
+  ever made a sound.
+
+### Fixed
+
+- **`decodeAudio` walks the WAVE chunk list** instead of assuming the classic
+  44-byte header. afconvert writes extra chunks, and skipping a fixed 44 bytes
+  reads metadata as audio: the signal shifts, and it looks like two decoders
+  disagreeing rather than a parser being lazy. That mistake overstated the
+  difference between them by 16x before it was caught; `tests/mel.test.ts`
+  covers the walk now.
+
 ## [0.3.0]
 
 Images. mlx-ts now generates them, and reads them — which makes this the

@@ -628,10 +628,13 @@ temperature, top-p, **top-k**, and **repetition penalty**
   (`src/models/speaker.ts`): a Slaney mel front end, an **ECAPA-TDNN** with
   Res2Net blocks and attentive statistics pooling, a **perceiver resampler** that
   squeezes any clip length into 32 latents, and **FSQ** to pack those into token
-  ids. Verified two ways — the 32 ids match mlx-audio exactly on both synthetic
-  and real audio, and `validation/spark-clone.ts` clones a voice then scores it
-  with ECAPA's x-vector, a different head from the one the tokens come from
-  (~0.96 against a ~0.40 floor for an unrelated voice).
+  ids. Checked against the **original PyTorch Spark-TTS**, not against another
+  port: all 32 ids match on synthetic and on real audio. That mattered — the
+  mlx-audio port left-aligns a short STFT window where `torch.stft` centres it,
+  which silently moved 12 of the 32 ids until it was caught. Cloning is also
+  checked end to end with no Python: `validation/spark-clone.ts` clones a voice
+  and scores it with ECAPA's x-vector, a different head from the one the tokens
+  come from (~0.95 against a ~0.38 floor for an unrelated voice).
 
 - **Multilingual chat** — the server injects a system prompt so replies come back
   in the user's language (Danish in → Danish out).

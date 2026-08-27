@@ -1,49 +1,80 @@
-# Oracle for BiCodec's speaker encoder — the encode half, which is what voice
-# cloning needs.
+# Oracle for BiCodec's speaker encoder — the encode half, which voice cloning needs.
 #
-# Dumps a fingerprint at every boundary: mel -> ECAPA features -> x-vector ->
-# perceiver latents -> the 32 global tokens. A mismatch in the tokens alone says
-# nothing about which of the four produced it.
+# This one runs the ORIGINAL PyTorch Spark-TTS, not mlx-audio, because mlx-audio
+# is wrong here in two ways:
 #
+#   1. Its mel left-aligns a short window inside n_fft. torch.stft centres it,
+#      and the checkpoint was trained that way. The result still looks like a
+#      spectrogram, and it moved one of the 32 token ids.
+#   2. It never leaves training mode, so ECAPA's BatchNorms try to compute batch
+#      statistics from a single utterance and throw. Its cloning path does not
+#      run as shipped; the original calls model.eval() at load.
+#
+# Everything downstream of the mel (ECAPA, perceiver, FSQ) does agree between the
+# two, but the authoritative reference is the model that produced the weights.
+#
+# Setup — the Spark-TTS package is not on PyPI, so fetch the modules it needs:
+#
+#   /tmp/sdvenv/bin/pip install torch torchaudio einops einx safetensors
+#   mkdir -p /tmp/sparktts/sparktts/modules/{speaker,fsq}
+#   cd /tmp/sparktts && for d in sparktts sparktts/modules sparktts/modules/speaker \
+#     sparktts/modules/fsq; do touch $d/__init__.py; done
+#   B=https://raw.githubusercontent.com/SparkAudio/Spark-TTS/main/sparktts
+#   for f in modules/speaker/ecapa_tdnn.py modules/speaker/perceiver_encoder.py \
+#            modules/speaker/speaker_encoder.py modules/speaker/pooling_layers.py \
+#            modules/fsq/finite_scalar_quantization.py modules/fsq/residual_fsq.py; do
+#     curl -sL "$B/$f" -o "sparktts/$f"; done
+#
+#   MLX_SPARK=/tmp/sparktts /tmp/sdvenv/bin/python reference/reference-speaker.py
+import os
+import sys
+
+sys.path.insert(0, os.environ.get("MLX_SPARK", "/tmp/sparktts"))
+
+import numpy as np
+import torch
+import torchaudio.transforms as TT
+from safetensors.torch import load_file
+from sparktts.modules.speaker.speaker_encoder import SpeakerEncoder
+
+CKPT = os.path.expanduser(
+    "~/.cache/mlx-ts/mlx-community/Spark-TTS-0.5B-bf16/BiCodec/model.safetensors")
+
+W = load_file(CKPT)
+sd = {k[len("speaker_encoder."):]: v.float() for k, v in W.items()
+      if k.startswith("speaker_encoder.")}
+
+model = SpeakerEncoder(input_dim=128, out_dim=1024, latent_dim=128, token_num=32,
+                       fsq_levels=[4, 4, 4, 4, 4, 4], fsq_num_quantizers=1)
+missing, unexpected = model.load_state_dict(sd, strict=True)
+model.eval()
+
 # Deterministic synthetic audio, exactly the 6 s window the model crops to, so
 # this needs no audio file and no decoder.
-#
-#   /tmp/sdvenv/bin/python reference/reference-speaker.py
-import os
+N = 6 * 16000 // 320 * 320
+wav = torch.tensor([((i * 131 + 7) % 1009) / 1009 - 0.5 for i in range(N)],
+                   dtype=torch.float32)
 
-import mlx.core as mx
-from mlx_audio.tts.models.spark.bicodec import BiCodec
-
-DIR = os.path.expanduser("~/.cache/mlx-ts/mlx-community/Spark-TTS-0.5B-bf16/BiCodec")
-model = BiCodec.load_from_checkpoint(DIR)
-# mlx-audio leaves the model in training mode, so ECAPA's BatchNorms try to
-# compute batch statistics from one utterance and throw. Inference wants the
-# running stats — which is also why our port has no training path.
-model.train(False)
-
-N = 6 * 16000 // 320 * 320          # the model's own reference window: 96000
-wav = mx.array([((i * 131 + 7) % 1009) / 1009 - 0.5 for i in range(N)], dtype=mx.float32)
+# Built exactly as the original BiCodec.init_mel_transformer does.
+mel_fn = TT.MelSpectrogram(16000, 1024, 640, 320, 10, None,
+                           n_mels=128, power=1, norm="slaney", mel_scale="slaney")
 
 
 def fp(tag, a):
-    f = a.astype(mx.float32).flatten()
-    mx.eval(f)
-    print(f"{tag:10s} shape={list(a.shape)} mean={float(f.mean()):.6f} "
-          f"absmean={float(mx.abs(f).mean()):.6f} "
-          f"first4={[round(float(v), 5) for v in f[:4].tolist()]}")
+    print(f"{tag:10s} shape={list(a.shape)} mean={a.mean():.6f} "
+          f"absmean={a.abs().mean():.6f} "
+          f"first4={[round(float(v), 5) for v in a.flatten()[:4]]}")
 
 
-mel = model.get_mel_spectrogram(wav[None, ...])
-fp("mel", mel)
+with torch.no_grad():
+    mel = mel_fn(wav[None, ...]).squeeze(1).transpose(1, 2)      # [1, frames, mels]
+    fp("mel", mel)
 
-se = model.speaker_encoder
-x_vector, features = se.speaker_encoder(mel, True)
-fp("features", features)
-fp("x_vector", x_vector)
+    x_vector, features = model.speaker_encoder(mel, True)
+    fp("features", features)
+    fp("x_vector", x_vector)
 
-latents = se.perceiver_sampler(features.transpose(0, 2, 1))
-fp("latents", latents)
+    latents = model.perceiver_sampler(features.transpose(1, 2))
+    fp("latents", latents)
 
-indices = se.tokenize(mel)
-mx.eval(indices)
-print("tokens:", mx.array(indices).flatten().tolist())
+    print("tokens:", model.tokenize(mel).flatten().tolist())

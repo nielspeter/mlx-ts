@@ -146,11 +146,12 @@ function stftMagnitude(
     x[pad + pcm.length + i] = pcm[pcm.length - 2 - i];
   }
 
-  const w = hann(winLength); // periodic, = hanning(win+1)[:-1]
+  const w = hann(winLength); // periodic, = hann_window(win, periodic=True)
+  const off = (nFft - winLength) >> 1; // centred, as torch.stft pads it
   const F = 1 + Math.floor((x.length - nFft) / hop);
-  const frames = new Float32Array(F * nFft); // zeros past winLength
+  const frames = new Float32Array(F * nFft); // zeros either side of the window
   for (let f = 0; f < F; f++)
-    for (let n = 0; n < winLength; n++) frames[f * nFft + n] = x[f * hop + n] * w[n];
+    for (let n = 0; n < winLength; n++) frames[f * nFft + off + n] = x[f * hop + off + n] * w[n];
 
   const { cos, sin } = dftBasis(nFft);
   const mag = tidy(() => {

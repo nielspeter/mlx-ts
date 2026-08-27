@@ -230,20 +230,25 @@ if [ "${MLXTS_TTS:-0}" = "1" ] && [ -x /tmp/sdvenv/bin/python ] \
   top5(){ grep "^top5:" | grep -oE "(1[0-9]{5}|[0-9]{1,5})," | tr "\n" " "; }
   cmp_pair "Spark-TTS logit ranking vs mlx-audio" /tmp/v_lm_t.txt /tmp/v_lm_p.txt top5
 
-  # The speaker encoder: mel -> ECAPA -> perceiver -> FSQ -> 32 tokens. The token
-  # ids must match exactly; the tensors in between are compared on mean/absmean,
-  # which are layout-invariant (ours are channels-last, mlx-audio's are
-  # channels-first).
+  # The speaker encoder: mel -> ECAPA -> perceiver -> FSQ -> 32 tokens.
   #
-  # The oracle needs model.train(False) — mlx-audio never leaves training mode,
-  # so ECAPA's BatchNorms try to compute batch statistics from one utterance and
-  # throw. Its cloning path does not run as shipped.
-  /tmp/sdvenv/bin/python reference/reference-speaker.py >/tmp/v_spk_p.txt 2>&1
-  bun validation/speaker-encode.ts >/tmp/v_spk_t.txt 2>&1
-  spkvals(){ grep -oE "(absmean|mean)=-?[0-9]+\.[0-9]{4}"; }
-  cmp_pair "speaker encoder vs mlx-audio (4 stages)" /tmp/v_spk_t.txt /tmp/v_spk_p.txt spkvals
-  spktok(){ grep "^tokens:" | grep -oE "[0-9]+" | tr "\n" " "; }
-  cmp_pair "speaker tokens vs mlx-audio (32 ids)" /tmp/v_spk_t.txt /tmp/v_spk_p.txt spktok
+  # Checked against the ORIGINAL PyTorch Spark-TTS rather than mlx-audio, which
+  # is wrong on the mel (it left-aligns a short window inside n_fft where
+  # torch.stft centres it) and never leaves training mode. See the header of
+  # reference-speaker.py for both, and for the one-off setup this needs. Skipped
+  # rather than failed when that setup is absent.
+  if /tmp/sdvenv/bin/python -c "import torchaudio, einx" >/dev/null 2>&1 \
+     && [ -d "${MLX_SPARK:-/tmp/sparktts}/sparktts" ]; then
+    MLX_SPARK="${MLX_SPARK:-/tmp/sparktts}" /tmp/sdvenv/bin/python reference/reference-speaker.py >/tmp/v_spk_p.txt 2>&1
+    bun validation/speaker-encode.ts >/tmp/v_spk_t.txt 2>&1
+    spkvals(){ grep -oE "(absmean|mean)=-?[0-9]+\.[0-9]{4}"; }
+    cmp_pair "speaker encoder vs PyTorch Spark-TTS (4 stages)" /tmp/v_spk_t.txt /tmp/v_spk_p.txt spkvals
+    spktok(){ grep "^tokens:" | grep -oE "[0-9]+" | tr "\n" " "; }
+    cmp_pair "speaker tokens vs PyTorch Spark-TTS (32 ids)" /tmp/v_spk_t.txt /tmp/v_spk_p.txt spktok
+  else
+    echo "  ⏭  speaker encoder parity: needs torch + the Spark-TTS modules"
+    echo "     (see reference/reference-speaker.py). Cloning is still checked below."
+  fi
 
   # Clone a voice and check it *is* that voice. Judged by ECAPA's x-vector, which
   # is a different head from the perceiver/FSQ path the tokens come from, so this

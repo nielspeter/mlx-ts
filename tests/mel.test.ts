@@ -12,7 +12,18 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 // HOP/N_FFT/N_MELS/N_SAMPLES are deliberately not in the public API — they are
 // implementation detail of the front-end — so they come from the module.
-import { decodeAudio, HOP, loadMelFilters, logMel, N_FFT, N_MELS, N_SAMPLES, padOrTrim, SR } from "../src/audio/mel.ts";
+import {
+  decodeAudio,
+  HOP,
+  loadMelFilters,
+  logMel,
+  melSpectrogram,
+  N_FFT,
+  N_MELS,
+  N_SAMPLES,
+  padOrTrim,
+  SR,
+} from "../src/audio/mel.ts";
 import { saveAudio } from "../src/audio/wav.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "mlx-ts-mel-"));
@@ -106,4 +117,43 @@ test("loadMelFilters reads a filterbank of the declared width", async () => {
   writeFileSync(path, Buffer.from(new Float32Array(bins * mels).fill(0.5).buffer));
   const f = await loadMelFilters(path, mels);
   expect(f.shape).toEqual([bins, mels]);
+});
+
+test("a short window is centred inside n_fft, the way torch.stft pads it", () => {
+  // The regression this exists for: with win_length 640 inside n_fft 1024, the
+  // window can be laid at offset 0 or at offset 192. Both produce something that
+  // looks like a spectrogram; only the centred one matches torch.stft, which is
+  // what the checkpoints were trained under. Left-aligning it moved 12 of
+  // BiCodec's 32 speaker tokens.
+  //
+  // The two constants below are measured, not chosen:
+  //   centred  0.106751  <- torchaudio.transforms.MelSpectrogram, and us
+  //   aligned  0.106592  <- mlx-audio
+  const N = ((6 * 16000) / 320) * 320;
+  const wav = Float32Array.from({ length: N }, (_, i) => ((i * 131 + 7) % 1009) / 1009 - 0.5);
+
+  const mel = melSpectrogram(wav);
+  expect(mel.shape).toEqual([1, 301, 128]);
+
+  const f = mel.toF32();
+  const mean = f.reduce((a, b) => a + b, 0) / f.length;
+  expect(mean).toBeCloseTo(0.106751, 5);
+  expect(Math.abs(mean - 0.106592)).toBeGreaterThan(1e-4);   // not the left-aligned value
+  mel.free();
+});
+
+test("melSpectrogram is linear magnitudes, not Whisper's normalized log", () => {
+  // No log and no per-clip normalisation, so silence is 0 and doubling the
+  // input doubles the output. logMel does neither.
+  const quiet = melSpectrogram(new Float32Array(8000));
+  expect(quiet.toF32().every((v) => v === 0)).toBe(true);
+  quiet.free();
+
+  const sig = Float32Array.from({ length: 8000 }, (_, i) => Math.sin(i / 7) * 0.3);
+  const a = melSpectrogram(sig);
+  const b = melSpectrogram(Float32Array.from(sig, (v) => v * 2));
+  const fa = a.toF32(), fb = b.toF32();
+  for (let i = 0; i < fa.length; i += 97) expect(fb[i]).toBeCloseTo(2 * fa[i], 4);
+  a.free();
+  b.free();
 });

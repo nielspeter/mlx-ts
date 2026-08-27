@@ -10,6 +10,7 @@
 // control tokens and the LM invents a matching speaker. Voice *cloning* needs
 // BiCodec's encoder — a mel front end, an ECAPA speaker encoder and a perceiver
 // sampler, none of which are implemented, since generation never uses them.
+import { decodeAudio, melSpectrogram } from "../audio/mel.ts";
 import { fromI32, type MX, setCacheLimit, tidy } from "../core/mx.ts";
 import { readJson } from "../io/fs.ts";
 import { hubFile } from "../io/hub.ts";
@@ -18,6 +19,7 @@ import { streamTokens } from "../text/lm.ts";
 import { Tokenizer } from "../text/tokenizer.ts";
 import { BiCodecPrenet, BiCodecQuantizer, SpeakerDetokenizer, WaveGenerator } from "./bicodec.ts";
 import { Qwen2, type Qwen2Config } from "./qwen2.ts";
+import { referenceClip, SpeakerTokenizer, volumeNormalize } from "./speaker.ts";
 
 const DEFAULT_REPO = "mlx-community/Spark-TTS-0.5B-bf16";
 
@@ -31,6 +33,14 @@ const GLOBAL_BASE = 151665; // <|bicodec_global_0|>    .. _4095
 const GLOBAL_COUNT = 4096;
 const SEMANTIC_BASE = 155761; // <|bicodec_semantic_0|>  .. _8191
 const SEMANTIC_COUNT = 8192;
+
+// Cloning writes the speaker into the prompt rather than letting the LM invent
+// one, so it needs the markers that delimit that run of tokens.
+const TASK_TTS = 165137; // <|task_tts|>
+const START_CONTENT = 165146;
+const END_CONTENT = 165152;
+const START_GLOBAL = 165150;
+const END_GLOBAL = 165156;
 
 /**
  * Split a generated id stream into the two token kinds BiCodec needs, dropping
@@ -79,6 +89,7 @@ export class SparkTTS {
   private speaker: SpeakerDetokenizer;
   private prenet: BiCodecPrenet;
   private generator: WaveGenerator;
+  private speakerEnc: SpeakerTokenizer;
 
   private constructor(
     tok: Tokenizer,
@@ -87,6 +98,7 @@ export class SparkTTS {
     speaker: SpeakerDetokenizer,
     prenet: BiCodecPrenet,
     generator: WaveGenerator,
+    speakerEnc: SpeakerTokenizer,
   ) {
     this.tok = tok;
     this.lm = lm;
@@ -94,6 +106,7 @@ export class SparkTTS {
     this.speaker = speaker;
     this.prenet = prenet;
     this.generator = generator;
+    this.speakerEnc = speakerEnc;
   }
 
   static async fromPretrained(repo = DEFAULT_REPO): Promise<SparkTTS> {
@@ -109,6 +122,7 @@ export class SparkTTS {
       new SpeakerDetokenizer(B),
       new BiCodecPrenet(B),
       new WaveGenerator(B),
+      new SpeakerTokenizer(B),
     );
   }
 
@@ -132,10 +146,21 @@ export class SparkTTS {
 
   /** Text -> a mono waveform `[1, samples, 1]` in [-1, 1] at 16 kHz. */
   async generate(text: string, opts: SpeechOptions = {}): Promise<MX> {
+    const { gender = "female", pitch = "moderate", speed = "moderate" } = opts;
+
+    const { global, semantic } = await this.run(this.promptIds(text, gender, pitch, speed), opts);
+
+    if (global.length === 0) throw new Error("no global (speaker) tokens generated");
+    if (semantic.length === 0) throw new Error("no semantic (content) tokens generated");
+    return this.decode(global, semantic);
+  }
+
+  /** The generation loop both entry points share. */
+  private async run(
+    prompt: number[],
+    opts: SpeechOptions,
+  ): Promise<{ global: number[]; semantic: number[] }> {
     const {
-      gender = "female",
-      pitch = "moderate",
-      speed = "moderate",
       temp = 0.8,
       topP = 0.95,
       topK = 50,
@@ -146,10 +171,8 @@ export class SparkTTS {
       onToken,
     } = opts;
 
-    const prompt = this.promptIds(text, gender, pitch, speed);
     const generated: number[] = [];
     let spoken = 0; // semantic tokens so far, for progress
-
     const prevLimit = setCacheLimit(cacheLimitMB);
     try {
       for await (const { token } of streamTokens(this.lm, prompt, {
@@ -167,10 +190,50 @@ export class SparkTTS {
     } finally {
       setCacheLimit(prevLimit);
     }
+    return splitAudioTokens(generated);
+  }
 
-    const { global, semantic } = splitAudioTokens(generated);
+  /**
+   * The 32 tokens that stand for the speaker in a recording.
+   *
+   * Exposed on its own because it is also how you *measure* a clone: tokenize
+   * the reference and the output and compare.
+   */
+  async speakerTokens(audioPath: string): Promise<number[]> {
+    const pcm = referenceClip(volumeNormalize(await decodeAudio(audioPath)));
+    const mel = melSpectrogram(pcm);
+    try {
+      return this.speakerEnc.tokenize(mel);
+    } finally {
+      mel.free();
+    }
+  }
 
-    if (global.length === 0) throw new Error("no global (speaker) tokens generated");
+  /**
+   * Speak `text` in the voice of a recording.
+   *
+   * The speaker is *measured* rather than invented: the 32 global tokens go
+   * into the prompt, and the LM is left to generate only the content. Six
+   * seconds of reference audio is what the encoder looks at; more is ignored,
+   * less is tiled.
+   *
+   * Spark can also take the reference's transcript, which conditions the LM on
+   * a worked example and matches the speaker's cadence more closely. That path
+   * needs BiCodec's content encoder and a separate wav2vec2 model, neither of
+   * which is implemented — so pacing here follows the text, not the reference.
+   */
+  async clone(text: string, audioPath: string, opts: SpeechOptions = {}): Promise<MX> {
+    const global = await this.speakerTokens(audioPath);
+    const prompt = [
+      TASK_TTS,
+      START_CONTENT,
+      ...this.tok.encode(text),
+      END_CONTENT,
+      START_GLOBAL,
+      ...global.map((g) => GLOBAL_BASE + g),
+      END_GLOBAL,
+    ];
+    const { semantic } = await this.run(prompt, opts);
     if (semantic.length === 0) throw new Error("no semantic (content) tokens generated");
     return this.decode(global, semantic);
   }

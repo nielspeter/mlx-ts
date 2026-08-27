@@ -9,10 +9,11 @@
 [npm](https://www.npmjs.com/package/@nielspeter/mlx-ts) · [native runtime](https://www.npmjs.com/package/@nielspeter/mlx-ts-darwin-arm64) · [FINDINGS](docs/FINDINGS.md) · [CHANGELOG](CHANGELOG.md)
 
 A TypeScript MLX SDK over **`mlx-c`** (Apple's official C API) via FFI, with
-**zero custom C/C++** and no build step — running on **Bun, Deno and Node**, and
+**zero custom C/C++**, **no required runtime dependencies** and no build step —
+running on **Bun, Deno and Node**, and
 **numerically identical** to MLX's Python reference (`scripts/validate-all.sh`:
-**66/66**, of which 5 Stable Diffusion checks are opt-in via `MLXTS_SD=1` and
-4 Spark-TTS checks via `MLXTS_TTS=1`).
+**67/67**, of which 5 Stable Diffusion checks are opt-in via `MLXTS_SD=1` and
+5 Spark-TTS checks via `MLXTS_TTS=1`).
 Test coverage over `src/` is measured and gated at **67% of functions / 74% of
 lines**.
 
@@ -108,6 +109,15 @@ const wav = await tts.generate("MLX runs on the GPU of your Mac.", {
 await saveAudio("speech.wav", wav.toF32(), SPARK_SAMPLE_RATE);   // 16 kHz
 ```
 
+**Cloning a voice.** Six seconds of reference audio becomes 32 speaker tokens,
+written into the prompt so the model only has to generate the words.
+
+```ts
+const tts = await SparkTTS.fromPretrained();
+const wav = await tts.clone("This was never spoken by that person.", "reference.wav");
+await saveAudio("cloned.wav", wav.toF32(), SPARK_SAMPLE_RATE);
+```
+
 **Images and text in one space.** CLIP's two towers project into the same 768
 dimensions, so cosine similarity classifies without any training.
 
@@ -180,7 +190,7 @@ const [hidden, cellOut] = tidy(() => lstm.apply(
 Runnable versions live in `examples/`: `examples/chat.ts`, `examples/stream.ts`,
 `examples/musicgen.ts`, `examples/train.ts`, `examples/metal-kernel.ts`,
 `examples/hub.ts`, `examples/stable-diffusion.ts`, `examples/clip-zeroshot.ts`,
-`examples/spark-tts.ts`, and `examples/server.ts` — an OpenAI-compatible endpoint with
+`examples/spark-tts.ts`, `examples/spark-clone.ts`, and `examples/server.ts` — an OpenAI-compatible endpoint with
 a chat page and a live mic. CI runs them on Bun, Deno and Node.
 
 ## When you'd want something else
@@ -614,6 +624,21 @@ temperature, top-p, **top-k**, and **repetition penalty**
   speaking a sentence and transcribing it back with our own Whisper
   (`validation/spark-roundtrip.ts`). ~2x realtime on an M-series Mac.
 
+- **Voice cloning (Spark-TTS)** — `examples/spark-clone.ts`: a recording in, the
+  same voice saying something else. BiCodec's **speaker encoder**
+  (`src/models/speaker.ts`): a Slaney mel front end, an **ECAPA-TDNN** with
+  Res2Net blocks and attentive statistics pooling, a **perceiver resampler** that
+  squeezes any clip length into 32 latents, and **FSQ** to pack those into token
+  ids. Checked against the **original PyTorch Spark-TTS**, not against another
+  port: all 32 ids match on synthetic and on real audio. That mattered — the
+  mlx-audio port left-aligns a short STFT window where `torch.stft` centres it,
+  which silently moved 12 of the 32 ids until it was caught. Those reference
+  numbers are committed (`validation/spark-golden.json`), so the checks run with
+  nothing installed beyond mlx-ts itself. Cloning is also
+  checked end to end with no Python: `validation/spark-clone.ts` clones a voice
+  and scores it with ECAPA's x-vector, a different head from the one the tokens
+  come from (~0.95 against a ~0.38 floor for an unrelated voice).
+
 - **Multilingual chat** — the server injects a system prompt so replies come back
   in the user's language (Danish in → Danish out).
 - **Local RAG** — `POST /v1/embeddings` returns L2-normalized sentence vectors
@@ -714,10 +739,13 @@ bun src/models/gpt2.ts "The capital of France is"   # greedy; TEMP/TOP_K/TOP_P/R
   current mean-pooled base-LLM vectors.
 
 ### ❌ Not yet (substantial new code or a real gap)
-- **Voice cloning** — text-to-speech itself ships (see above), but only the
-  *decode* half of BiCodec. Cloning a voice from a reference clip needs its
-  encoder: a mel front end, an ECAPA speaker encoder and a perceiver sampler,
-  some 400 tensors that generation never touches.
+- **Cloning a speaker's *cadence*** — cloning the voice ships (see above), but
+  Spark can also take the reference's transcript, which conditions the LM on a
+  worked example. Measured, that is worth having: without it a clone of an
+  11 s JFK clip runs 36% faster than he speaks, and with it 8%. Identity is
+  unaffected either way. It needs BiCodec's content encoder plus
+  **wav2vec2-large-xlsr-53** (~317M params, PyTorch pickle only), so it is a
+  second model rather than a tweak.
 - **Cross-platform** — Apple-Silicon + Metal only (no Linux/CUDA, Windows,
   Intel). Runtime portability is done: see "Runtimes" above.
 - **Multimodal LLMs** (LLaVA and friends) — the vision half exists now

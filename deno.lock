@@ -220,7 +220,6 @@
     "packageJson": {
       "dependencies": [
         "npm:@biomejs/biome@^2.5.10",
-        "npm:@huggingface/jinja@~0.5.9",
         "npm:@types/bun@^1.4.0",
         "npm:@types/node@^26.2.0",
         "npm:typescript@^7.0.2"

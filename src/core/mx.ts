@@ -12,8 +12,11 @@ import { dirname } from "node:path";
 import { m, stream } from "../ffi/generated.ts";
 import { ptr, view as toArrayBuffer } from "../ffi/index.ts";
 
-const FLOAT32 = 10,
-  INT32 = 7,
+// MLX's dtype enum, for astype(). Exported because a parity check needs to read
+// a bf16 checkpoint at full precision: bf16 is fine for generation but too
+// coarse to compare against a float32 reference.
+export const FLOAT32 = 10;
+const INT32 = 7,
   UINT32 = 3;
 const reg = new FinalizationRegistry<number>((h) => {
   if (h) m.mlx_array_free(h);
@@ -201,6 +204,10 @@ export class MX {
   }
   square() {
     return this.r(m.mlx_square, this.h, stream);
+  }
+  /** Elementwise max against a scalar — ReLU is `x.maximum(0)`. */
+  maximum(v: number) {
+    return this.r(m.mlx_maximum, this.h, scalar(v).h, stream);
   }
   meanAll() {
     const n = this.size;

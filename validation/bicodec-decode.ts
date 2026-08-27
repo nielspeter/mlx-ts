@@ -1,43 +1,38 @@
-// TS side of the BiCodec parity check, against mlx-audio's own port.
+// BiCodec's decode path against the committed reference numbers:
+// quantizer -> speaker d-vector -> prenet -> wave generator.
 //
-// Fingerprints all four stages, not just the waveform: quantizer -> speaker
-// d-vector -> prenet -> wave generator, and a mismatch at the end says nothing
-// about which of the four is wrong. Our tensors are channels-last [B, T, C]
-// where mlx-audio's are [B, C, T], so `first4` differs by layout — mean and
-// absmean do not.
+// All four stages, because a mismatch in the waveform says nothing about which
+// of the four caused it. The numbers come from the original PyTorch Spark-TTS
+// (see validation/golden.ts), so this needs no Python.
 //
-//   /tmp/sdvenv/bin/python reference/reference-bicodec.py && bun validation/bicodec-decode.ts
-import { fromI32, type MX } from "../src/index.ts";
+// Worth knowing when diffing against mlx-audio: its WNConvTranspose1d passes
+// `groups` positionally into conv_transpose1d's `output_padding` slot, so every
+// upsampling stage emits one extra sample and 16 frames come out as 5171 rather
+// than 320*16 = 5120. PyTorch gives 5120, and so do we.
+//   bun validation/bicodec-decode.ts
+import { fromI32 } from "../src/index.ts";
 import { hubFile } from "../src/io/hub.ts";
 import { singleFileWeights } from "../src/io/loader.ts";
 import { BiCodecPrenet, BiCodecQuantizer, SpeakerDetokenizer, WaveGenerator } from "../src/models/bicodec.ts";
+import { check, golden, verdict } from "./golden.ts";
 
-const REPO = "mlx-community/Spark-TTS-0.5B-bf16";
-const W = singleFileWeights(await hubFile(REPO, "BiCodec/model.safetensors"));
+const g = golden.bicodec;
+const W = singleFileWeights(await hubFile("mlx-community/Spark-TTS-0.5B-bf16", "BiCodec/model.safetensors"));
 
-function fp(tag: string, a: MX) {
-  const f = a.toF32();
-  let sum = 0, abs = 0;
-  for (const v of f) { sum += v; abs += Math.abs(v); }
-  console.log(`${tag.padEnd(9)} shape=[${a.shape.join(", ")}] mean=${(sum / f.length).toFixed(6)} ` +
-              `absmean=${(abs / f.length).toFixed(6)} ` +
-              `first4=[${Array.from(f.slice(0, 4)).map((v) => +v.toFixed(5)).join(", ")}]`);
-}
+const zq = new BiCodecQuantizer(W).detokenize(fromI32(Int32Array.from(g.semantic), [1, g.semantic.length]));
+check("z_q", zq, g.z_q);                            // channels-last here, first there
 
-const T = 16;
-const semantic = Int32Array.from({ length: T }, (_, i) => (i * 137 + 11) % 8192);
-const glob = Array.from({ length: 32 }, (_, i) => (i * 91 + 7) % 4096);
-
-const zq = new BiCodecQuantizer(W).detokenize(fromI32(semantic, [1, T]));
-fp("z_q", zq);
-
-const d = new SpeakerDetokenizer(W).detokenize([glob]);
-fp("d_vector", d);
+const d = new SpeakerDetokenizer(W).detokenize([g.global]);
+check("d_vector", d, g.d_vector, true);             // [1, 1024] both sides
 
 const pre = new BiCodecPrenet(W).forward(zq, d);
-fp("prenet", pre);
+check("prenet", pre, g.prenet);
 
 // The d-vector is added back after the prenet — the generator sees the speaker
 // twice, once through AdaLayerNorm and once as a plain bias.
 const wav = new WaveGenerator(W).forward(pre.add(d.reshape([1, 1, d.shape[1]])));
-fp("wav", wav);
+// [1, N, 1] and [1, 1, N] flatten identically, so these are the samples
+// themselves rather than a summary of them.
+check("wav", wav, g.wav, true);
+
+verdict("BiCodec decode");

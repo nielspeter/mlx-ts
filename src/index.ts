@@ -5,7 +5,16 @@
 //   import { MX, tidy, Tokenizer, generate } from "mlx-ts";
 
 // --- audio: the Whisper front-end (ffmpeg decode -> log-Mel) ----------------
-export { decodeAudio, loadMelFilters, logMel, padOrTrim, playAudio, SR } from "./audio/mel.ts";
+export {
+  decodeAudio,
+  loadMelFilters,
+  logMel,
+  melFilterBank,
+  melSpectrogram,
+  padOrTrim,
+  playAudio,
+  SR,
+} from "./audio/mel.ts";
 export { saveAudio } from "./audio/wav.ts";
 // --- arrays and memory ---------------------------------------------------
 // `tidy()` is not optional on a hot path: a FinalizationRegistry only runs
@@ -19,6 +28,7 @@ export {
   dropout,
   escape,
   evalAll,
+  FLOAT32,
   freeAll,
   fromF32,
   fromI32,
@@ -62,6 +72,7 @@ export {
   shapeOf,
   shardedWeights,
   singleFileWeights,
+  upcastWeights,
   type WeightMap,
   type Weights,
 } from "./io/loader.ts";
@@ -110,6 +121,16 @@ export {
   type SpeechOptions,
   splitAudioTokens,
 } from "./models/spark-tts.ts";
+// BiCodec's speaker encoder: a recording -> the 32 tokens that stand for its
+// voice. The encode half, which is what cloning needs.
+export {
+  ecapaTdnn,
+  fsqEncode,
+  perceiverResample,
+  referenceClip,
+  SpeakerTokenizer,
+  volumeNormalize,
+} from "./models/speaker.ts";
 export { type ImageOptions, StableDiffusion } from "./models/stable-diffusion.ts";
 export { type T5Config, T5Encoder } from "./models/t5.ts";
 export { timestepEmbedding, Unet, type UnetConfig } from "./models/unet.ts";

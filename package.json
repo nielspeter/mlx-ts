@@ -65,12 +65,10 @@
     "lint:fix": "biome check --write --formatter-enabled=false .",
     "format": "biome format --write ."
   },
-  "dependencies": {
-    "@huggingface/jinja": "^0.5.9"
-  },
   "optionalDependencies": {
     "koffi": "^3.1.6",
-    "@nielspeter/mlx-ts-darwin-arm64": "0.1.0"
+    "@nielspeter/mlx-ts-darwin-arm64": "0.1.0",
+    "@huggingface/jinja": "^0.5.9"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.10",

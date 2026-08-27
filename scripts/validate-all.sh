@@ -86,6 +86,22 @@ if bun -e 'import {isCached} from "./src/io/hub.ts"; process.exit(await isCached
                  *) no "hub load()" "$OUT" ;; esac
 fi
 
+# conv2d / convTranspose2d — the primitives a UNet and a VAE are built from.
+# Pinned before anything is built on them: a quiet layout or padding mismatch
+# here surfaces as a subtly wrong image fifty diffusion steps later.
+#
+# Needs Bun >= 1.4.0. These are the first ops in the binding whose arguments
+# spill past the arm64 register set as int32, and bun:ffi 1.3.x mis-marshalled
+# that — a segfault at 0x1, with `groups` landing where the stream pointer is
+# read. Node and Deno were always correct. See docs/FINDINGS.md.
+#
+# Sums are compared rounded: float addition order differs between the two, so
+# convTranspose2d lands on -4.333644 here and -4.333647 there.
+python3 reference/reference-conv2d.py >/tmp/v_cv_p.txt 2>&1
+bun validation/conv2d.ts >/tmp/v_cv_t.txt 2>&1
+cvvals(){ grep -oE "shape=\[[^]]*\] sum=-?[0-9]+\.[0-9]{4}|first4=\[[^]]*\]"; }
+cmp_pair "conv2d / convTranspose2d vs MLX Python" /tmp/v_cv_t.txt /tmp/v_cv_p.txt cvvals
+
 # The MLX repo layout (medium/large) reaches the weights through a name rewrite.
 # Headers only — no weights downloaded — so this is cheap enough to always run.
 if bun validation/musicgen-mlx-layout.ts >/tmp/v_mgl.txt 2>&1 && grep -q "verdict : OK" /tmp/v_mgl.txt; then

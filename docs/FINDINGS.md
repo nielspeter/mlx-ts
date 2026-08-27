@@ -319,6 +319,48 @@ The general lesson is that a memory assertion has to measure what the operating
 system has to satisfy, not what the allocator chooses to report — and that a
 guard which has never been observed to fire is not yet known to work.
 
+## 6.8. Eight arguments is where a JS FFI stops agreeing with the C ABI
+Adding `conv2d` — the first step toward a UNet — segfaulted immediately under
+Bun, at address `0x1`. The binding was not wrong: the same call, through the
+same generated symbol table, produced numbers identical to MLX Python on both
+Node (koffi) and Deno.
+
+`0x1` is the clue. `mlx_conv2d`'s last argument is the stream handle, and its
+second-to-last is `groups`, which the call passes as `1`. A crash dereferencing
+`0x1` means `groups` was read where the stream should have been — the arguments
+after a certain point had shifted by one slot.
+
+On Apple arm64 the first eight integer/pointer arguments travel in registers;
+everything beyond that goes on the stack, where sub-word types are packed to
+their natural width rather than padded to eight bytes. Sorting the binding by
+what actually spills makes the boundary exact:
+
+| symbol | args | spilled past arg 8 | Bun 1.3.14 |
+|---|---|---|---|
+| `mlx_conv1d` | 8 | nothing | works |
+| `mlx_conv_transpose1d` | 9 | `ptr` | works |
+| `mlx_quantized_matmul` | 10 | `ptr`, `ptr` | works |
+| `mlx_gather_qmm` | 13 | `u64`, `u64`, `ptr`, `bool`, `ptr` | works |
+| `mlx_conv2d` | 11 | **`i32`, `i32`**, `ptr` | segfault |
+| `mlx_conv_transpose2d` | 13 | **`i32` x4**, `ptr` | segfault |
+
+Arity alone is not the trigger — a 13-argument call works. What fails is an
+`i32` that spills onto the stack, and until now the binding had never had one:
+every op reached for so far either fit in the registers or spilled only
+pointer-width values. Fifteen symbols share the shape, all of them convolution
+or padding, and none had ever been called.
+
+Bun 1.4.0 fixes it; 1.3.14 does not. So `conv2d` and everything built on it
+needs Bun >= 1.4.0, and that is a floor worth stating rather than discovering
+from an image that comes out wrong.
+
+The general lesson is that a foreign-function binding is not verified by the
+ops that happen to be on the hot path. 472 symbols were generated from the
+headers and roughly a tenth are exercised; the untested remainder is not
+uniformly safe, because the calling convention has cliffs the type signatures do
+not show. The parity check is per-op for exactly this reason, and `conv2d` got
+one before a single layer was built on top of it.
+
 ## 7. What a production `@mlx-ts/lm` still needs
 The list has shrunk a lot — most of the original items are now built and
 validated (§3, §6, §7b). None of what remains is a feasibility risk; it is

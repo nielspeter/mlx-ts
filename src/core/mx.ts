@@ -158,6 +158,24 @@ export class MX {
   // conv1d: this=input [N,L,C_in], w=[C_out,K,C_in] -> [N,L',C_out]
   conv1d(w: MX, stride: number, padding: number) { return this.r(m.mlx_conv1d, this.h, w.h, stride, padding, 1, 1, stream); }
 
+  // conv2d: this=input [N,H,W,C_in], w=[C_out,KH,KW,C_in] -> [N,H',W',C_out].
+  // Channels-last, like conv1d and like MLX itself — PyTorch checkpoints are
+  // stored [C_out,C_in,KH,KW], so a port transposes the weights on load.
+  conv2d(w: MX, stride: [number, number] = [1, 1], padding: [number, number] = [0, 0],
+         dilation: [number, number] = [1, 1], groups = 1) {
+    return this.r(m.mlx_conv2d, this.h, w.h, stride[0], stride[1],
+                  padding[0], padding[1], dilation[0], dilation[1], groups, stream);
+  }
+
+  // The upsampling half of a decoder: same layout, plus output padding to pick
+  // between the output sizes a strided convolution leaves ambiguous.
+  convTranspose2d(w: MX, stride: [number, number] = [1, 1], padding: [number, number] = [0, 0],
+                  dilation: [number, number] = [1, 1], outputPadding: [number, number] = [0, 0], groups = 1) {
+    return this.r(m.mlx_conv_transpose2d, this.h, w.h, stride[0], stride[1],
+                  padding[0], padding[1], dilation[0], dilation[1],
+                  outputPadding[0], outputPadding[1], groups, stream);
+  }
+
   // fast ops
   rmsNorm(w: MX, eps: number) { return this.r(m.mlx_fast_rms_norm, this.h, w.h, eps, stream); }
   layerNorm(w: MX, b: MX, eps: number) { const s = slot(); m.mlx_fast_layer_norm(ptr(s), this.h, w.h, b.h, eps, stream); return new MX(Number(s[0])); }

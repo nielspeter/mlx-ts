@@ -86,6 +86,17 @@ if bun -e 'import {isCached} from "./src/io/hub.ts"; process.exit(await isCached
                  *) no "hub load()" "$OUT" ;; esac
 fi
 
+# The Qwen2 backbone against mlx-lm, on Spark-TTS's own prompt format. Compared
+# as token ids, not text: a tokenizer disagreement would otherwise hide behind
+# matching words. A plain sentence makes this checkpoint repeat one token
+# forever, and two implementations agreeing on a constant proves nothing.
+if [ -f "$HOME/.cache/mlx-ts/mlx-community/Spark-TTS-0.5B-bf16/model.safetensors" ] \
+   && [ -x /tmp/sdvenv/bin/python ]; then
+  /tmp/sdvenv/bin/python reference/reference-qwen2.py >/tmp/v_q2_p.txt 2>&1
+  bun validation/qwen2-generate.ts >/tmp/v_q2_t.txt 2>&1
+  cmp_pair "Qwen2 backbone vs mlx-lm" /tmp/v_q2_t.txt /tmp/v_q2_p.txt genids
+fi
+
 # conv2d / convTranspose2d — the primitives a UNet and a VAE are built from.
 # Pinned before anything is built on them: a quiet layout or padding mismatch
 # here surfaces as a subtly wrong image fifty diffusion steps later.

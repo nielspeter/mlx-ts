@@ -56,6 +56,8 @@ export { OLMoE } from "./models/olmoe.ts";
 // takes one as its first argument, so exporting the function without the class
 // gave consumers a signature they could not satisfy.
 export { generateBatch, Qwen3, stepTidy } from "./models/qwen-nn.ts";
+// Qwen2 / Qwen2.5 at full precision — the backbone under Spark-TTS and many others.
+export { Qwen2, type Qwen2Config } from "./models/qwen2.ts";
 export { type ImageOptions, StableDiffusion } from "./models/stable-diffusion.ts";
 export { type T5Config, T5Encoder } from "./models/t5.ts";
 export { timestepEmbedding, Unet, type UnetConfig } from "./models/unet.ts";

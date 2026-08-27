@@ -42,6 +42,11 @@ jobs:
       - run: bun tools/audit.ts
       - run: bun tools/check-api.ts
 
+
+      # Coverage over src/, with the weightless half of validation/ imported so the
+      # parity suite counts. Thresholds ratchet — see scripts/coverage.sh.
+      - name: coverage
+        run: scripts/coverage.sh
       - name: arena / ownership tests
         run: bun test tests/arena.test.ts
       - name: op parity fixtures

@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Run the fast gates before anything leaves the machine. These need no weights,
-# no GPU and no network, so they cost seconds — unlike the parity suite, which
-# stays a manual gate.
+# Run the fast gates before anything leaves the machine. These need no
+# downloaded weights and no network — unlike the parity suite, which stays a
+# manual gate. Lint, typecheck and audit cost seconds; coverage runs the
+# weightless half of validation/ and costs closer to a minute, which is the
+# price of the number meaning something.
 #
 # Enable once per clone:  git config core.hooksPath .githooks
 # Skip deliberately:      git push --no-verify
@@ -13,3 +15,5 @@ echo "pre-push: typecheck"
 bun run typecheck
 echo "pre-push: audit"
 bun tools/audit.ts
+echo "pre-push: coverage"
+scripts/coverage.sh

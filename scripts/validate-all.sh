@@ -370,6 +370,11 @@ fi
 #
 # mlx_whisper goes in its own venv because it pins dependencies the rest of the
 # reference scripts do not want. Without both, the totals below read 52, not 54.
+# The oracle decodes with ffmpeg, so these checks must too: afconvert and
+# ffmpeg resample differently — about 1% rms in the mel — and the claim here is
+# token-for-token equality, which a single flipped token would break. Everything
+# else, including a user's own transcription, uses the built-in decoder.
+export MLXTS_AUDIO_DECODER=ffmpeg
 PYW=""; for c in /tmp/wvenv/bin/python python3; do "$c" -c "import mlx_whisper" >/dev/null 2>&1 && { PYW=$c; break; }; done
 if [ -n "$PYW" ] && [ -f models/whisper-tiny.safetensors ]; then
   "$PYW" reference/reference-whisper.py >/dev/null 2>&1

@@ -100,7 +100,7 @@ dimensions, so cosine similarity classifies without any training.
 ```ts
 import { ClipVisionEncoder, fromF32, loadImage } from "@nielspeter/mlx-ts";
 
-const px = await loadImage("photo.jpg", { size: 224 });      // ffmpeg decodes it
+const px = await loadImage("photo.jpg", { size: 224 });      // sips decodes it
 const vec = vision.embed(fromF32(px, [1, 224, 224, 3]), W.mx("visual_projection.weight"));
 // ...then compare against text embeddings; examples/clip-zeroshot.ts is the whole thing.
 ```
@@ -224,7 +224,13 @@ token-for-token. Everything below is the validated machinery underneath it.
 npm i @nielspeter/mlx-ts      # or: bun add / deno add npm:
 ```
 
-That is the whole install. The native runtime arrives as
+That is the whole install — no other tools. Audio and image decoding go
+through macOS's own `afconvert` and `sips`, and playback through `afplay`; MLX
+is Apple-Silicon-only, so there is nothing to gain by requiring `ffmpeg`. (The
+parity suite still uses ffmpeg for the Whisper checks, because their oracle
+decodes that way — a dev dependency, not a user one.)
+
+The native runtime arrives as
 [`@nielspeter/mlx-ts-darwin-arm64`](https://www.npmjs.com/package/@nielspeter/mlx-ts-darwin-arm64),
 an `optionalDependency` carrying Apple's own `libmlx` + `mlx.metallib` next to
 our `libmlxc` (199 MB unpacked). The parity suite passes **forced onto it**,
@@ -644,7 +650,7 @@ curl -sL -o /tmp/jfk.flac https://github.com/openai/whisper/raw/main/tests/jfk.f
 WA=$(/tmp/wvenv/bin/python -c 'import mlx_whisper,os;print(os.path.dirname(mlx_whisper.__file__))')/assets
 cp "$WA/multilingual.tiktoken" models/whisper-multilingual.tiktoken
 python3 -c "import mlx.core as mx,numpy as np;np.array(mx.load('$WA/mel_filters.npz')['mel_128']).astype('float32').tofile('models/whisper-mel-filters-128.f32')"
-bun src/models/whisper.ts audio.flac          # auto-detects language; any ffmpeg-decodable file
+bun src/models/whisper.ts audio.flac          # auto-detects language; anything macOS can decode
 ```
 
 OLMoE-1B-7B 4-bit setup (the MoE model — weights git-ignored, ~3.9 GB):
@@ -687,7 +693,9 @@ bun src/models/gpt2.ts "The capital of France is"   # greedy; TEMP/TOP_K/TOP_P/R
   spectrum → audio) runs in mlx-c/TS, matching mlx-audio to 1.2e-7
   (`spikes/spike-istft.ts`). A full talking pipeline needs the rest of a vocoder
   (conv/norm variants — portable) plus a non-MLX grapheme→phoneme step
-  (`espeak-ng`, like ffmpeg). Scoped as product work — see `docs/FINDINGS.md` §7c.
+  (`espeak-ng`). Scoped as product work — see `docs/FINDINGS.md` §7c. An
+  LLM-based TTS avoids that step entirely by emitting audio codec tokens
+  straight from text, which is the shape MusicGen already proves out.
 - **Cross-platform** — Apple-Silicon + Metal only (no Linux/CUDA, Windows,
   Intel). Runtime portability is done: see "Runtimes" above.
 - **Multimodal LLMs** (LLaVA and friends) — the vision half exists now

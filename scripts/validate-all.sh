@@ -310,8 +310,18 @@ if [ -f data/input.txt ]; then   # tok_train: train BPE in native Rust -> our TS
     fi
   fi
 fi
-python3 reference/reference-chat.py >/dev/null 2>&1
-bun tests/chat-test.ts 2>&1 | grep -q "4/4" && ok "chat template vs Python jinja2 (4/4)" || no "chat-template" "parity"
+# The fixtures are regenerated first, so a stale file cannot pass. Not silenced:
+# if jinja2 is missing the oracle fails here rather than leaving us comparing
+# against whatever was checked in last.
+if python3 reference/reference-chat.py >/tmp/v_chat_p.txt 2>&1; then
+  CHATN=$(bun test tests/chat-template.test.ts 2>&1 | grep -oE "parity vs Python jinja2: [0-9]+/[0-9]+")
+  case "$CHATN" in
+    *"/"*) ok "chat template vs Python jinja2 (${CHATN##*: })" ;;
+    *) no "chat-template" "parity cases did not run (is models/tokenizer_config-qwen.json present?)" ;;
+  esac
+else
+  no "chat-template" "reference-chat.py failed: $(tail -1 /tmp/v_chat_p.txt)"
+fi
 # Custom Metal kernel authored in TypeScript vs the same kernel in MLX Python.
 python3 reference/reference-metal-kernel.py >/tmp/v_mk_p.txt 2>&1
 bun examples/metal-kernel.ts >/tmp/v_mk_t.txt 2>&1

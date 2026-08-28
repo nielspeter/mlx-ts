@@ -121,78 +121,39 @@ bun validation/groupnorm.ts >/tmp/v_gn_t.txt 2>&1
 gnvals(){ grep -oE "sum=-?[0-9]+\.[0-9]{4}|first4=\[[^]]*\]"; }
 cmp_pair "GroupNorm vs MLX Python" /tmp/v_gn_t.txt /tmp/v_gn_p.txt gnvals
 
-# ---- Stable Diffusion checks: opt-in with MLXTS_SD=1 --------------------------
+# ---- Stable Diffusion checks: opt-in with MLXTS_SD=1 -------------------------
 #
 #   MLXTS_SD=1 bash scripts/validate-all.sh
 #
-# The VAE decoder against mlx-examples' own Stable Diffusion port. Both sides
-# load stabilityai/sd-vae-ft-mse, so a difference is our decoder, not the
-# checkpoint. Needs their package and an MLX python; setup is:
+# Gated for memory, not for tooling: the UNet alone is 3.2 GB, which makes these
+# the peak of the whole suite and stops it completing on a busy machine. Nothing
+# here needs Python.
 #
-#   python3 -m venv /tmp/sdvenv
-#   /tmp/sdvenv/bin/pip install mlx huggingface_hub httpx safetensors numpy regex
-#   mkdir -p /tmp/mlxsd_pkg/stable_diffusion && cd /tmp/mlxsd_pkg/stable_diffusion
-#   for f in vae unet config model_io __init__ tokenizer clip sampler; do curl -sLO \
-#     "https://raw.githubusercontent.com/ml-explore/mlx-examples/main/stable_diffusion/stable_diffusion/$f.py"; done
+# The reference numbers live in validation/sd-golden.json, generated once from
+# PyTorch diffusers and transformers by reference/gen-sd-fixtures.py and
+# committed. Not from mlx-examples, which is a port like ours: comparing two
+# ports can only show they agree. Spark-TTS is the cautionary tale — we matched
+# another MLX port exactly and were both wrong about the STFT window.
 #
-# Compared on mean and the first few pixels, not the total: summing 49k floats
-# is order-dependent and the two land 0.036 apart out of -4788.
-# Opt-in: MLXTS_SD=1. These load the SD UNet twice — once in the Python oracle
-# and once here, 3.2 GB each — which makes them the peak of the whole suite and
-# stops it completing on a machine with other work running. conv2d and
-# GroupNorm above stay unconditional; they need no weights.
-if [ "${MLXTS_SD:-0}" = "1" ] && [ -x /tmp/sdvenv/bin/python ] \
-   && [ -d "${MLX_SD:-/tmp/mlxsd_pkg}/stable_diffusion" ]; then
-  MLX_SD="${MLX_SD:-/tmp/mlxsd_pkg}" /tmp/sdvenv/bin/python reference/reference-vae.py >/tmp/v_vae_p.txt 2>&1
-  bun validation/vae-decode.ts >/tmp/v_vae_t.txt 2>&1
-  vaevals(){ grep -oE "shape=\[[^]]*\]|mean=-?[0-9]+\.[0-9]{5}|first4=\[[^]]*\]"; }
-  cmp_pair "VAE decoder vs mlx-examples" /tmp/v_vae_t.txt /tmp/v_vae_p.txt vaevals
-
-  # CLIP's text encoder on fixed ids, so this is the transformer alone — the
-  # tokenizer is checked separately. Causal masking is the detail that matters:
-  # without it the conditioning is plausible but wrong.
-  MLX_SD="${MLX_SD:-/tmp/mlxsd_pkg}" /tmp/sdvenv/bin/python reference/reference-clip.py >/tmp/v_clip_p.txt 2>&1
-  bun validation/clip-encode.ts >/tmp/v_clip_t.txt 2>&1
-  clipvals(){ grep -oE "shape=\[[^]]*\]|mean=-?[0-9]+\.[0-9]{6}|first4=\[[^]]*\]"; }
-  cmp_pair "CLIP text encoder vs mlx-examples" /tmp/v_clip_t.txt /tmp/v_clip_p.txt clipvals
-
-  # CLIP's tokenizer. Character-level BPE with a </w> word-end mark, not the
-  # byte-level kind in src/text/tokenizer.ts. Cases cover where it can quietly
-  # differ: repeated whitespace, casing, punctuation runs, per-digit splitting,
-  # contractions, and words that need several merges.
-  MLX_SD="${MLX_SD:-/tmp/mlxsd_pkg}" /tmp/sdvenv/bin/python reference/reference-clip-tokenizer.py >/tmp/v_ctok_p.txt 2>&1
-  bun validation/clip-tokenizer.ts >/tmp/v_ctok_t.txt 2>&1
-  ctokvals(){ grep -oE "\[[0-9, ]+\]"; }
-  cmp_pair "CLIP tokenizer vs mlx-examples (7 cases)" /tmp/v_ctok_t.txt /tmp/v_ctok_p.txt ctokvals
-
-  # The UNet: fixed latents, timestep and conditioning, so this is the denoiser
-  # alone. 16x16 latents keep it cheap — the architecture is identical at SD's
-  # native 64 — but it still needs the 3.2 GB checkpoint cached.
-  if [ -f "$HOME/.cache/mlx-ts/stable-diffusion-v1-5/stable-diffusion-v1-5/unet/diffusion_pytorch_model.safetensors" ]; then
-    MLX_SD="${MLX_SD:-/tmp/mlxsd_pkg}" /tmp/sdvenv/bin/python reference/reference-unet.py >/tmp/v_unet_p.txt 2>&1
-    bun validation/unet-forward.ts >/tmp/v_unet_t.txt 2>&1
-    unetvals(){ grep -oE "shape=\[[^]]*\]|mean=-?[0-9]+\.[0-9]{6}|first4=\[[^]]*\]"; }
-    cmp_pair "UNet vs mlx-examples" /tmp/v_unet_t.txt /tmp/v_unet_p.txt unetvals
-  fi
-
-  # The noise schedule. No weights, so a mismatch is pure arithmetic — and this
-  # is where a diffusion port quietly goes wrong: SD trains on "scaled_linear"
-  # betas, linear in sqrt(beta), and the plain linear one still makes an image,
-  # just a worse one. Compared at 3-4 decimals because MLX builds the schedule
-  # in float32 and TypeScript in float64.
-  MLX_SD="${MLX_SD:-/tmp/mlxsd_pkg}" /tmp/sdvenv/bin/python reference/reference-scheduler.py >/tmp/v_sch_p.txt 2>&1
-  bun validation/scheduler.ts >/tmp/v_sch_t.txt 2>&1
-  if diff -q /tmp/v_sch_t.txt /tmp/v_sch_p.txt >/dev/null 2>&1; then
-    ok "noise schedule vs mlx-examples"
-  else
-    no "scheduler" "$(diff /tmp/v_sch_t.txt /tmp/v_sch_p.txt | head -2 | tr '\n' ' ')"
-  fi
-elif [ "${MLXTS_SD:-0}" = "1" ]; then
-  echo "  ⏭  Stable Diffusion checks: MLXTS_SD=1 set but the oracle is missing —"
-  echo "     need /tmp/sdvenv and \${MLX_SD:-/tmp/mlxsd_pkg}/stable_diffusion (see above)"
+# Verified against PyTorch when this moved: CLIP tokenizer identical on all 7
+# cases, CLIP text and the UNet exact, the VAE within float noise, and our
+# continuous-time sigma(t) equal to diffusers' sigmas[t-1] at every integer t.
+if [ "${MLXTS_SD:-0}" = "1" ]; then
+  for spec in "clip-tokenizer:CLIP tokenizer (7 cases)" \
+              "clip-encode:CLIP text encoder" \
+              "vae-decode:VAE decoder" \
+              "scheduler:noise schedule" \
+              "unet-forward:UNet"; do
+    f="${spec%%:*}"; label="${spec#*:}"
+    if bun "validation/$f.ts" >"/tmp/v_$f.txt" 2>&1 && grep -q ": ok$" "/tmp/v_$f.txt"; then
+      ok "$label vs PyTorch diffusers"
+    else
+      no "$label" "$(grep -E "FAIL|MISMATCH|Error" "/tmp/v_$f.txt" | head -2 | tr '\n' ' ')"
+    fi
+  done
 else
-  echo "  ⏭  Stable Diffusion checks skipped (VAE, CLIP x2, UNet, scheduler)."
-  echo "     They load the 3.2 GB UNet twice; run them with MLXTS_SD=1."
+  echo "  ⏭  Stable Diffusion checks skipped (CLIP x2, VAE, scheduler, UNet)."
+  echo "     They load the 3.2 GB UNet; run them with MLXTS_SD=1."
 fi
 
 # ---- Spark-TTS checks: opt-in with MLXTS_TTS=1 -------------------------------

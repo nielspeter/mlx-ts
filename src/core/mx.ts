@@ -9,7 +9,7 @@
 
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { m, stream } from "../ffi/generated.ts";
+import { m, pendingError, stream, throwIfError } from "../ffi/generated.ts";
 import { ptr, view as toArrayBuffer } from "../ffi/index.ts";
 
 // MLX's dtype enum, for astype(). Exported because a parity check needs to read
@@ -39,13 +39,23 @@ export function tidy<T>(fn: () => T): T {
   let result: T;
   try {
     result = fn();
-  } finally {
+  } catch (e) {
+    // Nothing survives a scope that failed. Cleanup placed after a try/finally
+    // is skipped exactly here — on the error path, where a long-lived process
+    // needs deterministic freeing most.
     ARENA = parent;
+    for (const x of cur) x.free();
+    throw e;
   }
+  ARENA = parent;
   const keep = new Set<MX>();
   collect(result, keep);
   for (const x of cur) if (!keep.has(x)) x.free();
-  if (parent) for (const k of keep) parent.add(k);
+  // Hand the parent only what this scope created. `keep` can also hold arrays
+  // from outside — a nested tidy() returning one of its inputs, say — and those
+  // belong to whoever made them. Adopting one lets the outer scope free an
+  // array its caller still holds.
+  if (parent) for (const k of keep) if (cur.has(k)) parent.add(k);
   return result;
 }
 
@@ -149,10 +159,11 @@ const NONE = new Uint8Array([0]);
 
 export class MX {
   h: number;
-  private pin?: ArrayBufferView; // keep source buffer alive for zero-copy arrays
-  constructor(h: number, pin?: ArrayBufferView) {
+  // No reference to the source TypedArray: mlx_array_new_data copies at
+  // construction — verified by mutating the buffer before any eval and reading
+  // the original values back — so retaining one only pinned JS memory.
+  constructor(h: number) {
     this.h = h;
-    this.pin = pin;
     reg.register(this, h, this);
     ARENA?.add(this);
   }
@@ -165,9 +176,13 @@ export class MX {
     this.free();
   } // `using a = x.add(y)` frees deterministically at scope end
 
+  // Every op funnels through here, so this is where mlx-c failures become
+  // TypeScript exceptions. One null comparison per operation; without it an
+  // invalid shape reaches mlx-c's default handler, which prints and exits.
   private r(fn: any, ...a: any[]): MX {
     const s = slot();
     fn(ptr(s), ...a);
+    if (pendingError() !== null) throwIfError(fn.name || "mlx-c op", Number(s[0]));
     return new MX(Number(s[0]));
   }
 
@@ -474,8 +489,11 @@ export class MX {
   }
 
   // materialize / read back
+  // Errors surface here as well as at graph construction: a bad shape is caught
+  // when the op is built, an allocation failure only when it runs.
   eval() {
     m.mlx_array_eval(this.h);
+    if (pendingError() !== null) throwIfError("mlx_array_eval");
     return this;
   }
   get size() {
@@ -572,25 +590,50 @@ export class MX {
 }
 
 // constructors
+/**
+ * Validate a host array against the shape it is given.
+ *
+ * mlx-c takes a pointer and a shape but no byte length, so a shape larger than
+ * the buffer makes native code read past the TypedArray — silently, returning
+ * whatever follows it. A fractional dimension is truncated by the Int32Array
+ * cast, and a negative one reaches the allocator as a huge unsigned size. None
+ * of that should be reachable from a public constructor.
+ *
+ * Returns the shape buffer padded to length 1, because ptr() cannot address a
+ * zero-length buffer and a 0-d array is legal: product([]) === 1.
+ */
+function shapeBuffer(shape: number[], n: number, what: string): Int32Array {
+  let product = 1;
+  for (const d of shape) {
+    if (!Number.isInteger(d) || d < 0) {
+      throw new Error(`${what}: shape [${shape}] has a non-integer or negative dimension`);
+    }
+    product *= d;
+    if (!Number.isSafeInteger(product)) {
+      throw new Error(`${what}: shape [${shape}] overflows a safe integer`);
+    }
+  }
+  if (product !== n) {
+    throw new Error(`${what}: shape [${shape}] needs ${product} elements, got ${n}`);
+  }
+  const buf = new Int32Array(Math.max(1, shape.length));
+  buf.set(shape);
+  return buf;
+}
+
 export function fromF32(data: Float32Array, shape: number[]): MX {
-  return new MX(
-    m.mlx_array_new_data(ptr(data), ptr(new Int32Array(shape)), shape.length, FLOAT32) as number,
-    data,
-  );
+  const sh = shapeBuffer(shape, data.length, "fromF32");
+  return new MX(m.mlx_array_new_data(ptr(data), ptr(sh), shape.length, FLOAT32) as number);
 }
 export function fromI32(data: Int32Array, shape: number[]): MX {
-  return new MX(
-    m.mlx_array_new_data(ptr(data), ptr(new Int32Array(shape)), shape.length, INT32) as number,
-    data,
-  );
+  const sh = shapeBuffer(shape, data.length, "fromI32");
+  return new MX(m.mlx_array_new_data(ptr(data), ptr(sh), shape.length, INT32) as number);
 }
 // uint32 — e.g. packed quantized weights and gather indices (bit pattern matters,
 // so these can't round-trip through float32).
 export function fromU32(data: Uint32Array, shape: number[]): MX {
-  return new MX(
-    m.mlx_array_new_data(ptr(data), ptr(new Int32Array(shape)), shape.length, UINT32) as number,
-    data,
-  );
+  const sh = shapeBuffer(shape, data.length, "fromU32");
+  return new MX(m.mlx_array_new_data(ptr(data), ptr(sh), shape.length, UINT32) as number);
 }
 export const scalar = (x: number): MX => new MX(m.mlx_array_new_float(x) as number);
 // GELU constant singletons — allocated once at module load (ARENA is null here, so

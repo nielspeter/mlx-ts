@@ -17,7 +17,7 @@ const x = new MX(get(w, "x"));
 // uint32 index arrays (dtype 3 = UINT32)
 function u32(data: number[], shape: number[]) {
   const buf = Uint32Array.from(data);
-  return new MX(m.mlx_array_new_data(ptr(buf), ptr(new Int32Array(shape)), shape.length, 3) as number, buf);
+  return new MX(m.mlx_array_new_data(ptr(buf), ptr(new Int32Array(shape)), shape.length, 3) as number);
 }
 const lhs = u32([0, 1, 2, 3, 4, 5], [T]);    // token t -> x row t
 const idx = u32([0, 1, 2, 3, 0, 1], [T]);    // token t -> expert idx[t]

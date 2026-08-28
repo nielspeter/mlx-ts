@@ -133,18 +133,32 @@ function generate(model: Qwen3, ids: number[], opts: { max: number; temp: number
 
 // ---- batched greedy generation (B sequences, same length) ----
 export function generateBatch(model: Qwen3, batch: number[][], max: number) {
+  if (batch.length === 0) throw new Error("generateBatch: batch is empty");
   const B = batch.length, L = batch[0].length;
+  // Flattened into one shaped array below, so ragged input would reshape into
+  // nonsense rather than fail.
+  const ragged = batch.findIndex((seq) => seq.length !== L);
+  if (ragged >= 0) throw new Error(`generateBatch: sequence ${ragged} has length ${batch[ragged].length}, expected ${L}`);
+
   const cache: KV[] = Array(model.NL).fill(null);
-  let toks = stepTidy(model, Int32Array.from(batch.flat()), B, L, 0, cache, 0, 0, 0);
-  let cur = toks.toU32(); toks.free();
-  const out = batch.map(() => [] as number[]);
-  let pos = L;
-  for (let i = 0; i < max; i++) {
-    for (let b = 0; b < cur.length; b++) out[b].push(cur[b]);
-    toks = stepTidy(model, Int32Array.from(cur), B, 1, pos, cache, 0, 0, 0);
-    cur = toks.toU32(); toks.free(); pos++;
+  try {
+    let toks = stepTidy(model, Int32Array.from(batch.flat()), B, L, 0, cache, 0, 0, 0);
+    let cur = toks.toU32(); toks.free();
+    const out = batch.map(() => [] as number[]);
+    let pos = L;
+    for (let i = 0; i < max; i++) {
+      for (let b = 0; b < cur.length; b++) out[b].push(cur[b]);
+      toks = stepTidy(model, Int32Array.from(cur), B, 1, pos, cache, 0, 0, 0);
+      cur = toks.toU32(); toks.free(); pos++;
+    }
+    return out;
+  } finally {
+    // Each step frees the previous entry, but the last key/value pair per layer
+    // is still live at return. Leaving that to the FinalizationRegistry is the
+    // exact pattern tidy() exists to avoid: repeated synchronous calls grow
+    // native memory until a JS GC happens. streamTokens() already does this.
+    for (const kv of cache) if (kv) { kv.k.free(); kv.v.free(); }
   }
-  return out;
 }
 
 // ---- CLI ----

@@ -10,11 +10,10 @@ import { cstring, ptr, view as toArrayBuffer } from "../ffi/index.ts";
 // The safetensors Load primitive only implements eval_gpu == no -> load on CPU.
 const cpuStream = m.mlx_default_cpu_stream_new() as number;
 const asBig = (x: unknown) => BigInt((x as number) ?? 0);
-const KEEP: unknown[] = [];
+// Not retained past the call: mlx-c copies the string, and an FFI argument only
+// has to outlive the synchronous call it is passed to.
 function cstr(s: string) {
-  const b = new Uint8Array([...new TextEncoder().encode(s), 0]);
-  KEEP.push(b);
-  return ptr(b);
+  return ptr(new Uint8Array([...new TextEncoder().encode(s), 0]));
 }
 
 // The raw mlx_map_string_to_array handle. Distinct from the `Weights` accessor
@@ -86,7 +85,14 @@ export function upcastWeights(W: Weights, dtype: number = FLOAT32): Weights {
 // Whole file mmapped once; tensors returned as (refcounted) views.
 export function singleFileWeights(path: string): Weights {
   const w = loadSafetensors(path);
-  return { mx: (n) => new MX(get(w, n)), done: () => freeMap(w) };
+  // done() is idempotent. A model may release the map once it holds its own
+  // tensor references, and the caller may reasonably release it too; a second
+  // mlx_map_string_to_array_free on the same handle is a double free.
+  let closed = false;
+  return {
+    mx: (n) => new MX(get(w, n)),
+    done: () => { if (!closed) { closed = true; freeMap(w); } },
+  };
 }
 
 // Multi-file (sharded) checkpoints — the norm for large MoE. Each shard is

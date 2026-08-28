@@ -16,10 +16,10 @@ import { singleFileWeights, upcastWeights } from "../src/io/loader.ts";
 import { Qwen2, type Qwen2Config } from "../src/models/qwen2.ts";
 import { streamTokens } from "../src/text/lm.ts";
 import { Tokenizer } from "../src/text/tokenizer.ts";
-import { checkIds, golden, verdict } from "./golden.ts";
+import { checkIds, loadGolden, verdict } from "./golden.ts";
 
 const REPO = "mlx-community/Spark-TTS-0.5B-bf16";
-const g = golden.lm;
+const g = loadGolden("spark-golden.json").lm;
 
 const tok = await Tokenizer.fromFile(await hubFile(REPO, "tokenizer.json"));
 const prompt = tok.encode(

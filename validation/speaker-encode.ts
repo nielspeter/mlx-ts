@@ -12,9 +12,9 @@ import { melSpectrogram } from "../src/audio/mel.ts";
 import { hubFile } from "../src/io/hub.ts";
 import { singleFileWeights } from "../src/io/loader.ts";
 import { ecapaTdnn, perceiverResample, SpeakerTokenizer } from "../src/models/speaker.ts";
-import { check, checkIds, golden, verdict } from "./golden.ts";
+import { check, checkIds, loadGolden, verdict } from "./golden.ts";
 
-const g = golden.speaker;
+const g = loadGolden("spark-golden.json").speaker;
 const W = singleFileWeights(await hubFile("mlx-community/Spark-TTS-0.5B-bf16", "BiCodec/model.safetensors"));
 
 const wav = Float32Array.from({ length: g.samples }, (_, i) => ((i * 131 + 7) % 1009) / 1009 - 0.5);

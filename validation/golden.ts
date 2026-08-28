@@ -1,10 +1,10 @@
-// Comparing against the committed reference numbers in spark-golden.json.
+// Comparing against the committed reference numbers in validation/*-golden.json.
 //
-// Those numbers come from the original PyTorch Spark-TTS, generated once by
-// reference/gen-spark-fixtures.py and checked in — so these checks need nothing
-// but mlx-ts and a cached checkpoint. No Python, no PyTorch, no fetching a
-// package that is not on PyPI. That matters: an oracle nobody can run is an
-// oracle that always skips.
+// Those numbers come from the models' *original* PyTorch implementations —
+// Spark-TTS, and diffusers/transformers for Stable Diffusion — generated once by
+// reference/gen-{spark,sd}-fixtures.py and checked in. So these checks need
+// nothing but mlx-ts and cached weights: no Python, and no fetching a package
+// that is not on PyPI. An oracle nobody can run is an oracle that always skips.
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,9 +12,11 @@ import type { MX } from "../src/index.ts";
 
 export type Stats = { shape: number[]; mean: number; absmean: number; first4: number[] };
 
-export const golden = JSON.parse(
-  readFileSync(join(dirname(fileURLToPath(import.meta.url)), "spark-golden.json"), "utf8"),
-);
+/** Load a committed reference file from validation/. */
+// biome-ignore lint/suspicious/noExplicitAny: the shape differs per model.
+export function loadGolden(file: string): any {
+  return JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), file), "utf8"));
+}
 
 let failures = 0;
 
@@ -58,6 +60,14 @@ export function checkIds(tag: string, got: number[], want: number[]): void {
   console.log(`  ${ok ? "ok  " : "FAIL"} ${tag.padEnd(10)} ${got.length} ids` +
               (ok ? "" : at === -2 ? `\n         length ${got.length} vs ${want.length}`
                                    : `\n         differs at ${at}: ${got[at]} vs ${want[at]}`));
+  if (!ok) failures++;
+}
+
+/** A single number — a sigma, a scale. Relative tolerance, like `check`. */
+export function checkNum(tag: string, got: number, want: number, rel = 1e-4): void {
+  const ok = close(got, want, rel);
+  console.log(`  ${ok ? "ok  " : "FAIL"} ${tag.padEnd(18)} ${got.toFixed(6)}` +
+              (ok ? "" : ` vs ${want.toFixed(6)}`));
   if (!ok) failures++;
 }
 

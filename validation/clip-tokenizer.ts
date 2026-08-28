@@ -1,22 +1,23 @@
-// TS side of the CLIP tokenizer parity check, against mlx-examples' own port.
+// CLIP's tokenizer against the committed reference ids.
 //
-// The cases are chosen for the places this can quietly differ: repeated
-// whitespace and casing (both normalised away), punctuation runs, digits split
-// one at a time, contractions, and a word that must fall back to several merges.
-//   /tmp/sdvenv/bin/python reference/reference-clip-tokenizer.py && bun validation/clip-tokenizer.ts
+// Character-level BPE with a `</w>` word-end mark, not the byte-level kind in
+// src/text/tokenizer.ts. The cases cover where it can quietly differ: repeated
+// whitespace, casing, punctuation runs, per-digit splitting, contractions, and
+// words that need several merges.
+//
+// Reference: Hugging Face's own CLIPTokenizer (see validation/golden.ts).
+//   bun validation/clip-tokenizer.ts
 import { hubFile } from "../src/io/hub.ts";
 import { ClipTokenizer } from "../src/text/clip-tokenizer.ts";
+import { checkIds, loadGolden, verdict } from "./golden.ts";
 
-const REPO = "openai/clip-vit-large-patch14";
-const tok = await ClipTokenizer.fromFiles(await hubFile(REPO, "vocab.json"), await hubFile(REPO, "merges.txt"));
+const g = loadGolden("sd-golden.json").clip_tokenizer;
+const tok = await ClipTokenizer.fromFiles(
+  await hubFile("openai/clip-vit-large-patch14", "vocab.json"),
+  await hubFile("openai/clip-vit-large-patch14", "merges.txt"),
+);
 
-const CASES = [
-  "a photo of a cat",
-  "A  PHOTO   of a CAT",
-  "uplifting trance, 138 bpm",
-  "an astronaut riding a horse on mars, highly detailed, 4k",
-  "hello-world (test) 42",
-  "it's a dog's life",
-  "cafe naive",
-];
-for (const c of CASES) console.log(`${JSON.stringify(c)} -> [${tok.encode(c).join(", ")}]`);
+for (const [i, text] of (g.cases as string[]).entries()) {
+  checkIds(JSON.stringify(text).slice(0, 24), tok.encode(text), g.ids[i]);
+}
+verdict("CLIP tokenizer");

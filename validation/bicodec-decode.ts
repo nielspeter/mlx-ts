@@ -14,9 +14,9 @@ import { fromI32 } from "../src/index.ts";
 import { hubFile } from "../src/io/hub.ts";
 import { singleFileWeights } from "../src/io/loader.ts";
 import { BiCodecPrenet, BiCodecQuantizer, SpeakerDetokenizer, WaveGenerator } from "../src/models/bicodec.ts";
-import { check, golden, verdict } from "./golden.ts";
+import { check, loadGolden, verdict } from "./golden.ts";
 
-const g = golden.bicodec;
+const g = loadGolden("spark-golden.json").bicodec;
 const W = singleFileWeights(await hubFile("mlx-community/Spark-TTS-0.5B-bf16", "BiCodec/model.safetensors"));
 
 const zq = new BiCodecQuantizer(W).detokenize(fromI32(Int32Array.from(g.semantic), [1, g.semantic.length]));

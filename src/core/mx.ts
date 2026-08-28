@@ -145,6 +145,19 @@ export class Owned<T> {
   }
 }
 
+/**
+ * Wrap a result handle, raising anything mlx-c reported first.
+ *
+ * Every native op has to consume the error state, not just the ones that go
+ * through MX.r(). An op that leaves an error unconsumed does not fail itself —
+ * it poisons the *next* unrelated call, which then throws someone else's
+ * message under its own name.
+ */
+function mk(op: string, s: BigUint64Array): MX {
+  if (pendingError() !== null) throwIfError(op, Number(s[0]));
+  return new MX(Number(s[0]));
+}
+
 function slot(): BigUint64Array {
   const r = new BigUint64Array(1);
   r[0] = BigInt((m.mlx_array_new() as number) ?? 0);
@@ -363,7 +376,7 @@ export class MX {
   layerNorm(w: MX | null, b: MX | null, eps: number) {
     const s = slot();
     m.mlx_fast_layer_norm(ptr(s), this.h, w ? w.h : 0, b ? b.h : 0, eps, stream);
-    return new MX(Number(s[0]));
+    return mk("mlx_fast_layer_norm", s);
   }
   rope(dims: number, base: number, offset: number) {
     return this.r(m.mlx_fast_rope, this.h, dims, false, optF(base), 1.0, offset, 0, stream);
@@ -381,7 +394,7 @@ export class MX {
       0,
       stream,
     );
-    return new MX(Number(s[0]));
+    return mk("mlx_fast_scaled_dot_product_attention", s);
   }
 
   // gather / quant
@@ -405,12 +418,12 @@ export class MX {
       ptr(AFFINE),
       stream,
     );
-    return new MX(Number(s[0]));
+    return mk("mlx_quantized_matmul", s);
   }
   static dequantize(wq: MX, scales: MX, biases: MX, gs: number, bits: number) {
     const s = slot();
     m.mlx_dequantize(ptr(s), wq.h, scales.h, biases.h, optI(gs), optI(bits), ptr(AFFINE), 0, 0, stream);
-    return new MX(Number(s[0]));
+    return mk("mlx_dequantize", s);
   }
 
   // MoE routing + expert dispatch
@@ -440,7 +453,7 @@ export class MX {
       false,
       stream,
     );
-    return new MX(Number(s[0]));
+    return mk("mlx_gather_qmm", s);
   }
 
   // reductions / sampling primitives
@@ -485,7 +498,7 @@ export class MX {
     const s = slot();
     m.mlx_concatenate_axis(ptr(s), vh, axis, stream);
     m.mlx_vector_array_free(vh);
-    return new MX(Number(s[0]));
+    return mk("mlx_concatenate_axis", s);
   }
 
   // materialize / read back
@@ -649,7 +662,7 @@ export function stack(arrs: MX[], axis: number): MX {
   s[0] = BigInt((m.mlx_array_new() as number) ?? 0);
   m.mlx_stack_axis(ptr(s), vh, axis, stream);
   m.mlx_vector_array_free(vh);
-  return new MX(Number(s[0]));
+  return mk("mlx_stack_axis", s);
 }
 
 // batched eval: force everything before reading (keeps the lazy graph from
@@ -755,7 +768,7 @@ export const setWiredLimit = (mb: number): void => {
 function categorical(logits: MX, axis: number): MX {
   const s = slot();
   m.mlx_random_categorical(ptr(s), logits.h, axis, 0, stream);
-  return new MX(Number(s[0]));
+  return mk("mlx_random_categorical", s);
 }
 
 // Inverted dropout (device-side): keep each element w.p. (1-p) via a Bernoulli

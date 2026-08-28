@@ -149,3 +149,16 @@ test("dispatching a kernel does not leak its outputs", async () => {
   (copy as { free?: () => void }).free?.();
   x.free();
 });
+
+test("a failing op is named for itself, not for whatever runs next", async () => {
+  // Ops that build their own result slot — concat, layerNorm, sdpa, the
+  // quantized ones — bypass MX.r(). Until each of them consumed the error state
+  // too, a failure here surfaced on the *next unrelated* call: a valid add threw
+  // "mlx_add: [concatenate] All the input array dimensions must match...".
+  const a = fromF32(Float32Array.from([1, 2, 3, 4]), [2, 2]);
+  const b = fromF32(Float32Array.from([1, 2, 3, 4, 5, 6, 7, 8, 9]), [3, 3]);
+
+  expect(() => a.concat(b, 0)).toThrow(/mlx_concatenate_axis: \[concatenate\]/);
+  // And the error is consumed, so the next valid op is unaffected.
+  expect(a.add(a).toF32()).toEqual([2, 4, 6, 8]);
+});

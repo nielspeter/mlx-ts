@@ -19,7 +19,7 @@
 //     them.
 
 import { MX } from "../core/mx.ts";
-import { m, stream } from "./generated.ts";
+import { m, stream, throwIfError } from "./generated.ts";
 import { ptr } from "./index.ts";
 
 const FLOAT32 = 10;
@@ -75,6 +75,9 @@ export function metalKernel(opts: {
         inVec = vecArray(inputs);
         const rc = m.mlx_fast_metal_kernel_apply(ptr(outVec), k, inVec, cfg, stream);
         outVecH = Number(outVec[0]);
+        // Same reason as loader.ts: consume mlx-c's message here, or it lands
+        // on whatever op runs next.
+        throwIfError("mlx_fast_metal_kernel_apply");
         if (rc !== 0) throw new Error(`mlx_fast_metal_kernel_apply failed (${rc})`);
 
         // Each get() takes its own reference, so the vector itself can go.

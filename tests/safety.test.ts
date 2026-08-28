@@ -162,3 +162,15 @@ test("a failing op is named for itself, not for whatever runs next", async () =>
   // And the error is consumed, so the next valid op is unaffected.
   expect(a.add(a).toF32()).toEqual([2, 4, 6, 8]);
 });
+
+test("a failed weight load does not poison the next operation", async () => {
+  // Same class as the concat case, in a different file: loadSafetensors checked
+  // its return code but never consumed mlx-c's message, so a missing checkpoint
+  // surfaced later as
+  //   "mlx_add: [load_safetensors] Failed to open file /nonexistent.safetensors".
+  const { singleFileWeights } = await import("../src/io/loader.ts");
+  const a = fromF32(Float32Array.from([1, 2, 3, 4]), [2, 2]);
+
+  expect(() => singleFileWeights("/nonexistent-checkpoint.safetensors")).toThrow(/load_safetensors/);
+  expect(a.add(a).toF32()).toEqual([2, 4, 6, 8]);
+});

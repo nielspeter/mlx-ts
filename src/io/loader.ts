@@ -4,7 +4,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { clearCache, FLOAT32, MX } from "../core/mx.ts";
-import { type Arr, m } from "../ffi/generated.ts";
+import { type Arr, m, throwIfError } from "../ffi/generated.ts";
 import { cstring, ptr, view as toArrayBuffer } from "../ffi/index.ts";
 
 // The safetensors Load primitive only implements eval_gpu == no -> load on CPU.
@@ -28,6 +28,11 @@ export function loadSafetensors(path: string): WeightMap {
   const strMap = new BigUint64Array(1);
   strMap[0] = asBig(m.mlx_map_string_to_string_new());
   const rc = m.mlx_load_safetensors(ptr(arrMap), ptr(strMap), cstr(path), cpuStream);
+  // throwIfError first: it carries mlx-c's own message and, just as importantly,
+  // consumes it. An unconsumed error surfaces on the next unrelated op under
+  // that op's name. The rc check stays as the fallback for a failure reported
+  // without a message.
+  throwIfError(`mlx_load_safetensors(${path})`);
   if (rc !== 0) throw new Error(`mlx_load_safetensors failed (${rc}) for ${path}`);
   return Number(arrMap[0]);
 }

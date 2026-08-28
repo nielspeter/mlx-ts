@@ -254,9 +254,21 @@ function cstr(s: string) { return ptr(new Uint8Array([...new TextEncoder().encod
 // Nothing is thrown from inside this callback: unwinding a JS exception through
 // the C frame that called us is undefined behaviour. It only stores the string.
 let LAST_ERROR: string | null = null;
-const errorHandler = callback({ args: ["ptr", "ptr"], returns: "void" }, (msg: unknown) => {
-  const addr = Number(msg);
-  LAST_ERROR = addr ? cstring(addr) : "unknown mlx-c error";
+
+// Exported to keep it reachable, which is load-bearing rather than tidy: the
+// trampoline lives as long as this object does, and a module-level const that
+// nothing reads again is collectible. Freeing it leaves mlx-c calling into
+// released memory, and the crash is GC-timing dependent — it passed locally and
+// segfaulted once in CI. valueAndGrad retains its callback for the same reason.
+export const errorHandler = callback({ args: ["ptr", "ptr"], returns: "void" }, (msg: unknown) => {
+  // Runs inside a C frame. Do the minimum and let nothing escape: an exception
+  // unwinding through the caller would be undefined behaviour.
+  try {
+    const addr = Number(msg);
+    LAST_ERROR = addr ? cstring(addr) : "unknown mlx-c error";
+  } catch {
+    LAST_ERROR = "mlx-c reported an error whose message could not be decoded";
+  }
 });
 m.mlx_set_error_handler(errorHandler.addr, 0, 0);
 

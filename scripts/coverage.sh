@@ -20,8 +20,8 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
-MIN_FUNCS=${MIN_FUNCS:-64}
-MIN_LINES=${MIN_LINES:-72}
+MIN_FUNCS=${MIN_FUNCS:-67}
+MIN_LINES=${MIN_LINES:-74}
 REPORT_ONLY=0
 [ "${1:-}" = "--report" ] && REPORT_ONLY=1
 

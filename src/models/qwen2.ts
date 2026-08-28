@@ -87,6 +87,11 @@ export class Qwen2 implements Decoder {
         down: lin(`${p}.mlp.down_proj`, false),
       };
     });
+
+    // Every tensor above holds its own MLX reference, so the raw safetensors
+    // map can go. Without this it becomes unreachable and is never freed —
+    // olmoe.ts already does the same.
+    W.done();
   }
 
   private block(li: number, h: MX, B: number, L: number, offset: number, cache: KV[]): MX {

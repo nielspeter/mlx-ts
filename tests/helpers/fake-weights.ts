@@ -36,18 +36,19 @@ export function fakeWeights(spec: Record<string, number[]>): Weights {
   // as soon as a model reads a weight inside tidy(): the arena frees it on the
   // way out, and the next call gets a freed handle. Real checkpoints never see
   // this because the buffer outlives the view.
-  const cache = new Map<string, MX>();
   return {
     mx(name: string): MX {
       const shape = spec[name];
       if (!shape) throw new Error(`missing tensor '${name}'`);
-      const t = detTensor(name, shape);
-      cache.set(name, t);   // last handout, so done() has something to free
-      return t;
+      return detTensor(name, shape);
     },
+    // Releases the *source*, not the tensors already handed out — which is what
+    // singleFileWeights does: it frees the safetensors map while every MX taken
+    // from it keeps its own reference and stays valid. A fixture that freed the
+    // handouts instead would break any model that releases its weight map in
+    // the constructor (Qwen2, OLMoE), and only under test.
     done() {
-      for (const t of cache.values()) t.free();
-      cache.clear();
+      /* nothing to release: there is no underlying map */
     },
   };
 }

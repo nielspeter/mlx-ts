@@ -62,7 +62,7 @@ export async function* streamTokens(model: Decoder, prompt: number[], opts: GenO
   const { max = 256, temp = 0, topP = 0, topK = 0, window = 0 } = opts;
   const repetitionPenalty = opts.repetitionPenalty ?? 1;
   const repCtx = opts.repetitionContext ?? Infinity;
-  if (opts.seed) seed(opts.seed);
+  if (opts.seed !== undefined) seed(opts.seed); // 0 is a valid seed, and falsy
   const s: SampleCfg = { temp, topP, topK, repetitionPenalty };
   const cache: KV[] = Array(model.numLayers).fill(null);
   const history = [...prompt]; // prompt + generated, for the repetition penalty

@@ -19,12 +19,14 @@
 //     them.
 
 import { MX } from "../core/mx.ts";
-import { m, stream } from "./generated.ts";
+import { m, stream, throwIfError } from "./generated.ts";
 import { ptr } from "./index.ts";
 
 const FLOAT32 = 10;
-const KEEP: unknown[] = [];
-const cstr = (s: string) => { const b = new Uint8Array([...new TextEncoder().encode(s), 0]); KEEP.push(b); return ptr(b); };
+// No module-global retention array: an FFI argument only has to outlive the
+// synchronous call it is passed to, and mlx-c copies what it keeps. Holding
+// every shape buffer and C string forever grew the JS heap per dispatch.
+const cstr = (s: string) => ptr(new Uint8Array([...new TextEncoder().encode(s), 0]));
 const slot = () => { const s = new BigUint64Array(1); s[0] = BigInt((m.mlx_array_new() as number) ?? 0); return s; };
 
 // mlx_vector_string of JS strings.
@@ -50,28 +52,49 @@ export function metalKernel(opts: {
     opts.ensureRowContiguous ?? true, opts.atomicOutputs ?? false,
   ) as number;
 
+  let freed = false;
   return {
     apply(inputs: MX[], outputs: { shape: number[]; dtype?: number }[],
           grid: [number, number, number], threadGroup: [number, number, number]): MX[] {
+      // Three native objects per dispatch, all of which used to leak: the config
+      // (on the throw path), the input vector, and the vector the outputs come
+      // back in. That last one is the expensive one — it holds a reference to
+      // every output array, so freeing the returned MX released nothing. A
+      // 1024-float kernel dispatched 1000 times grew active memory by 4.096 MB.
       const cfg = m.mlx_fast_metal_kernel_config_new() as number;
-      for (const o of outputs) {
-        const sh = new Int32Array(o.shape); KEEP.push(sh);
-        m.mlx_fast_metal_kernel_config_add_output_arg(cfg, ptr(sh), BigInt(o.shape.length), o.dtype ?? FLOAT32);
+      let inVec = 0, outVecH = 0;
+      try {
+        for (const o of outputs) {
+          const sh = new Int32Array(o.shape);
+          m.mlx_fast_metal_kernel_config_add_output_arg(cfg, ptr(sh), BigInt(o.shape.length), o.dtype ?? FLOAT32);
+        }
+        m.mlx_fast_metal_kernel_config_set_grid(cfg, ...grid);
+        m.mlx_fast_metal_kernel_config_set_thread_group(cfg, ...threadGroup);
+
+        const outVec = slot();
+        inVec = vecArray(inputs);
+        const rc = m.mlx_fast_metal_kernel_apply(ptr(outVec), k, inVec, cfg, stream);
+        outVecH = Number(outVec[0]);
+        // Same reason as loader.ts: consume mlx-c's message here, or it lands
+        // on whatever op runs next.
+        throwIfError("mlx_fast_metal_kernel_apply");
+        if (rc !== 0) throw new Error(`mlx_fast_metal_kernel_apply failed (${rc})`);
+
+        // Each get() takes its own reference, so the vector itself can go.
+        const n = Number(m.mlx_vector_array_size(outVecH));
+        const out: MX[] = [];
+        for (let i = 0; i < n; i++) { const s = slot(); m.mlx_vector_array_get(ptr(s), outVecH, BigInt(i)); out.push(new MX(Number(s[0]))); }
+        return out;
+      } finally {
+        m.mlx_fast_metal_kernel_config_free(cfg);
+        if (inVec) m.mlx_vector_array_free(inVec);
+        if (outVecH) m.mlx_vector_array_free(outVecH);
       }
-      m.mlx_fast_metal_kernel_config_set_grid(cfg, ...grid);
-      m.mlx_fast_metal_kernel_config_set_thread_group(cfg, ...threadGroup);
-
-      const outVec = slot();
-      const rc = m.mlx_fast_metal_kernel_apply(ptr(outVec), k, vecArray(inputs), cfg, stream);
-      if (rc !== 0) throw new Error(`mlx_fast_metal_kernel_apply failed (${rc})`);
-      m.mlx_fast_metal_kernel_config_free(cfg);
-
-      const vh = Number(outVec[0]);
-      const n = Number(m.mlx_vector_array_size(vh));
-      const out: MX[] = [];
-      for (let i = 0; i < n; i++) { const s = slot(); m.mlx_vector_array_get(ptr(s), vh, BigInt(i)); out.push(new MX(Number(s[0]))); }
-      return out;
     },
+
+    /** Release the compiled kernel. `using k = metalKernel(...)` does it for you. */
+    free() { if (!freed) { freed = true; m.mlx_fast_metal_kernel_free(k); } },
+    [Symbol.dispose]() { this.free(); },
   };
 }
 

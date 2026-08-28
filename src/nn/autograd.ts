@@ -5,7 +5,7 @@
 
 import { MX } from "../core/mx.ts";
 import { type Tree, treeFlatten, treeUnflattenLike } from "../core/pytree.ts";
-import { m } from "../ffi/generated.ts";
+import { m, throwIfError } from "../ffi/generated.ts";
 import { callback, open, ptr } from "../ffi/index.ts";
 
 // mlx_closure_new_func takes a C function pointer -> not in the generated table.
@@ -45,6 +45,9 @@ export function valueAndGrad(template: Tree, loss: (params: Tree, ...extra: MX[]
     const inputs = vecOf([...treeFlatten(params).map((p) => p.h), ...extras.map((e) => e.h)]);
     const lossV = nb(), gradV = nb();
     m.mlx_closure_value_and_grad_apply(ptr(lossV), ptr(gradV), vag, inputs);
+    // The loss closure runs inside this call, so a failure in the user's forward
+    // pass is reported here. Consume it rather than leaving it for the next op.
+    throwIfError("mlx_closure_value_and_grad_apply");
     const lossVal = new MX(vget(Number(lossV[0]), 0)).itemF();
     const grads = treeUnflattenLike(params, Array.from({ length: nP }, (_, i) => new MX(vget(Number(gradV[0]), i))));
     m.mlx_vector_array_free(inputs); m.mlx_vector_array_free(Number(lossV[0])); m.mlx_vector_array_free(Number(gradV[0]));

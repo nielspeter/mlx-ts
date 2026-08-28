@@ -156,6 +156,36 @@ else
   echo "     They load the 3.2 GB UNet; run them with MLXTS_SD=1."
 fi
 
+# ---- Parakeet (speech to text): opt-in with MLXTS_ASR=1 ----------------------
+#
+#   MLXTS_ASR=1 bash scripts/validate-all.sh
+#
+# Gated for memory: the checkpoint is 2.4 GB, and the transcribe check loads
+# Spark-TTS on top of it. Nothing here needs Python.
+#
+# Reference numbers in validation/parakeet-golden.json, generated once from
+# transformers.ParakeetForTDT — the implementation NVIDIA published these weights
+# for — by reference/gen-parakeet-fixtures.py.
+if [ "${MLXTS_ASR:-0}" = "1" ]; then
+  if bun validation/parakeet-encode.ts >/tmp/v_pk.txt 2>&1 && grep -q ": ok$" /tmp/v_pk.txt; then
+    ok "Parakeet encoder + decode vs PyTorch (5 stages)"
+  else
+    no "Parakeet encoder" "$(grep -E "FAIL|MISMATCH|Error" /tmp/v_pk.txt | head -2 | tr '\n' ' ')"
+  fi
+
+  # Cross-model: Spark-TTS speaks a sentence and Parakeet reads it back. The
+  # numeric check above runs on synthetic noise, where the transcript is
+  # meaningless — this is the one that says the decode path produces language.
+  if bun validation/parakeet-transcribe.ts >/tmp/v_pkt.txt 2>&1 && grep -q "transcribe: ok" /tmp/v_pkt.txt; then
+    ok "Parakeet transcribes Spark-TTS speech ($(grep -oE "[0-9]+x realtime" /tmp/v_pkt.txt))"
+  else
+    no "Parakeet transcribe" "$(grep -E "^heard:" /tmp/v_pkt.txt | head -1)"
+  fi
+else
+  echo "  ⏭  Parakeet checks skipped (encoder parity, speech transcription)."
+  echo "     They load a 2.4 GB checkpoint; run them with MLXTS_ASR=1."
+fi
+
 # ---- Spark-TTS checks: opt-in with MLXTS_TTS=1 -------------------------------
 #
 #   MLXTS_TTS=1 bash scripts/validate-all.sh

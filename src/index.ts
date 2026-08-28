@@ -12,6 +12,7 @@ export {
   melFilterBank,
   melSpectrogram,
   padOrTrim,
+  parakeetMel,
   playAudio,
   SR,
 } from "./audio/mel.ts";
@@ -106,6 +107,22 @@ export {
 // Namespaced: its `generate`/`forward` would collide with the ones above.
 export * as nanogpt from "./models/nanogpt-model.ts";
 export { OLMoE } from "./models/olmoe.ts";
+// Speech -> text. NVIDIA's FastConformer transducer: streaming-native, and
+// it skips encoder frames rather than decoding one step per frame.
+export {
+  decodeGreedy,
+  encode as parakeetEncode,
+  initialState,
+  joint,
+  type ParakeetConfig,
+  type ParakeetEncoderConfig,
+  type PredictorState,
+  predict,
+  projectEncoder,
+  relPositionalEncoding,
+  subsample,
+} from "./models/parakeet.ts";
+export { Parakeet } from "./models/parakeet-model.ts";
 // Qwen3 is the model class the rest of the repo is built around; generateBatch
 // takes one as its first argument, so exporting the function without the class
 // gave consumers a signature they could not satisfy.
@@ -161,6 +178,7 @@ export { Adam } from "./nn/optim.ts";
 export { ChatTemplate, type Message } from "./text/chat-template.ts";
 export { type ClipEncodeOptions, ClipTokenizer } from "./text/clip-tokenizer.ts";
 export { type Decoder, type GenOptions, generate, type KV, streamText, streamTokens } from "./text/lm.ts";
+export { ParakeetTokenizer } from "./text/parakeet-tokenizer.ts";
 // --- text: tokenizing, chat templates, generation ------------------------
 export { GPT2_SPLIT, Tokenizer } from "./text/tokenizer.ts";
 export { UnigramTokenizer } from "./text/unigram.ts";

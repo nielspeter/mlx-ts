@@ -24,8 +24,12 @@ export const SR = 16000,
   N_SAMPLES = 30 * SR; // 30 s chunk
 
 const TWO_PI = 2 * Math.PI;
-const hann = (N: number) =>
-  Float32Array.from({ length: N }, (_, n) => 0.5 * (1 - Math.cos((TWO_PI * n) / N)));
+// Periodic (denominator N) is what spectral analysis wants and what
+// torch.hann_window(N) gives by default. Symmetric (denominator N-1) is
+// torch.hann_window(N, periodic=False), which NeMo's front end uses — the two
+// differ by one sample of phase and are not interchangeable.
+const hann = (N: number, periodic = true) =>
+  Float32Array.from({ length: N }, (_, n) => 0.5 * (1 - Math.cos((TWO_PI * n) / (periodic ? N : N - 1))));
 
 // DFT basis for an N-point rfft -> (N/2+1) bins. cos[n,k], sin[n,k].
 function dftBasis(N: number): { cos: MX; sin: MX } {
@@ -132,21 +136,34 @@ export function melFilterBank(o: {
  * with zeros on the *right* — left-aligned, not centred. Getting that backwards
  * shifts every frame by half the difference.
  */
+type StftOptions = {
+  /** "reflect" mirrors the signal at the edges; "constant" pads with zeros. */
+  padMode?: "reflect" | "constant";
+  /** torch.hann_window's `periodic` flag. */
+  periodicWindow?: boolean;
+  /** |X|^2 rather than |X|. Mel front ends differ on this and it is not a scale factor. */
+  power?: boolean;
+};
+
 function stftMagnitude(
   pcm: Float32Array,
   nFft: number,
   hop: number,
   winLength: number,
+  o: StftOptions = {},
 ): { mag: MX; F: number } {
+  const { padMode = "reflect", periodicWindow = true, power = false } = o;
   const pad = nFft / 2;
   const x = new Float32Array(pcm.length + 2 * pad);
   x.set(pcm, pad);
-  for (let i = 0; i < pad; i++) {
-    x[pad - 1 - i] = pcm[i + 1];
-    x[pad + pcm.length + i] = pcm[pcm.length - 2 - i];
-  }
+  if (padMode === "reflect") {
+    for (let i = 0; i < pad; i++) {
+      x[pad - 1 - i] = pcm[i + 1];
+      x[pad + pcm.length + i] = pcm[pcm.length - 2 - i];
+    }
+  } // "constant" leaves the zeros already there
 
-  const w = hann(winLength); // periodic, = hann_window(win, periodic=True)
+  const w = hann(winLength, periodicWindow);
   const off = (nFft - winLength) >> 1; // centred, as torch.stft pads it
   const F = 1 + Math.floor((x.length - nFft) / hop);
   const frames = new Float32Array(F * nFft); // zeros either side of the window
@@ -158,7 +175,8 @@ function stftMagnitude(
     const fr = fromF32(frames, [F, nFft]);
     const re = fr.matmul(cos),
       im = fr.matmul(sin);
-    return re.mul(re).add(im.mul(im)).sqrt(); // |rfft|, magnitude not power
+    const sq = re.mul(re).add(im.mul(im)); // |rfft|^2
+    return power ? sq : sq.sqrt();
   });
   cos.free();
   sin.free();
@@ -191,6 +209,78 @@ export function melSpectrogram(
   mag.free();
   fb.free();
   return mel;
+}
+
+/**
+ * NeMo's log-mel front end, as Parakeet expects it.
+ *
+ * Every parameter here differs from the two front ends above, and each
+ * difference is silent if you get it wrong — a plausible spectrogram that moves
+ * the transcript. Against Whisper's and BiCodec's:
+ *
+ *   preemphasis      x[i] - 0.97*x[i-1] first; neither of the others has it
+ *   window           Hann *symmetric* (periodic=False), not periodic
+ *   padding          zeros, not reflect
+ *   spectrum         power |X|^2, not magnitude
+ *   log              natural log with a 2^-24 floor, not log10
+ *   normalisation    per mel bin over time, with the sample (n-1) variance
+ *
+ * Returned `[1, frames, 128]`, channels-last, which is the layout the encoder's
+ * subsampling stack takes.
+ */
+export function parakeetMel(pcm: Float32Array, o: { nMels?: number; preemphasis?: number } = {}): MX {
+  const { nMels = 128, preemphasis = 0.97 } = o;
+  const N_FFT = 512,
+    HOP = 160,
+    WIN = 400;
+
+  // Preemphasis: a one-tap high-pass that flattens the spectral tilt of speech.
+  // The first sample has no predecessor and is kept as-is.
+  const pre = new Float32Array(pcm.length);
+  if (pcm.length) pre[0] = pcm[0];
+  for (let i = 1; i < pcm.length; i++) pre[i] = pcm[i] - preemphasis * pcm[i - 1];
+
+  const { mag, F } = stftMagnitude(pre, N_FFT, HOP, WIN, {
+    padMode: "constant",
+    periodicWindow: false,
+    power: true,
+  });
+  // librosa.filters.mel(..., fmin=0, fmax=sr/2, norm="slaney") — and librosa's
+  // default mel_scale is slaney too, so both are.
+  const fb = melFilterBank({ sampleRate: SR, nFft: N_FFT, nMels, fMin: 0, scale: "slaney", norm: "slaney" });
+  const raw = tidy(() => mag.matmul(fb));
+  mag.free();
+  fb.free();
+
+  // log(x + 2^-24), then zero-mean unit-variance per mel bin across time. The
+  // variance divides by (n - 1), not n: the sample variance, not the population
+  // one, which is a real difference at short utterances.
+  const f = raw.toF32();
+  raw.free();
+  const LOG_GUARD = 2 ** -24,
+    EPS = 1e-5;
+  const out = new Float32Array(f.length);
+  for (let i = 0; i < f.length; i++) out[i] = Math.log(f[i] + LOG_GUARD);
+
+  // Centred framing yields one more frame than the model counts as real:
+  // floor(samples / hop) are valid and the trailing one is masked to zero. The
+  // statistics are taken over the valid frames only — including the extra one
+  // shifts every value, which is 3% of absmean here.
+  const valid = Math.min(F, Math.floor(pcm.length / HOP));
+  for (let m = 0; m < nMels; m++) {
+    let sum = 0;
+    for (let t = 0; t < valid; t++) sum += out[t * nMels + m];
+    const mean = sum / valid;
+    let sq = 0;
+    for (let t = 0; t < valid; t++) {
+      const d = out[t * nMels + m] - mean;
+      sq += d * d;
+    }
+    const std = Math.sqrt(sq / Math.max(1, valid - 1));
+    for (let t = 0; t < valid; t++) out[t * nMels + m] = (out[t * nMels + m] - mean) / (std + EPS);
+    for (let t = valid; t < F; t++) out[t * nMels + m] = 0;
+  }
+  return fromF32(out, [1, F, nMels]);
 }
 
 // Decode any audio file to 16 kHz mono PCM via ffmpeg, as s16 -> float32/32768

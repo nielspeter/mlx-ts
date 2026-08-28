@@ -1,8 +1,9 @@
 // The native boundary: errors, host-buffer validation, and arena ownership.
 //
-// Every case here is a finding from docs/CODE_REVIEW.md that reproduced. They
-// share a failure mode — the SDK looked fine and did the wrong thing silently,
-// or took the process down with it — so they are pinned rather than trusted.
+// Every case here is a defect a source review turned up and that reproduced
+// before it was fixed. They share a failure mode — the SDK looked fine and did
+// the wrong thing silently, or took the process down with it — so they are
+// pinned rather than trusted.
 //   bun test tests/safety.test.ts
 import { expect, test } from "bun:test";
 import { fromF32, fromI32, MX, tidy } from "../src/index.ts";

@@ -2,6 +2,73 @@
 
 Notable changes, newest first. Hand-written.
 
+## [0.4.1]
+
+A source review of the native binding, and the ten defects it found. All are
+runtime-safety and lifetime issues; none change any numeric result.
+
+### Fixed
+
+- **mlx-c errors are catchable instead of fatal.** No error handler was ever
+  installed, so mlx-c kept its default: print the message and call `exit()`. A
+  shape-invalid `matmul` inside `try/catch` exited with status 255 and the catch
+  block never ran — reachable from `examples/server.ts` by any request carrying
+  a bad dimension. `mlx_set_error_handler` is now installed with a handler that
+  *records* rather than exits, and every call site raises a normal `Error` naming
+  the operation.
+
+      before   MLX error: [matmul] Last dimension ... / exit 255
+      after    caught in TypeScript: mlx_matmul: [matmul] Last dimension ...
+
+- **Host-array constructors validate their shape.** mlx-c takes a pointer and a
+  shape but no byte length, so one float declared as `[4]` returned four values —
+  three read past the TypedArray. Fractional dimensions were silently truncated
+  and a negative one reached the allocator as a huge unsigned size. `fromF32`,
+  `fromI32` and `fromU32` now check integrality, sign, overflow and element
+  count. 0-d arrays work, where they used to fail inside the FFI layer.
+
+- **`tidy()` had two ownership bugs.** Cleanup sat after a `try/finally`, so a
+  throwing callback skipped it entirely — on the error path, where deterministic
+  freeing matters most. And a nested `tidy()` handed its parent every array
+  reachable from its result, including ones created outside both scopes, so the
+  outer scope freed arrays its caller still held.
+
+- **Custom Metal dispatch leaked three native objects per call.** Measured: a
+  1024-float kernel dispatched 1000 times grew MLX active memory by exactly
+  4.096 MB even though every returned `MX` was freed, because the output vector
+  still held them. Now 0.000 MB. This affects EnCodec's LSTM, which dispatches
+  once per time step per layer. Compiled kernels are disposable now.
+
+- **`generateBatch()` never freed its KV cache**, leaving the last key/value pair
+  per layer to the `FinalizationRegistry` — the pattern `tidy()` exists to avoid.
+  It also validates that the batch is non-empty and rectangular before flattening
+  it into a shaped array.
+
+- **Qwen2 never released its safetensors map.** `Weights.done()` is idempotent
+  now, since a model and its caller may both reasonably release the same source.
+
+- **Generated wrappers retained every temporary buffer for the life of the
+  module** — shape buffers, C strings, input arrays — growing the JS heap with
+  each token and each reshape. Removed: `mlx_array_new_data` copies at
+  construction, verified by mutating the source before any eval.
+
+- **`show()`** returned a pointer typed as a string, and leaked the `mlx_string`.
+- **Seed 0** was ignored, being falsy. `if (opts.seed !== undefined)` now.
+
+### Changed
+
+- **`ChatTemplate`'s constructor is private.** Construct with
+  `ChatTemplate.fromString()` or `.fromConfig()` — a deferred import cannot be
+  awaited in a constructor. `render()` stays synchronous, so a generation loop
+  pays nothing. (Shipped in 0.4.0; recorded here because the constructor is
+  public API.)
+
+- Stable Diffusion and Spark-TTS are now verified against each model's
+  **original PyTorch implementation** rather than another MLX port, with the
+  reference numbers committed. Comparing two ports can only show they agree: a
+  wrong STFT window, copied from another port, moved 12 of the speaker encoder's
+  32 tokens and was caught by the PyTorch comparison before 0.4.0 shipped.
+
 ## [0.4.0]
 
 Text to speech, and voice cloning. Also the first release that requires nothing

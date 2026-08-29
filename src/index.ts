@@ -123,6 +123,7 @@ export {
   subsample,
 } from "./models/parakeet.ts";
 export { Parakeet } from "./models/parakeet-model.ts";
+export { ParakeetStream, SAMPLES_PER_FRAME, type StreamOptions } from "./models/parakeet-stream.ts";
 // Qwen3 is the model class the rest of the repo is built around; generateBatch
 // takes one as its first argument, so exporting the function without the class
 // gave consumers a signature they could not satisfy.

@@ -177,7 +177,7 @@ if [ "${MLXTS_ASR:-0}" = "1" ]; then
   # numeric check above runs on synthetic noise, where the transcript is
   # meaningless — this is the one that says the decode path produces language.
   if bun validation/parakeet-transcribe.ts >/tmp/v_pkt.txt 2>&1 && grep -q "transcribe: ok" /tmp/v_pkt.txt; then
-    ok "Parakeet transcribes Spark-TTS speech ($(grep -oE "[0-9]+x realtime" /tmp/v_pkt.txt))"
+    ok "Parakeet transcribes Spark-TTS speech, batch and streaming ($(grep -oE "[0-9.]+s lag" /tmp/v_pkt.txt))"
   else
     no "Parakeet transcribe" "$(grep -E "^heard:" /tmp/v_pkt.txt | head -1)"
   fi

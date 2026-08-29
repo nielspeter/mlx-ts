@@ -33,7 +33,8 @@ export class Parakeet {
   tokens(pcm: Float32Array, cacheLimitMB = 4096): number[] {
     const prev = setCacheLimit(cacheLimitMB);
     try {
-      return decodeGreedy(this.W, this.cfg, encode(this.W, this.cfg.encoder_config, parakeetMel(pcm)));
+      const mel = parakeetMel(pcm, { nMels: this.cfg.encoder_config.num_mel_bins });
+      return decodeGreedy(this.W, this.cfg, encode(this.W, this.cfg.encoder_config, mel));
     } finally {
       setCacheLimit(prev);
     }

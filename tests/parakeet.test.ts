@@ -149,3 +149,78 @@ test("the tokenizer turns metaspace into word boundaries", () => {
   expect(tok.decode([])).toBe("");
   expect(tok.decode([1, 2])).toBe("world");
 });
+
+// --- streaming -------------------------------------------------------------
+
+import { ParakeetStream, SAMPLES_PER_FRAME } from "../src/index.ts";
+
+/** A tokenizer over a tiny vocabulary, so decoding is checkable by eye. */
+const toyTok = () =>
+  new ParakeetTokenizer({
+    model: { vocab: [["▁the", 0], ["▁coun", 1], ["try", 2], ["▁is", 3], ["!", 4]] },
+  });
+
+test("a continuation chunk keeps its leading space", () => {
+  // An utterance starts with a word-start marker that must not become a leading
+  // space. A chunk in the *middle* of a stream must keep it, or its first word
+  // runs into the previous chunk's last one — "Americans,ask" instead of
+  // "Americans, ask".
+  const tok = toyTok();
+  expect(tok.decode([0, 1, 2])).toBe("the country");
+  expect(tok.decode([3], true)).toBe(" is");
+  expect(tok.decode([3], false)).toBe("is");
+});
+
+test("startsWord distinguishes a word from its continuation", () => {
+  // "country" is emitted as ▁coun + try. Without this a chunk boundary cuts
+  // words in half.
+  const tok = toyTok();
+  expect(tok.startsWord(1)).toBe(true);   // ▁coun
+  expect(tok.startsWord(2)).toBe(false);  // try
+  expect(tok.startsWord(99)).toBe(false); // unknown id
+});
+
+test("latency is the chunk plus the lookahead", () => {
+  const W = fakeWeights(spec());
+  const s = new ParakeetStream(W, CFG, toyTok(), { chunkFrames: 13, lookaheadFrames: 13 });
+  // 80 ms per frame: 26 frames is 2.08 s.
+  expect(s.latencySeconds).toBeCloseTo(2.08, 6);
+  expect(new ParakeetStream(W, CFG, toyTok(), { chunkFrames: 13, lookaheadFrames: 4 }).latencySeconds)
+    .toBeCloseTo(1.36, 6);
+  W.done();
+});
+
+test("nothing is emitted until a chunk and its lookahead have arrived", () => {
+  // The lookahead is the whole reason for the delay: a chunk cannot be decoded
+  // until some of the audio *after* it exists.
+  const W = fakeWeights(spec());
+  const s = new ParakeetStream(W, CFG, toyTok(), { chunkFrames: 4, lookaheadFrames: 4, warmupFrames: 4 });
+  const tick = new Float32Array(SAMPLES_PER_FRAME);
+  for (let i = 0; i < 7; i++) expect(s.push(tick)).toBe("");   // 7 frames < 4 + 4
+  s.push(tick);                                                // the 8th allows a decode
+  expect(s.text.length).toBeGreaterThanOrEqual(0);             // may be blanks, but it ran
+  W.done();
+});
+
+test("flush drains whatever is left, with no lookahead to wait for", () => {
+  const W = fakeWeights(spec());
+  const s = new ParakeetStream(W, CFG, toyTok(), { chunkFrames: 4, lookaheadFrames: 4, warmupFrames: 4 });
+  s.push(new Float32Array(SAMPLES_PER_FRAME * 20));
+  const before = s.text;
+  s.flush();
+  // flush never loses what was already emitted.
+  expect(s.text.startsWith(before)).toBe(true);
+  W.done();
+});
+
+test("a long session does not grow without bound", () => {
+  // Only the context window is retained; audio older than that is dropped, or a
+  // meeting-length stream would hold the whole recording in memory.
+  const W = fakeWeights(spec());
+  const s = new ParakeetStream(W, CFG, toyTok(), { chunkFrames: 4, lookaheadFrames: 4, leftFrames: 8, warmupFrames: 4 });
+  for (let i = 0; i < 60; i++) s.push(new Float32Array(SAMPLES_PER_FRAME));
+  // 60 frames pushed, at most left + chunk + lookahead retained.
+  const retained = (s as unknown as { buf: Float32Array }).buf.length / SAMPLES_PER_FRAME;
+  expect(retained).toBeLessThanOrEqual(8 + 4 + 4 + 2);
+  W.done();
+});

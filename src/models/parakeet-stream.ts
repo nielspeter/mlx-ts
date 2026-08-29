@@ -27,6 +27,15 @@
 // Two settings tie at 2.2%; this one updates every 1.04 s rather than every
 // 1.52 s, and a live transcript that moves more often reads as more live.
 //
+// That 2.2% is against batch *on short clips*, where batch is the better of the
+// two. It does not hold in general: past about two minutes batch degrades badly
+// — 10.7% word error at 64 s against FLEURS' references, 34.0% at 138 s — while
+// streaming stays near 25% throughout. The model was trained on short
+// utterances, so a few thousand frames of global attention is out of
+// distribution, and the window here is closer to what it was trained on than
+// the whole clip is. Long audio belongs in this class even when the file is
+// already on disk.
+//
 // "avg" is what a speaker mostly feels: a word at the end of a chunk waits only
 // the lookahead, one at the start waits the whole chunk as well. Both exclude
 // compute, which is ~0.12 s per chunk here.

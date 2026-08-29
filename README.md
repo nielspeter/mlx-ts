@@ -657,23 +657,28 @@ temperature, top-p, **top-k**, and **repetition penalty**
   at microphone pace, so the delay can be heard rather than quoted.
 
   **Memory** is flat, which took fixing rather than luck. MLX's own accounting is
-  the only thing that can see this — Metal buffers are invisible to process RSS.
-  Feeding 5 minutes of audio through the stream, sampled every 30 s:
+  the only thing that can see this — Metal buffers do not appear in process RSS,
+  which drifts upward whether or not anything is leaking. Streaming 32 minutes of
+  real audio, sampled every two minutes:
 
   ```
-   at  30s   active 2509 MB   peak 2765 MB
-   at 150s   active 2509 MB   peak 2765 MB
-   at 300s   active 2509 MB   peak 2765 MB
+   at  120s   active 2509 MB   peak 2765 MB
+   at  960s   active 2509 MB   peak 2765 MB
+   at 1920s   active 2509 MB   peak 2765 MB
   ```
 
-  Not a megabyte of drift, so a stream can run as long as someone keeps talking.
-  Before `tidy()` covered the encoder it grew 17.5 MB per 30 s — linear, no
-  plateau, about **2 GB an hour**. Batch decode is likewise flat across repeated
-  calls; it had leaked 76 MB per utterance. Nearly all of the 2509 MB is the
-  weights themselves (627M parameters at F32). Batch peaks higher than streaming
-  on the same 62 s file — 4587 MB against 2765 MB — because it encodes the whole
-  clip at once and attention is quadratic, so **long recordings are cheaper
-  streamed even when you have the whole file already**.
+  Not a megabyte of drift across the whole run, so a stream can go as long as
+  someone keeps talking. Before `tidy()` covered the encoder it grew 17.5 MB per
+  30 s — linear, no plateau, about **2 GB an hour**: `step()` dropped the encoder
+  output and 24 blocks of intermediates on the floor for the GC to find. Batch
+  decode had its own leak, 76 MB per utterance, and is now likewise flat across
+  repeated calls. Nearly all of the resident 2509 MB is the weights (627M
+  parameters at F32).
+
+  Use the stream for anything long, even when you already have the whole file.
+  Batch encodes the clip in one pass, so its peak climbs with duration — 2919 MB
+  at 30 s, 4484 MB at 177 s — and a few minutes in it will exhaust a machine that
+  streams the same audio in 2765 MB flat.
 
 - **Speech-to-text (Whisper), multilingual** — `src/audio/mel.ts` (log-Mel, ~1e-6 vs numpy
   FFT) + `src/models/whisper.ts` (Conv1d stem, bidirectional encoder, cross-attention decoder,

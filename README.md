@@ -694,14 +694,29 @@ temperature, top-p, **top-k**, and **repetition penalty**
   closer to how the model was trained, and its accuracy barely moves with length
   while its memory does not move at all.
 
-  Two caveats on those numbers. The absolute streaming column is pessimistic:
-  the test splices FLEURS sentences back to back, which removes the pauses real
-  speech has and makes every join a discontinuity — on natural recordings the
-  crossover comes earlier. And streaming improves with length only because its
-  fixed 3 s warmup is amortised over more audio.
+  On continuous speech it is worse than that table shows, because splicing read
+  sentences hands batch a restart at every join that real talk never gives it.
+  Take one recording, transcribe the same opening 20 s as part of files of
+  different lengths, and count how many words in that fixed window change — the
+  audio is identical, so only the length varies, and each run is its own control:
 
-  So: **short clips batch, anything past a couple of minutes stream** — and
-  stream it even when the whole file is already on disk.
+  ```
+   file  20s   batch:  0 words changed   stream:  0 words changed
+   file  45s   batch: 13 words changed   stream:  8 words changed
+   file  91s   batch: 18 words changed   stream:  8 words changed
+  ```
+
+  Batch rewrites audio it had already heard, worse the more you append. Streaming
+  shifts once and then holds — and that 8 is not drift but the end of the file:
+  in the 20 s run those last frames are flushed with no lookahead, where a longer
+  file gives them proper future context. So the degradation is measurable by
+  **45 seconds** of continuous speech, not two minutes.
+
+  Streaming's own numbers improve with length only because its fixed 3 s warmup
+  is amortised over more audio.
+
+  So: **short clips batch, anything approaching a minute of continuous speech
+  stream** — and stream it even when the whole file is already on disk.
 
 - **Speech-to-text (Whisper), multilingual** — `src/audio/mel.ts` (log-Mel, ~1e-6 vs numpy
   FFT) + `src/models/whisper.ts` (Conv1d stem, bidirectional encoder, cross-attention decoder,

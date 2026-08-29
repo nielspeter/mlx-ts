@@ -236,13 +236,22 @@ export class ParakeetStream {
       return;
     }
 
+    // Everything the encoder makes is scratch except its projected output: the
+    // mel, and 24 blocks of intermediates that were previously left to the GC.
+    // Measured before this: 17.5 MB per 30 s of audio, growing linearly with no
+    // plateau — about 2 GB an hour, which is the one thing a stream cannot do.
+    //
     // nMels comes from the config, not parakeetMel's default: the class should
     // work for any Parakeet checkpoint, not just the 128-bin one.
-    const mel = parakeetMel(win, { nMels: this.cfg.encoder_config.num_mel_bins });
-    const ep = projectEncoder(this.W, encode(this.W, this.cfg.encoder_config, mel));
-    mel.free();
+    const ep = tidy(() => {
+      const mel = parakeetMel(win, { nMels: this.cfg.encoder_config.num_mel_bins });
+      return projectEncoder(this.W, encode(this.W, this.cfg.encoder_config, mel));
+    });
     const lo = this.next - from;
     const hi = Math.min(ep.shape[1], lo + chunk);
+    // Deliberately outside the tidy() above: decodeFrames advances the predictor
+    // state, which must outlive this chunk. Inside, the arena would adopt it and
+    // free the stream's own memory out from under it.
     this.decodeFrames(ep, lo + this.carry, hi);
     ep.free();
     this.next += chunk;

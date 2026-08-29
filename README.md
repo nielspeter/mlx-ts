@@ -653,6 +653,27 @@ temperature, top-p, **top-k**, and **repetition penalty**
   is global, so each chunk is encoded with past context and a little future
   audio; that lookahead is the latency. Measured against transcribing the whole
   clip at once, ~2.2% word error at a 1.6 s average lag. `--look` trades the two.
+  `examples/parakeet-live.ts` plays a file to the speakers while transcribing it
+  at microphone pace, so the delay can be heard rather than quoted.
+
+  **Memory** is flat, which took fixing rather than luck. MLX's own accounting is
+  the only thing that can see this — Metal buffers are invisible to process RSS.
+  Feeding 5 minutes of audio through the stream, sampled every 30 s:
+
+  ```
+   at  30s   active 2509 MB   peak 2765 MB
+   at 150s   active 2509 MB   peak 2765 MB
+   at 300s   active 2509 MB   peak 2765 MB
+  ```
+
+  Not a megabyte of drift, so a stream can run as long as someone keeps talking.
+  Before `tidy()` covered the encoder it grew 17.5 MB per 30 s — linear, no
+  plateau, about **2 GB an hour**. Batch decode is likewise flat across repeated
+  calls; it had leaked 76 MB per utterance. Nearly all of the 2509 MB is the
+  weights themselves (627M parameters at F32). Batch peaks higher than streaming
+  on the same 62 s file — 4587 MB against 2765 MB — because it encodes the whole
+  clip at once and attention is quadratic, so **long recordings are cheaper
+  streamed even when you have the whole file already**.
 
 - **Speech-to-text (Whisper), multilingual** — `src/audio/mel.ts` (log-Mel, ~1e-6 vs numpy
   FFT) + `src/models/whisper.ts` (Conv1d stem, bidirectional encoder, cross-attention decoder,

@@ -2,6 +2,92 @@
 
 Notable changes, newest first. Hand-written.
 
+## [0.5.0]
+
+Speech to text. NVIDIA's **Parakeet TDT** — a FastConformer encoder, a 2-layer
+LSTM prediction network, and a joint that emits a token *and a duration*, so the
+decoder skips encoder frames rather than stepping through them. Batch,
+streaming, word timestamps and live microphone input, all in TypeScript.
+
+Additive only; nothing existing changed.
+
+### Added
+
+- **`Parakeet`** — `transcribeFile(path)` for a recording in, a transcript out.
+  Checked stage by stage against the original PyTorch
+  `transformers.ParakeetForTDT`, not another MLX port: mel, subsampling,
+  positional encoding, encoder and projection all match, with the reference
+  numbers frozen into `validation/parakeet-golden.json` so the check needs no
+  Python. Accuracy matches NVIDIA's published per-language figures — 15.6%
+  measured against 15.08% published on Swedish FLEURS, 16.3% against 18.41% on
+  Danish.
+
+- **`ParakeetStream`** — genuinely incremental, because a transducer's decoder
+  is: state carries across chunks and a token, once emitted, is never revised.
+  Unlike a sliding window, which re-transcribes and can rewrite what you have
+  already read. The encoder is the part that needed adapting, its attention
+  being global, so each chunk is encoded with past context and a little future
+  audio. That lookahead is the latency: ~1.6 s average, ~2.2% word error against
+  whole-clip transcription on short audio. `chunkFrames` / `lookaheadFrames`
+  trade the two.
+
+- **Word timestamps** — `Parakeet.words()`, `decodeGreedyTimed()`, and
+  `ParakeetTokenizer.words()`. Nearly free: the decode loop already walks
+  encoder frames at 80 ms each, so the pointer *is* a clock and is now recorded
+  rather than discarded. An attention decoder has no such pointer, which is why
+  timestamps there need a separate alignment pass. Verified by splicing clips
+  together with exact silences: of 55 words, none landed in a gap. Starts are
+  the number to trust; ends come from the duration head, capped at four frames.
+
+- **Examples** — `examples/parakeet.ts` (`--timestamps`, `--srt`),
+  `examples/parakeet-live.ts` (plays a file to the speakers while transcribing
+  it at microphone pace, so the delay can be heard rather than quoted), and
+  `examples/parakeet-mic.ts` (live from the microphone).
+
+### Fixed
+
+- **Three memory leaks in the decode paths.** Only MLX's own accounting shows
+  these: Metal buffers do not appear in process RSS, which drifted upward in the
+  leaking and the fixed runs alike.
+
+      batch decode        76 MB per utterance
+      Parakeet.tokens     the mel and encoder states, every call
+      ParakeetStream      17.5 MB per 30 s — linear, no plateau, ~2 GB an hour
+
+  The streaming one was the only unbounded one, and the only one a short clip
+  could not reveal: `step()` built the encoder output, passed it straight into
+  `projectEncoder` and dropped it, leaving that tensor and 24 blocks of
+  intermediates to the garbage collector. All three now run inside `tidy()`.
+  Streaming holds at 2509 MB active / 2765 MB peak across 32 minutes of audio
+  without a megabyte of drift.
+
+- **`ParakeetStream.close()`.** A stream owns tensors that outlive every step by
+  design — the LSTM state *is* the stream — so `tidy()` cannot cover them and
+  there had been no way to hand them back.
+
+- **Ctrl-C stops the examples and their audio.** Interrupting `examples/parakeet-live.ts`
+  left `afplay` running, so the sound played on to the end of the file with the
+  transcript already gone. And `scripts/sandbox.sh` had no INT trap at all:
+  `set -m` gives the child its own process group so the watchdog can kill it as
+  a unit, which also takes it out of the terminal's foreground group — an
+  interrupt killed the watchdog and left the work running orphaned.
+
+### Notes
+
+- **Batch degrades on long audio; stream it instead.** Scored against FLEURS'
+  own Danish references, batch is clearly better on short clips and 3-5x faster
+  — 10.7% word error at 64 s against streaming's 26.2% — but 34.0% by 138 s,
+  where streaming holds near 25%. The model was trained on short utterances, so
+  a few thousand frames of global attention is out of distribution; NeMo limits
+  attention context for long-form inference for the same reason. On continuous
+  speech the effect is measurable by 45 s: transcribe the same opening 20 s as
+  part of longer and longer files and batch rewrites 13 then 18 words of audio
+  it had already heard, while streaming settles. Short clips batch, anything
+  approaching a minute of continuous speech stream — even with the file on disk.
+
+- Parakeet covers 25 European languages against Whisper's 99, so it is an
+  addition rather than a replacement.
+
 ## [0.4.1]
 
 A source review of the native binding, and the ten defects it found. All are

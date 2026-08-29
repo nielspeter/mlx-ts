@@ -325,15 +325,27 @@ export function decodeGreedy(W: Weights, cfg: ParakeetConfig, enc: MX): number[]
     // The predictor only moves when a real token was emitted; after a blank its
     // output is unchanged, so it is reused rather than recomputed.
     if (cached === null) {
-      const r = predict(W, cfg, prev, state);
+      // tidy() keeps what is returned and frees the LSTM's intermediates. Without
+      // it every step of a long utterance stays resident until a GC — the pattern
+      // tidy exists for, and it is why a batch of clips ran the machine out of
+      // memory.
+      const r = tidy(() => predict(W, cfg, prev, state));
+      for (const layer of state) {
+        layer.h.free();
+        layer.c.free();
+      }
       cached = r.out;
       state = r.state;
     }
-    const logits = joint(
-      W,
-      encProj.slice([0, t, 0], [1, t + 1, cfg.decoder_hidden_size]).reshape([1, cfg.decoder_hidden_size]),
-      cached,
-    ).toF32();
+    // Everything here is scratch: the frame slice, the reshape, the joint output.
+    // `cached` was made outside this scope, so it is not adopted or freed.
+    const logits = tidy(() =>
+      joint(
+        W,
+        encProj.slice([0, t, 0], [1, t + 1, cfg.decoder_hidden_size]).reshape([1, cfg.decoder_hidden_size]),
+        cached as MX,
+      ).toF32(),
+    );
 
     let token = 0,
       best = -Infinity;
@@ -352,11 +364,11 @@ export function decodeGreedy(W: Weights, cfg: ParakeetConfig, enc: MX): number[]
     }
 
     if (token === cfg.blank_token_id) {
-      if (dur === 0) dur = 1; // never stall on a blank
-      cached = null === cached ? null : cached; // predictor state unchanged
+      if (dur === 0) dur = 1; // never stall on a blank; the predictor is unchanged
     } else {
       out.push(token);
       prev = token;
+      cached.free();
       cached = null; // force a predictor step next time
     }
     t += dur;
@@ -367,5 +379,11 @@ export function decodeGreedy(W: Weights, cfg: ParakeetConfig, enc: MX): number[]
       sinceAdvance = 0;
     }
   }
+  cached?.free();
+  for (const layer of state) {
+    layer.h.free();
+    layer.c.free();
+  }
+  encProj.free();
   return out;
 }

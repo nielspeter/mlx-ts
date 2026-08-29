@@ -34,7 +34,7 @@
 // Left context matters far less than either — 5 s and 10 s score the same — and
 // past ~5 s it stops helping at all.
 import { parakeetMel } from "../audio/mel.ts";
-import { type MX, setCacheLimit } from "../core/mx.ts";
+import { type MX, setCacheLimit, tidy } from "../core/mx.ts";
 import type { Weights } from "../io/loader.ts";
 import type { ParakeetTokenizer } from "../text/parakeet-tokenizer.ts";
 import {
@@ -198,6 +198,21 @@ export class ParakeetStream {
     return this.tok.decode(this.ids.slice(start), start > 0);
   }
 
+  /**
+   * Release the predictor state. A stream owns tensors that outlive every
+   * step by design — the LSTM state is the whole point of it — so they are
+   * not covered by the per-step tidy() and have to be handed back here.
+   */
+  close(): void {
+    for (const layer of this.state) {
+      layer.h.free();
+      layer.c.free();
+    }
+    this.state = [];
+    this.cached?.free();
+    this.cached = null;
+  }
+
   private available(): number {
     return this.bufFrame + Math.floor(this.buf.length / SAMPLES_PER_FRAME);
   }
@@ -225,9 +240,11 @@ export class ParakeetStream {
     // work for any Parakeet checkpoint, not just the 128-bin one.
     const mel = parakeetMel(win, { nMels: this.cfg.encoder_config.num_mel_bins });
     const ep = projectEncoder(this.W, encode(this.W, this.cfg.encoder_config, mel));
+    mel.free();
     const lo = this.next - from;
     const hi = Math.min(ep.shape[1], lo + chunk);
     this.decodeFrames(ep, lo + this.carry, hi);
+    ep.free();
     this.next += chunk;
   }
 
@@ -238,11 +255,20 @@ export class ParakeetStream {
     let guard = 0;
     while (t < hi && guard++ < this.cfg.max_symbols_per_step * (hi - lo) + 64) {
       if (this.cached === null) {
-        const r = predict(this.W, this.cfg, this.prev, this.state);
+        // Same reason as decodeGreedy: without tidy() the LSTM's intermediates
+        // accumulate, and a stream is exactly where that matters — it runs for
+        // as long as someone keeps talking.
+        const r = tidy(() => predict(this.W, this.cfg, this.prev, this.state));
+        for (const layer of this.state) {
+          layer.h.free();
+          layer.c.free();
+        }
         this.cached = r.out;
         this.state = r.state;
       }
-      const logits = joint(this.W, ep.slice([0, t, 0], [1, t + 1, H]).reshape([1, H]), this.cached).toF32();
+      const logits = tidy(() =>
+        joint(this.W, ep.slice([0, t, 0], [1, t + 1, H]).reshape([1, H]), this.cached as MX).toF32(),
+      );
 
       let token = 0,
         best = -Infinity;
@@ -265,6 +291,7 @@ export class ParakeetStream {
       } else {
         this.ids.push(token);
         this.prev = token;
+        this.cached.free();
         this.cached = null;
       }
       t += dur;

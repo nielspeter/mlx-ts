@@ -675,10 +675,33 @@ temperature, top-p, **top-k**, and **repetition penalty**
   repeated calls. Nearly all of the resident 2509 MB is the weights (627M
   parameters at F32).
 
-  Use the stream for anything long, even when you already have the whole file.
-  Batch encodes the clip in one pass, so its peak climbs with duration — 2919 MB
-  at 30 s, 4484 MB at 177 s — and a few minutes in it will exhaust a machine that
-  streams the same audio in 2765 MB flat.
+  **Which to use is decided by accuracy, not memory.** Scored against FLEURS'
+  own Danish references — not against batch, since batch is the thing in
+  question — there is a crossover near two minutes:
+
+  | audio  | batch WER | stream WER |
+  |--------|-----------|------------|
+  |   64 s | **10.7%** |      26.2% |
+  |   94 s | **20.7%** |      30.5% |
+  |  138 s |     34.0% |  **27.7%** |
+  |  251 s |     33.3% |  **23.5%** |
+
+  Batch is clearly better on short clips, and 3-5x faster besides — that is what
+  it is for. But it degrades steadily with length, because the model was trained
+  on short utterances and a few thousand frames of global attention is out of
+  distribution; NeMo's own long-form inference limits the attention context for
+  the same reason. Streaming's 7 s window is therefore not a compromise, it is
+  closer to how the model was trained, and its accuracy barely moves with length
+  while its memory does not move at all.
+
+  Two caveats on those numbers. The absolute streaming column is pessimistic:
+  the test splices FLEURS sentences back to back, which removes the pauses real
+  speech has and makes every join a discontinuity — on natural recordings the
+  crossover comes earlier. And streaming improves with length only because its
+  fixed 3 s warmup is amortised over more audio.
+
+  So: **short clips batch, anything past a couple of minutes stream** — and
+  stream it even when the whole file is already on disk.
 
 - **Speech-to-text (Whisper), multilingual** — `src/audio/mel.ts` (log-Mel, ~1e-6 vs numpy
   FFT) + `src/models/whisper.ts` (Conv1d stem, bidirectional encoder, cross-attention decoder,

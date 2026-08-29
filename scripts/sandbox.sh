@@ -63,6 +63,26 @@ stop() {
   exit 137
 }
 
+# Ctrl-C does not reach the child on its own. `set -m` above gave it its own
+# process group so the watchdog can kill it as a unit, and that same move takes
+# it out of the terminal's foreground group — so an interrupt killed this script
+# and left the work running orphaned, along with anything it had spawned.
+#
+# SIGINT first, so the child can stop an audio player and print what it has,
+# then insist a second later.
+interrupt() {
+  echo "" >&2
+  echo "sandbox: interrupted — stopping process group $PGID" >&2
+  kill -INT "-$PGID" 2>/dev/null
+  for _ in $(seq 10); do
+    kill -0 "$PID" 2>/dev/null || exit 130
+    sleep 0.1
+  done
+  kill -9 "-$PGID" 2>/dev/null
+  exit 130
+}
+trap interrupt INT TERM
+
 while kill -0 "$PID" 2>/dev/null; do
   AVAIL=$(available_mb)
   if [ -n "$AVAIL" ] && [ "$AVAIL" -lt "$FLOOR_MB" ]; then

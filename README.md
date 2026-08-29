@@ -639,12 +639,46 @@ temperature, top-p, **top-k**, and **repetition penalty**
   identical on real speech. 25 European languages, against Whisper's 99 — so it
   is an addition, not a replacement.
 
+  **Word timestamps** (`--timestamps`, or `--srt` for a subtitle file) come out
+  of the same duration head, which is why they cost nothing: the decode loop
+  already walks encoder frames, so the pointer *is* a clock at 80 ms a frame,
+  and it only records where it was. An attention decoder has no such pointer and
+  needs a separate alignment pass. Verified by splicing clips together with exact
+  silences between them — of 55 words, none landed in a gap. Starts are the
+  number to trust; ends come from the duration head, capped at four frames.
+
   **Streaming** (`ParakeetStream`): the decoder is genuinely incremental, so a
   token once emitted is never revised — unlike a sliding window, which
   re-transcribes and can rewrite what you already read. The encoder's attention
   is global, so each chunk is encoded with past context and a little future
   audio; that lookahead is the latency. Measured against transcribing the whole
   clip at once, ~2.2% word error at a 1.6 s average lag. `--look` trades the two.
+  `examples/parakeet-live.ts` plays a file to the speakers while transcribing it
+  at microphone pace, so the delay can be heard rather than quoted.
+
+  **Memory** is flat, which took fixing rather than luck. MLX's own accounting is
+  the only thing that can see this — Metal buffers do not appear in process RSS,
+  which drifts upward whether or not anything is leaking. Streaming 32 minutes of
+  real audio, sampled every two minutes:
+
+  ```
+   at  120s   active 2509 MB   peak 2765 MB
+   at  960s   active 2509 MB   peak 2765 MB
+   at 1920s   active 2509 MB   peak 2765 MB
+  ```
+
+  Not a megabyte of drift across the whole run, so a stream can go as long as
+  someone keeps talking. Before `tidy()` covered the encoder it grew 17.5 MB per
+  30 s — linear, no plateau, about **2 GB an hour**: `step()` dropped the encoder
+  output and 24 blocks of intermediates on the floor for the GC to find. Batch
+  decode had its own leak, 76 MB per utterance, and is now likewise flat across
+  repeated calls. Nearly all of the resident 2509 MB is the weights (627M
+  parameters at F32).
+
+  Use the stream for anything long, even when you already have the whole file.
+  Batch encodes the clip in one pass, so its peak climbs with duration — 2919 MB
+  at 30 s, 4484 MB at 177 s — and a few minutes in it will exhaust a machine that
+  streams the same audio in 2765 MB flat.
 
 - **Speech-to-text (Whisper), multilingual** — `src/audio/mel.ts` (log-Mel, ~1e-6 vs numpy
   FFT) + `src/models/whisper.ts` (Conv1d stem, bidirectional encoder, cross-attention decoder,

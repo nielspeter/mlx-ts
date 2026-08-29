@@ -302,6 +302,20 @@ export function joint(W: Weights, encFrame: MX, decOut: MX): MX {
 export const projectEncoder = (W: Weights, enc: MX): MX =>
   enc.matmul(W.mx("encoder_projector.weight").transpose([1, 0])).add(W.mx("encoder_projector.bias"));
 
+/** A token and where in the audio it came from. One encoder frame is 80 ms. */
+export type TimedToken = {
+  id: number;
+  /** Encoder frame the joint network emitted this token at. */
+  frame: number;
+  /**
+   * Frames the model then skipped — its own estimate of the token's extent.
+   *
+   * This is what makes TDT different from a plain transducer: the duration head
+   * is trained, not inferred. A 0 means another token follows at the same frame.
+   */
+  duration: number;
+};
+
 /**
  * TDT greedy decode: encoder states in, token ids out.
  *
@@ -310,10 +324,21 @@ export const projectEncoder = (W: Weights, enc: MX): MX =>
  * would stall forever, so it is forced to 1 — the reference does the same.
  */
 export function decodeGreedy(W: Weights, cfg: ParakeetConfig, enc: MX): number[] {
+  return decodeGreedyTimed(W, cfg, enc).map((t) => t.id);
+}
+
+/**
+ * The same decode, keeping the frame each token was emitted at.
+ *
+ * Timestamps are nearly free here in a way they are not for an attention
+ * decoder: this loop already walks encoder frames, so the pointer *is* the
+ * time. Nothing extra is computed — it is only recorded.
+ */
+export function decodeGreedyTimed(W: Weights, cfg: ParakeetConfig, enc: MX): TimedToken[] {
   const encProj = projectEncoder(W, enc);
   const T = encProj.shape[1];
   const V = cfg.vocab_size;
-  const out: number[] = [];
+  const out: TimedToken[] = [];
 
   let state = initialState(cfg);
   let prev = cfg.blank_token_id;
@@ -325,15 +350,27 @@ export function decodeGreedy(W: Weights, cfg: ParakeetConfig, enc: MX): number[]
     // The predictor only moves when a real token was emitted; after a blank its
     // output is unchanged, so it is reused rather than recomputed.
     if (cached === null) {
-      const r = predict(W, cfg, prev, state);
+      // tidy() keeps what is returned and frees the LSTM's intermediates. Without
+      // it every step of a long utterance stays resident until a GC — the pattern
+      // tidy exists for, and it is why a batch of clips ran the machine out of
+      // memory.
+      const r = tidy(() => predict(W, cfg, prev, state));
+      for (const layer of state) {
+        layer.h.free();
+        layer.c.free();
+      }
       cached = r.out;
       state = r.state;
     }
-    const logits = joint(
-      W,
-      encProj.slice([0, t, 0], [1, t + 1, cfg.decoder_hidden_size]).reshape([1, cfg.decoder_hidden_size]),
-      cached,
-    ).toF32();
+    // Everything here is scratch: the frame slice, the reshape, the joint output.
+    // `cached` was made outside this scope, so it is not adopted or freed.
+    const logits = tidy(() =>
+      joint(
+        W,
+        encProj.slice([0, t, 0], [1, t + 1, cfg.decoder_hidden_size]).reshape([1, cfg.decoder_hidden_size]),
+        cached as MX,
+      ).toF32(),
+    );
 
     let token = 0,
       best = -Infinity;
@@ -352,11 +389,12 @@ export function decodeGreedy(W: Weights, cfg: ParakeetConfig, enc: MX): number[]
     }
 
     if (token === cfg.blank_token_id) {
-      if (dur === 0) dur = 1; // never stall on a blank
-      cached = null === cached ? null : cached; // predictor state unchanged
+      if (dur === 0) dur = 1; // never stall on a blank; the predictor is unchanged
     } else {
-      out.push(token);
+      // Recorded before `t` advances: this is the frame the token was emitted at.
+      out.push({ id: token, frame: t, duration: dur });
       prev = token;
+      cached.free();
       cached = null; // force a predictor step next time
     }
     t += dur;
@@ -367,5 +405,11 @@ export function decodeGreedy(W: Weights, cfg: ParakeetConfig, enc: MX): number[]
       sinceAdvance = 0;
     }
   }
+  cached?.free();
+  for (const layer of state) {
+    layer.h.free();
+    layer.c.free();
+  }
+  encProj.free();
   return out;
 }

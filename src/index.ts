@@ -111,6 +111,7 @@ export { OLMoE } from "./models/olmoe.ts";
 // it skips encoder frames rather than decoding one step per frame.
 export {
   decodeGreedy,
+  decodeGreedyTimed,
   encode as parakeetEncode,
   initialState,
   joint,
@@ -121,6 +122,7 @@ export {
   projectEncoder,
   relPositionalEncoding,
   subsample,
+  type TimedToken,
 } from "./models/parakeet.ts";
 export { Parakeet } from "./models/parakeet-model.ts";
 export { ParakeetStream, SAMPLES_PER_FRAME, type StreamOptions } from "./models/parakeet-stream.ts";
@@ -179,7 +181,7 @@ export { Adam } from "./nn/optim.ts";
 export { ChatTemplate, type Message } from "./text/chat-template.ts";
 export { type ClipEncodeOptions, ClipTokenizer } from "./text/clip-tokenizer.ts";
 export { type Decoder, type GenOptions, generate, type KV, streamText, streamTokens } from "./text/lm.ts";
-export { ParakeetTokenizer } from "./text/parakeet-tokenizer.ts";
+export { ParakeetTokenizer, type Word } from "./text/parakeet-tokenizer.ts";
 // --- text: tokenizing, chat templates, generation ------------------------
 export { GPT2_SPLIT, Tokenizer } from "./text/tokenizer.ts";
 export { UnigramTokenizer } from "./text/unigram.ts";

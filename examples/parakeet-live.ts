@@ -63,12 +63,39 @@ console.log(`  a word should appear ${(lookaheadFrames * 1280 / SR).toFixed(2)}-
 stream.push(new Float32Array(TICK));
 
 const player = silent ? null : spawn("afplay", [path], { stdio: "ignore" });
+
+// Ctrl-C has to stop the sound too. `afplay` is its own process, and killing
+// this one does not kill it — without this the audio plays on to the end of the
+// file after the transcript is gone.
+let stopped = false;
+const shutdown = () => {
+  // A second Ctrl-C means the first one did not get us out. Leave immediately;
+  // no cleanup is worth ignoring the user twice.
+  if (stopped) process.exit(130);
+  stopped = true;
+  try {
+    // SIGKILL, not SIGTERM: this is a media player with nothing to wind down,
+    // and a polite signal can sit unhandled long enough to keep making noise.
+    player?.kill("SIGKILL");
+    stream.close();
+    const words = stream.text.trim().split(/\s+/).filter(Boolean).length;
+    process.stdout.write(`\n\n  stopped — ${words} words transcribed\n\n`);
+  } finally {
+    // Whatever went wrong above, still leave. Without the finally an exception
+    // in the cleanup strands the process with the handler already latched, and
+    // every later Ctrl-C is swallowed.
+    process.exit(130);
+  }
+};
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
+
 const t0 = performance.now();
 const elapsed = () => (performance.now() - t0) / 1000;
 let lag = "";
 if (!lines) process.stdout.write("  ");
 
-for (let i = 0; i < pcm.length; i += TICK) {
+for (let i = 0; i < pcm.length && !stopped; i += TICK) {
   const audioAt = (i + TICK) / SR;
   // Feed no faster than the sound is playing.
   const wait = audioAt - elapsed();
@@ -94,6 +121,7 @@ for (let i = 0; i < pcm.length; i += TICK) {
 }
 
 const tail = stream.flush();
+stream.close();
 if (lines) {
   if (tail) console.log(`  [audio ${(pcm.length / SR).toFixed(1)}s]  final chunk                ${tail}`);
 } else {

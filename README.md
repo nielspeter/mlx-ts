@@ -13,8 +13,9 @@ A TypeScript MLX SDK over **`mlx-c`** (Apple's official C API) via FFI, with
 running on **Bun, Deno and Node**, and
 **numerically identical** to MLX's Python reference for ops and bindings, and to
 each model's *original* PyTorch implementation for the ports
-(`scripts/validate-all.sh`: **67/67**, of which 5 Stable Diffusion checks are
-opt-in via `MLXTS_SD=1` and 5 Spark-TTS checks via `MLXTS_TTS=1`).
+(`scripts/validate-all.sh`: **69/69**, of which 5 Stable Diffusion checks are
+opt-in via `MLXTS_SD=1`, 5 Spark-TTS via `MLXTS_TTS=1`, and 2 Parakeet via
+`MLXTS_ASR=1`).
 Test coverage over `src/` is measured and gated at **67% of functions / 74% of
 lines**.
 
@@ -95,6 +96,17 @@ const img = sd.generate("a photo of an astronaut riding a horse", {
   width: 384, height: 384, steps: 20, seed: 42,   // same seed -> same image
 });
 await savePng("out.png", img.toF32(), 384, 384);
+```
+
+**Speech to text, fast.** Parakeet TDT — NVIDIA's FastConformer transducer. Its
+decoder predicts how many encoder frames to skip at each step, so it does far
+less work than an autoregressive decoder over a fixed window.
+
+```ts
+import { Parakeet } from "@nielspeter/mlx-ts";
+
+const asr = await Parakeet.fromPretrained();
+console.log(await asr.transcribeFile("audio.wav"));
 ```
 
 **Text to speech.** Spark-TTS: a Qwen2 LM predicts audio tokens, BiCodec
@@ -191,7 +203,8 @@ const [hidden, cellOut] = tidy(() => lstm.apply(
 Runnable versions live in `examples/`: `examples/chat.ts`, `examples/stream.ts`,
 `examples/musicgen.ts`, `examples/train.ts`, `examples/metal-kernel.ts`,
 `examples/hub.ts`, `examples/stable-diffusion.ts`, `examples/clip-zeroshot.ts`,
-`examples/spark-tts.ts`, `examples/spark-clone.ts`, and `examples/server.ts` — an OpenAI-compatible endpoint with
+`examples/spark-tts.ts`, `examples/spark-clone.ts`, `examples/parakeet.ts`,
+and `examples/server.ts` — an OpenAI-compatible endpoint with
 a chat page and a live mic. CI runs them on Bun, Deno and Node.
 
 ## When you'd want something else
@@ -582,9 +595,9 @@ base, packed into a u64), `mlx_fast_scaled_dot_product_attention` with
 
 ## What you can build with it
 
-mlx-ts today is a **local runtime for text LLMs, Whisper speech-to-text,
-Spark-TTS text-to-speech, MusicGen text-to-music, Stable Diffusion text-to-image
-and CLIP image embeddings**, plus training (LoRA, full fine-tuning, a GRPO loss path) and
+mlx-ts today is a **local runtime for text LLMs, Whisper and Parakeet
+speech-to-text, Spark-TTS text-to-speech, MusicGen text-to-music, Stable
+Diffusion text-to-image and CLIP image embeddings**, plus training (LoRA, full fine-tuning, a GRPO loss path) and
 custom Metal kernels — Apple-Silicon-only, published as
 `@nielspeter/mlx-ts` and also runnable as scripts in this repo. The library
 under `src/` runs on Bun, Deno and Node, as do all of `examples/`; only
@@ -599,6 +612,20 @@ temperature, top-p, **top-k**, and **repetition penalty**
   `/v1/chat/completions` (SSE/JSON), `/v1/embeddings`, `/v1/audio/transcriptions`,
   and a self-contained chat page at `/` with a **live mic** (record → transcribe →
   edit → send). Single-process / low-concurrency, not multi-tenant.
+- **Speech-to-text (Parakeet TDT)** — `examples/parakeet.ts`: a recording in, a
+  transcript out. NVIDIA's **FastConformer** encoder (`src/models/parakeet.ts`):
+  an 8x depthwise-separable subsampling stem, 24 blocks of Macaron feed-forwards
+  around Transformer-XL **relative-position attention** and a gated convolution,
+  then a 2-layer LSTM prediction network and a joint that emits a token *and a
+  duration*. That duration head is the point: a plain transducer advances one
+  encoder frame per blank, while this one skips, so silence costs one step
+  instead of many.
+
+  Checked against the **original PyTorch** `transformers.ParakeetForTDT`, not
+  another MLX port: every stage matches, and the decode is token-for-token
+  identical on real speech. 25 European languages, against Whisper's 99 — so it
+  is an addition, not a replacement.
+
 - **Speech-to-text (Whisper), multilingual** — `src/audio/mel.ts` (log-Mel, ~1e-6 vs numpy
   FFT) + `src/models/whisper.ts` (Conv1d stem, bidirectional encoder, cross-attention decoder,
   KV cache) + `src/text/whisper-tokenizer.ts`. **Token-for-token identical to `mlx_whisper`**

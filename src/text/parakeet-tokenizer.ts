@@ -25,12 +25,29 @@ export class ParakeetTokenizer {
     return new ParakeetTokenizer(await readJson(path));
   }
 
-  /** Token ids -> text. Blanks and other specials are the caller's to filter. */
-  decode(ids: number[]): string {
+  /**
+   * Whether this token begins a new word.
+   *
+   * Words are emitted in pieces — "country" arrives as ▁co + un + tr + y — so a
+   * caller showing text incrementally needs this to avoid cutting a word in
+   * half at a chunk boundary.
+   */
+  startsWord(id: number): boolean {
+    return (this.idToTok[id] ?? "").startsWith(METASPACE);
+  }
+
+  /**
+   * Token ids -> text. Blanks and other specials are the caller's to filter.
+   *
+   * `continuation` keeps a leading space. An utterance starts with a metaspace
+   * (prepend_scheme "always") which should not become a leading space — but a
+   * *chunk* in the middle of a stream must keep it, or its first word runs into
+   * the previous chunk's last one.
+   */
+  decode(ids: number[], continuation = false): string {
     let s = "";
     for (const id of ids) s += this.idToTok[id] ?? "";
-    // prepend_scheme "always": every utterance starts with a metaspace, which
-    // would otherwise come back as a leading space.
-    return s.replaceAll(METASPACE, " ").replace(/^ /, "");
+    s = s.replaceAll(METASPACE, " ");
+    return continuation ? s : s.replace(/^ /, "");
   }
 }

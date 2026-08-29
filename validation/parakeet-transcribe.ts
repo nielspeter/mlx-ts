@@ -39,5 +39,31 @@ const ok = norm(heard) === norm(TEXT);
 console.log(`said:  ${JSON.stringify(TEXT)}`);
 console.log(`heard: ${JSON.stringify(heard)}`);
 console.log(`${(samples.length / SPARK_SAMPLE_RATE / secs).toFixed(0)}x realtime`);
-console.log(ok ? "transcribe: ok" : "transcribe: MISMATCH");
-if (!ok) process.exit(1);
+
+// --- and again, streaming ---------------------------------------------------
+// Fed in 100 ms pieces, as a microphone would. The encoder's attention is
+// global, so each chunk is encoded with past context and a little future audio;
+// the decoder is a transducer and genuinely incremental, emitting tokens that
+// are never revised. Streaming therefore costs some accuracy against
+// transcribing the whole clip at once, and this is what pins that cost.
+const { ParakeetStream } = await import("../src/models/parakeet-stream.ts");
+const { ParakeetTokenizer } = await import("../src/text/parakeet-tokenizer.ts");
+const { readJson } = await import("../src/io/fs.ts");
+const { hubFile } = await import("../src/io/hub.ts");
+const { singleFileWeights } = await import("../src/io/loader.ts");
+const REPO = "nvidia/parakeet-tdt-0.6b-v3";
+const cfg = await readJson<import("../src/models/parakeet.ts").ParakeetConfig>(await hubFile(REPO, "config.json"));
+const stream = new ParakeetStream(
+  singleFileWeights(await hubFile(REPO, "model.safetensors")),
+  cfg,
+  await ParakeetTokenizer.fromFile(await hubFile(REPO, "tokenizer.json")),
+);
+const pcm = await decodeAudio(OUT);
+for (let i = 0; i < pcm.length; i += 1600) stream.push(pcm.subarray(i, i + 1600));
+stream.flush();
+const streamed = stream.text.trim();
+console.log(`streamed (${stream.latencySeconds.toFixed(2)}s lag): ${JSON.stringify(streamed)}`);
+
+const streamOk = norm(streamed) === norm(TEXT);
+console.log(ok && streamOk ? "transcribe: ok" : "transcribe: MISMATCH");
+if (!ok || !streamOk) process.exit(1);

@@ -109,6 +109,19 @@ const asr = await Parakeet.fromPretrained();
 console.log(await asr.transcribeFile("audio.wav"));
 ```
 
+**Live transcription.** A transducer emits each token once and moves on, so a
+streamed transcript is never revised — no sliding window, no segment seam.
+
+```ts
+const stream = new ParakeetStream(W, cfg, tok);   // ~2 s behind the speaker
+for await (const pcm of mic) process.stdout.write(stream.push(pcm));
+process.stdout.write(stream.flush());
+```
+
+`bun examples/parakeet-live.ts audio.wav` plays a file through the speakers while
+feeding the model at microphone pace, so you can hear the delay rather than read
+about it.
+
 **Text to speech.** Spark-TTS: a Qwen2 LM predicts audio tokens, BiCodec
 renders them. The voice is described, not cloned — no reference clip needed.
 
@@ -204,7 +217,7 @@ Runnable versions live in `examples/`: `examples/chat.ts`, `examples/stream.ts`,
 `examples/musicgen.ts`, `examples/train.ts`, `examples/metal-kernel.ts`,
 `examples/hub.ts`, `examples/stable-diffusion.ts`, `examples/clip-zeroshot.ts`,
 `examples/spark-tts.ts`, `examples/spark-clone.ts`, `examples/parakeet.ts`,
-and `examples/server.ts` — an OpenAI-compatible endpoint with
+`examples/parakeet-live.ts`, and `examples/server.ts` — an OpenAI-compatible endpoint with
 a chat page and a live mic. CI runs them on Bun, Deno and Node.
 
 ## When you'd want something else
@@ -625,6 +638,13 @@ temperature, top-p, **top-k**, and **repetition penalty**
   another MLX port: every stage matches, and the decode is token-for-token
   identical on real speech. 25 European languages, against Whisper's 99 — so it
   is an addition, not a replacement.
+
+  **Streaming** (`ParakeetStream`): the decoder is genuinely incremental, so a
+  token once emitted is never revised — unlike a sliding window, which
+  re-transcribes and can rewrite what you already read. The encoder's attention
+  is global, so each chunk is encoded with past context and a little future
+  audio; that lookahead is the latency. Measured against transcribing the whole
+  clip at once, ~2.2% word error at a 1.6 s average lag. `--look` trades the two.
 
 - **Speech-to-text (Whisper), multilingual** — `src/audio/mel.ts` (log-Mel, ~1e-6 vs numpy
   FFT) + `src/models/whisper.ts` (Conv1d stem, bidirectional encoder, cross-attention decoder,

@@ -639,6 +639,14 @@ temperature, top-p, **top-k**, and **repetition penalty**
   identical on real speech. 25 European languages, against Whisper's 99 — so it
   is an addition, not a replacement.
 
+  **Word timestamps** (`--timestamps`, or `--srt` for a subtitle file) come out
+  of the same duration head, which is why they cost nothing: the decode loop
+  already walks encoder frames, so the pointer *is* a clock at 80 ms a frame,
+  and it only records where it was. An attention decoder has no such pointer and
+  needs a separate alignment pass. Verified by splicing clips together with exact
+  silences between them — of 55 words, none landed in a gap. Starts are the
+  number to trust; ends come from the duration head, capped at four frames.
+
   **Streaming** (`ParakeetStream`): the decoder is genuinely incremental, so a
   token once emitted is never revised — unlike a sliding window, which
   re-transcribes and can rewrite what you already read. The encoder's attention

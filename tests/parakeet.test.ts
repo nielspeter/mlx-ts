@@ -150,6 +150,46 @@ test("the tokenizer turns metaspace into word boundaries", () => {
   expect(tok.decode([1, 2])).toBe("world");
 });
 
+test("words are grouped from their pieces and timed from their frames", () => {
+  // "country" arrives as ▁coun + try, so a word runs from the frame its first
+  // piece was emitted at to the end of its last. One frame is 80 ms.
+  const tok = new ParakeetTokenizer({
+    model: { vocab: [["▁the", 0], ["▁coun", 1], ["try", 2], ["▁is", 3]] },
+  });
+  const words = tok.words([
+    { id: 0, frame: 0, duration: 2 },
+    { id: 1, frame: 2, duration: 1 },
+    { id: 2, frame: 3, duration: 3 },
+    { id: 3, frame: 10, duration: 2 },
+  ]);
+  expect(words.map((w) => w.text)).toEqual(["the", "country", "is"]);
+  expect(words.map((w) => w.start)).toEqual([0, 0.16, 0.8]);
+  // "country" ends where `try` ends (frame 3 + 3 = 6), not where ▁coun does.
+  expect(words.map((w) => w.end)).toEqual([0.16, 0.48, 0.96]);
+});
+
+test("a zero-duration token still gets a non-empty span", () => {
+  // TDT may emit several tokens at one frame — duration 0 means "another
+  // follows here". Credited zero frames, such a word would start and end at the
+  // same instant, which no caption renderer can show.
+  const tok = new ParakeetTokenizer({ model: { vocab: [["▁a", 0], ["▁b", 1]] } });
+  const words = tok.words([
+    { id: 0, frame: 5, duration: 0 },
+    { id: 1, frame: 5, duration: 2 },
+  ]);
+  expect(words.map((w) => w.text)).toEqual(["a", "b"]);
+  expect(words[0].end).toBeGreaterThan(words[0].start);
+});
+
+test("a word never starts before the audio does", () => {
+  // Frames are absolute, so the arithmetic is only a scale — but an off-by-one
+  // in the frame constant would silently shift every subtitle.
+  const tok = new ParakeetTokenizer({ model: { vocab: [["▁x", 0]] } });
+  expect(tok.words([{ id: 0, frame: 0, duration: 1 }])[0].start).toBe(0);
+  // 12.5 frames a second, so frame 125 is exactly 10 s in.
+  expect(tok.words([{ id: 0, frame: 125, duration: 1 }])[0].start).toBeCloseTo(10, 9);
+});
+
 // --- streaming -------------------------------------------------------------
 
 import { ParakeetStream, SAMPLES_PER_FRAME } from "../src/index.ts";

@@ -1,7 +1,7 @@
 {
   "name": "@nielspeter/mlx-ts",
-  "version": "0.4.1",
-  "description": "A TypeScript MLX SDK over Apple's mlx-c via FFI \u2014 Bun, Deno and Node. Apple Silicon only.",
+  "version": "0.5.0",
+  "description": "A TypeScript MLX SDK over Apple's mlx-c via FFI — Bun, Deno and Node. Apple Silicon only.",
   "license": "MIT",
   "homepage": "https://github.com/nielspeter/mlx-ts#readme",
   "repository": {

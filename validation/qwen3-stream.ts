@@ -34,7 +34,8 @@ import {
 } from "../src/index.ts";
 import { readJson } from "../src/io/fs.ts";
 
-const REPO = "mlx-community/Qwen3-0.6B-4bit";
+// Any cached Qwen3 small enough to also run resident; MLXTS_REPO overrides.
+const REPO = process.env.MLXTS_REPO ?? "mlx-community/Qwen3-0.6B-4bit";
 const PROMPT = "The capital of France is";
 const MAX = 48;
 const LAYER = /^model\.layers\.(\d+)\./;

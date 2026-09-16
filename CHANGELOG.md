@@ -40,6 +40,21 @@ Notable changes, newest first. Hand-written.
 - `Decoder.close?()`, so a model holding something outside the GC's reach — a
   layer store's open weight maps — can release it after `load()`.
 
+- **Models already in Hugging Face's cache are used where they are.** Before
+  downloading, `hubFile` — and so `load()` and every model's `fromHub` — looks
+  in `~/.cache/huggingface/hub`, where `huggingface_hub`, mlx-lm and the `hf`
+  CLI keep what they fetch, following the same `HF_HUB_CACHE`, `HF_HOME` and
+  `XDG_CACHE_HOME` settings they do. A checkpoint fetched by one of them is not
+  downloaded a second time. The lookup only reads: nothing is written there,
+  and new downloads still go to `~/.cache/mlx-ts`. `{ sharedCache: false }`
+  turns it off. A Qwen3-0.6B-4bit fetched by the `hf` CLI loads, resident and
+  streamed, with the network blocked, generating the same tokens as mlx-ts's own
+  copy.
+
+  A sharded checkpoint must have every shard beside its index, since that is
+  how it is opened; if Hugging Face's copy is incomplete, the whole set is
+  downloaded into mlx-ts's cache rather than mixed across the two.
+
 ### Fixed
 
 - **Untied Qwen3 checkpoints computed logits through the wrong matrix.** The
@@ -49,6 +64,13 @@ Notable changes, newest first. Hand-written.
   is now read when the config says the model is untied; a test pins that an
   `lm_head` equal to the embedding reproduces the tied logits and a different
   one changes them.
+
+- **`revision` was ignored by the cache.** Every revision of a file shared one
+  cached path, so after `main` was downloaded, asking for another branch, tag or
+  commit returned `main`'s copy without a request. A revision other than `main`
+  is now cached under `<org>/<name>@<revision>/`; `main` keeps the existing
+  layout, so nothing already cached is downloaded again. The revision is also
+  URL-encoded in the request, so a `refs/pr/1` resolves.
 
 ## [0.5.0]
 

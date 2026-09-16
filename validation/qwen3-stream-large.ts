@@ -9,10 +9,12 @@
 // which compares streamed against resident on models small enough for both.
 //
 //   MLXTS_REPO=mlx-community/Qwen3-32B-8bit bun validation/qwen3-stream-large.ts ["prompt"] [max tokens]
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
 import {
   activeMemoryMB,
-  cacheDir,
   cacheMemoryMB,
+  hubFile,
   isCached,
   load,
   peakMemoryMB,
@@ -25,17 +27,14 @@ const REPO = process.env.MLXTS_REPO ?? "mlx-community/Qwen3-32B-8bit";
 const PROMPT = process.argv[2] ?? "The capital of France is";
 const MAX = Number(process.argv[3] ?? 12);
 
-// Every weight file must be cached: load() would otherwise fetch the rest.
+// Every weight file must be cached — and, for a sharded checkpoint, beside its
+// index, which is how load() opens it. Anything less and load() downloads.
 async function fullyCached(repo: string): Promise<boolean> {
   if (await isCached(repo, "model.safetensors")) return true;
   if (!(await isCached(repo, "model.safetensors.index.json"))) return false;
-  const index = await readJson<{ weight_map: Record<string, string> }>(
-    `${cacheDir()}/${repo}/model.safetensors.index.json`,
-  );
-  for (const shard of new Set(Object.values(index.weight_map))) {
-    if (!(await isCached(repo, shard))) return false;
-  }
-  return true;
+  const index = await hubFile(repo, "model.safetensors.index.json");
+  const { weight_map } = await readJson<{ weight_map: Record<string, string> }>(index);
+  return Object.values(weight_map).every((shard) => existsSync(join(dirname(index), shard)));
 }
 
 if (!(await fullyCached(REPO))) {

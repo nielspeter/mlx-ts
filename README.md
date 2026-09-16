@@ -297,7 +297,9 @@ for await (const piece of streamText(model, tokenizer, tokenizer.encode("Hello")
 ```
 
 `load()` fetches config, tokenizer and weights from the hub and caches them in
-`~/.cache/mlx-ts` (`MLXTS_CACHE` overrides), so only the first run downloads.
+`~/.cache/mlx-ts` (`MLXTS_CACHE` overrides), so only the first run downloads. A
+model already in Hugging Face's cache — fetched by `huggingface_hub`, mlx-lm or
+the `hf` CLI — is read from there instead of downloaded again.
 Supported today: 4-bit `qwen3` and `olmoe` checkpoints.
 
 **Models larger than memory.** `load(repo, { streamLayers: true })` reads a

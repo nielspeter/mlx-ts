@@ -3,6 +3,8 @@
 // Fetches config, tokenizer and weights from the hub (cached), dispatches on
 // config.model_type, and hands back a model the generation API accepts.
 
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { readJson } from "../io/fs.ts";
 import { type FetchOptions, hubFile } from "../io/hub.ts";
 import { layerStore } from "../io/layer-store.ts";
@@ -27,8 +29,8 @@ export type LoadOptions = FetchOptions & {
 const SHARD_INDEX = "model.safetensors.index.json";
 
 // Weights are one file or many; the sharded loader mmaps each shard on first
-// touch, so a large MoE never materialises on the heap.
-async function fetchWeights(repo: string, opts: FetchOptions): Promise<{ single?: string; index?: string }> {
+// touch, so a large MoE never materialises on the heap. Exported for tests.
+export async function fetchWeights(repo: string, opts: FetchOptions): Promise<{ single?: string; index?: string }> {
   // Single file first. Many mlx-community repos ship BOTH model.safetensors and
   // an index that names only that one file, so probing for the index first
   // misreads them as sharded.
@@ -47,8 +49,16 @@ async function fetchWeights(repo: string, opts: FetchOptions): Promise<{ single?
     );
   }
   const shards = new Set(Object.values((await readJson<{ weight_map: Record<string, string> }>(index)).weight_map));
-  for (const shard of shards) await hubFile(repo, shard, opts);
-  return { index };
+  // A sharded checkpoint is opened through its index, each shard looked up
+  // beside it, so every file must sit in one directory. Hugging Face's cache can
+  // hold an index whose shards never all finished downloading; opening it there
+  // would fail on the missing one. Then the whole set comes into our own cache —
+  // re-fetching any shard that was there, which is waste but not a wrong answer.
+  if ([...shards].every((shard) => existsSync(join(dirname(index), shard)))) return { index };
+  const own = { ...opts, sharedCache: false };
+  const ownIndex = await hubFile(repo, SHARD_INDEX, own);
+  for (const shard of shards) await hubFile(repo, shard, own);
+  return { index: ownIndex };
 }
 
 /**

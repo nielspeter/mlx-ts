@@ -16,10 +16,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  cacheDir,
   entries,
   freeMap,
   get,
+  hubFile,
   isCached,
   layerStore,
   load,
@@ -47,9 +47,8 @@ if (mode) {
   let model: any;
   let tokenizer: Tokenizer;
   if (mode === "sharded") {
-    const dir = join(cacheDir(), REPO);
-    model = new Qwen3(await readJson(join(dir, "config.json")), layerStore(process.argv[3]));
-    tokenizer = await Tokenizer.fromFile(join(dir, "tokenizer.json"));
+    model = new Qwen3(await readJson(await hubFile(REPO, "config.json")), layerStore(process.argv[3]));
+    tokenizer = await Tokenizer.fromFile(await hubFile(REPO, "tokenizer.json"));
   } else {
     ({ model, tokenizer } = await load(REPO, { streamLayers: mode === "streamed" }));
   }
@@ -68,7 +67,7 @@ if (!(await isCached(REPO, "model.safetensors"))) {
   console.log(`qwen3-stream: skipped — ${REPO} is not cached`);
   process.exit(0);
 }
-const src = join(cacheDir(), REPO, "model.safetensors");
+const src = await hubFile(REPO, "model.safetensors");
 
 /** Bytes per tensor, from the header alone. */
 function tensorBytes(path: string): Map<string, number> {

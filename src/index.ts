@@ -64,6 +64,8 @@ export type { Backend, Callback, CType, SymbolSpec, SymbolTable } from "./ffi/ty
 export { CLIP_MEAN, CLIP_STD, type LoadImageOptions, loadImage } from "./image/load.ts";
 export { savePng } from "./image/png.ts";
 export { cacheDir, type FetchOptions, hubFile, isCached } from "./io/hub.ts";
+// Decoder layers read from disk one at a time, for models larger than memory.
+export { type LayerStore, type LayerStoreOptions, layerStore } from "./io/layer-store.ts";
 // --- weights -------------------------------------------------------------
 export {
   entries,
@@ -95,7 +97,7 @@ export { type DiffusionConfig, EulerSampler } from "./models/diffusion.ts";
 export { type EncodecConfig, EncodecDecoder } from "./models/encodec.ts";
 // Fetch-and-construct from a Hugging Face repo id — the step between `npm i`
 // and a token.
-export { type Loaded, load } from "./models/load.ts";
+export { type Loaded, type LoadOptions, load } from "./models/load.ts";
 // Text -> music. T5 conditioning, a codebook LM, EnCodec back to a waveform.
 export {
   type GenerateOptions,

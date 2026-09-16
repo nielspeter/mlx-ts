@@ -5,6 +5,7 @@
 
 import { readJson } from "../io/fs.ts";
 import { type FetchOptions, hubFile } from "../io/hub.ts";
+import { layerStore } from "../io/layer-store.ts";
 import { loadSafetensors, shardedWeights, singleFileWeights, type Weights } from "../io/loader.ts";
 import type { Decoder } from "../text/lm.ts";
 import { Tokenizer } from "../text/tokenizer.ts";
@@ -12,6 +13,16 @@ import { OLMoE } from "./olmoe.ts";
 import { Qwen3 } from "./qwen-nn.ts";
 
 export type Loaded = { model: Decoder; tokenizer: Tokenizer; config: any };
+
+export type LoadOptions = FetchOptions & {
+  /**
+   * Read decoder layers from disk one at a time instead of holding the whole
+   * model: for checkpoints larger than memory, at the cost of a read per layer
+   * per step. Same tokens either way. Qwen3 only so far; release the shared
+   * tensors with `model.close()`.
+   */
+  streamLayers?: boolean;
+};
 
 const SHARD_INDEX = "model.safetensors.index.json";
 
@@ -46,8 +57,11 @@ async function fetchWeights(repo: string, opts: FetchOptions): Promise<{ single?
  * Supported today: 4-bit `qwen3` and `olmoe` checkpoints (the mlx-community
  * conversions). Unquantised and other architectures throw with the reason —
  * adding one is a forward pass plus a weight-key mapping, not new binding work.
+ *
+ * `{ streamLayers: true }` reads Qwen3's decoder layers from disk one at a time,
+ * for checkpoints larger than memory; it also reads sharded Qwen3 checkpoints.
  */
-export async function load(repo: string, opts: FetchOptions = {}): Promise<Loaded> {
+export async function load(repo: string, opts: LoadOptions = {}): Promise<Loaded> {
   const config = await readJson<any>(await hubFile(repo, "config.json", opts));
   const tokenizer = await Tokenizer.fromFile(await hubFile(repo, "tokenizer.json", opts));
   const type = config.model_type;
@@ -64,10 +78,19 @@ export async function load(repo: string, opts: FetchOptions = {}): Promise<Loade
 
   switch (type) {
     case "qwen3":
+      if (opts.streamLayers) {
+        return { model: new Qwen3(config, layerStore(w.index ?? w.single!)), tokenizer, config };
+      }
       // Qwen3 takes the raw map handle rather than the accessor.
-      if (w.index) throw new Error(`load(${repo}): sharded qwen3 is not wired up yet`);
+      if (w.index) {
+        throw new Error(
+          `load(${repo}): sharded qwen3 is not wired up for resident loading yet; ` +
+          `{ streamLayers: true } reads it layer by layer`,
+        );
+      }
       return { model: new Qwen3(config, loadSafetensors(w.single!)), tokenizer, config };
     case "olmoe":
+      if (opts.streamLayers) throw new Error(`load(${repo}): streamLayers supports qwen3 only so far`);
       return { model: new OLMoE(config, weights()), tokenizer, config };
     default:
       throw new Error(

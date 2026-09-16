@@ -84,6 +84,15 @@ if bun -e 'import {isCached} from "./src/io/hub.ts"; process.exit(await isCached
   OUT=$(bun examples/hub.ts "The capital of France is" 2>&1 | tail -1)
   case "$OUT" in *"chunks in"*) ok "load() from a hub repo id -> streaming text" ;;
                  *) no "hub load()" "$OUT" ;; esac
+
+  # Layer streaming: the same model held in memory, streamed from its file, and
+  # streamed from a two-shard copy must generate identical tokens, the streamed
+  # runs peaking lower by close to the layers they no longer hold.
+  if bun validation/qwen3-stream.ts >/tmp/v_qs.txt 2>&1 && grep -q "qwen3-stream: ok" /tmp/v_qs.txt; then
+    ok "layer streaming: identical tokens resident / streamed / sharded ($(grep -oE 'peak [0-9]+ -> [0-9]+ MB' /tmp/v_qs.txt))"
+  else
+    no "layer streaming" "$(grep -E 'FAIL|MISMATCH|rror' /tmp/v_qs.txt | head -2 | tr '\n' ' ')"
+  fi
 fi
 
 # The Qwen2 backbone against mlx-lm, on Spark-TTS's own prompt format. Compared

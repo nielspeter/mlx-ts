@@ -26,7 +26,7 @@ const INTERNAL = new Set([
 const MODULES = [
   "core/mx", "core/pytree", "nn/nn", "nn/optim", "nn/loss", "nn/autograd",
   "text/tokenizer", "text/chat-template", "text/lm", "text/whisper-tokenizer",
-  "io/loader", "io/fs", "audio/mel",
+  "io/loader", "io/layer-store", "io/fs", "audio/mel",
   "models/whisper", "models/olmoe", "models/qwen-nn", "models/nanogpt-model",
   "models/vae", "models/clip", "models/unet", "models/diffusion", "models/stable-diffusion",
   "text/clip-tokenizer", "image/png", "image/load", "models/clip-vision", "models/clip-layers",

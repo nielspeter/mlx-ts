@@ -638,7 +638,9 @@ temperature, top-p, **top-k**, and **repetition penalty**
   drops from 349 MB to 109 MB, at the cost of a read per layer per step (~22 vs
   ~290 tok/s), so it is for models that do not fit. Single-file and sharded
   checkpoints, checked against the resident model by `validation/qwen3-stream.ts`.
-  Qwen3 only so far: the store is not model-specific, but each architecture still
+  On a model that genuinely does not fit — Qwen3-32B-8bit, 32.4 GiB against a
+  28.1 GiB GPU limit — it answers correctly at a 2.18 GB peak and 5.4 s per token
+  (`validation/qwen3-stream-large.ts`). Qwen3 only so far: the store is not model-specific, but each architecture still
   needs wiring to it.
 - **Speech-to-text (Parakeet TDT)** — `examples/parakeet.ts`: a recording in, a
   transcript out. NVIDIA's **FastConformer** encoder (`src/models/parakeet.ts`):

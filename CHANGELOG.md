@@ -15,6 +15,14 @@ Notable changes, newest first. Hand-written.
   longer holds, and generation is token-for-token identical whether the
   checkpoint is one file or sharded.
 
+  And on a model that does not fit: mlx-community/Qwen3-32B-8bit is 32.4 GiB,
+  over the 28.1 GiB this 36 GB Mac lets the GPU use, and with 10.5 GiB free it
+  answered "The capital of France is" with " Paris." at a **2.18 GB** MLX peak —
+  the embedding and output head, plus one layer — at 5.4 s per token, reading
+  about 33 GB of layers from the SSD for each. A resident run is impossible
+  there, so that output has no exact reference; exactness rests on the
+  small-model checks. `validation/qwen3-stream-large.ts` reproduces it.
+
   It reads the checkpoint as it is on disk: no conversion, no second copy. The
   cost is a read per layer per step, so on a model that already fits it is pure
   overhead — about 22 tok/s against 290 on that 0.6B model, with its weights

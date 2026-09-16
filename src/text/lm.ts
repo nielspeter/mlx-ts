@@ -25,6 +25,9 @@ export interface Decoder {
   // Logits [B, vocab] at the last position for ids [B,L] at sequence `offset`,
   // mutating `cache` in place. Graph is built, NOT evaluated.
   logitsLastMX(idsMX: MX, B: number, L: number, offset: number, cache: KV[], window: number): MX;
+  // Release what the model holds outside the GC's reach — a layer store's
+  // open weight maps, for one. Optional: most models have nothing to release.
+  close?(): void;
 }
 
 export interface GenOptions {

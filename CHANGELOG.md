@@ -2,6 +2,46 @@
 
 Notable changes, newest first. Hand-written.
 
+## [Unreleased]
+
+### Added
+
+- **Layer streaming: run a model larger than memory.** `layerStore(checkpoint)`
+  reads a decoder's layers from disk one at a time, and
+  `load(repo, { streamLayers: true })` wires it into Qwen3. Only the embedding,
+  final norm and output head stay in memory; each layer is loaded when the
+  forward pass reaches it and released once its outputs are evaluated. On
+  Qwen3-0.6B-4bit the peak falls from **349 MB to 109 MB**, the 27 layers it no
+  longer holds, and generation is token-for-token identical whether the
+  checkpoint is one file or sharded.
+
+  It reads the checkpoint as it is on disk: no conversion, no second copy. The
+  cost is a read per layer per step, so on a model that already fits it is pure
+  overhead — about 22 tok/s against 290 on that 0.6B model, with its weights
+  already in the page cache. It is for models that do not fit, and suits long
+  inputs with short outputs, where one pass over the layers serves the whole
+  prompt.
+
+  `withLayer` evaluates what a layer returns before releasing it. MLX is lazy,
+  so an unevaluated output still references the weights that produce it; doing
+  the evaluation inside the store means a model cannot release a layer early.
+
+- **Sharded Qwen3 checkpoints load** with `{ streamLayers: true }`. Resident
+  loading of a sharded Qwen3 still throws, now naming the option that works.
+
+- `Decoder.close?()`, so a model holding something outside the GC's reach — a
+  layer store's open weight maps — can release it after `load()`.
+
+### Fixed
+
+- **Untied Qwen3 checkpoints computed logits through the wrong matrix.** The
+  mlx-community 4-bit Qwen3-8B and 32B set `tie_word_embeddings: false` and ship
+  their own `lm_head`, but `Qwen3` always projected through the embedding,
+  without error. 0.6B and 4B are tied, which is why nothing caught it. The head
+  is now read when the config says the model is untied; a test pins that an
+  `lm_head` equal to the embedding reproduces the tied logits and a different
+  one changes them.
+
 ## [0.5.0]
 
 Speech to text. NVIDIA's **Parakeet TDT** — a FastConformer encoder, a 2-layer

@@ -300,6 +300,12 @@ for await (const piece of streamText(model, tokenizer, tokenizer.encode("Hello")
 `~/.cache/mlx-ts` (`MLXTS_CACHE` overrides), so only the first run downloads.
 Supported today: 4-bit `qwen3` and `olmoe` checkpoints.
 
+**Models larger than memory.** `load(repo, { streamLayers: true })` reads a
+Qwen3's decoder layers from disk one at a time instead of holding them all: the
+same tokens, a fraction of the peak memory, a read per layer per step. The
+measured cost is under *What you can build with it*. Release what a streamed
+model holds with `model.close()`.
+
 macOS on Apple Silicon only. Bun and Deno work as-is; Node needs 24+ (the
 package ships compiled JS, because Node refuses to type-strip inside
 `node_modules`) and pulls in `koffi` for FFI. The library package carries no
@@ -625,6 +631,15 @@ temperature, top-p, **top-k**, and **repetition penalty**
   `/v1/chat/completions` (SSE/JSON), `/v1/embeddings`, `/v1/audio/transcriptions`,
   and a self-contained chat page at `/` with a **live mic** (record → transcribe →
   edit → send). Single-process / low-concurrency, not multi-tenant.
+- **Models larger than memory** — `load(repo, { streamLayers: true })` reads a
+  Qwen3's decoder layers from disk one at a time (`src/io/layer-store.ts`), so only
+  the embedding, final norm and output head stay in memory. Generation is
+  token-for-token the same as holding the whole model; on Qwen3-0.6B-4bit the peak
+  drops from 349 MB to 109 MB, at the cost of a read per layer per step (~22 vs
+  ~290 tok/s), so it is for models that do not fit. Single-file and sharded
+  checkpoints, checked against the resident model by `validation/qwen3-stream.ts`.
+  Qwen3 only so far: the store is not model-specific, but each architecture still
+  needs wiring to it.
 - **Speech-to-text (Parakeet TDT)** — `examples/parakeet.ts`: a recording in, a
   transcript out. NVIDIA's **FastConformer** encoder (`src/models/parakeet.ts`):
   an 8x depthwise-separable subsampling stem, 24 blocks of Macaron feed-forwards

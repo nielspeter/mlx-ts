@@ -164,7 +164,7 @@ export { upsampleNearest, type VaeConfig, VaeDecoder } from "./models/vae.ts";
 // `bun src/models/<name>.ts "prompt"`.
 export { loadWhisper, Whisper } from "./models/whisper.ts";
 // The training entry point: differentiate a scalar loss w.r.t. a pytree of params.
-export { valueAndGrad } from "./nn/autograd.ts";
+export { checkpoint, valueAndGrad, vjpOf } from "./nn/autograd.ts";
 export { crossEntropy, maskedCrossEntropy } from "./nn/loss.ts";
 // --- modules, optimizers, losses ----------------------------------------
 export {

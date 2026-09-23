@@ -5,7 +5,7 @@
 //   bun olmoe.ts "The capital of France is"
 //   MX_SHARDED=models/model-olmoe-sharded/model.safetensors.index.json bun olmoe.ts "..."
 
-import { activeMemoryMB, cacheMemoryMB, fromI32, MX, peakMemoryMB, resetPeakMemory, setMemoryLimit, stack } from "../core/mx.ts";
+import { activeMemoryMB, cacheMemoryMB, fromI32, MX, peakMemoryMB, resetPeakMemory, setMemoryLimit, stack, tidy } from "../core/mx.ts";
 import { readJson } from "../io/fs.ts";
 import { shardedWeights, singleFileWeights, type Weights } from "../io/loader.ts";
 import { type Experts, MoE, QuantizedEmbedding, QuantizedLinear, RMSNorm } from "../nn/nn.ts";
@@ -83,7 +83,18 @@ class OLMoE implements Decoder {
   // ids as a device array [B,T] -> logits at last position [B, vocab].
   logitsLastMX(idsMX: MX, B: number, T: number, offset: number, cache: KV[], _window: number): MX {
     let h = this.embed.forward(idsMX);
-    for (let i = 0; i < this.NL; i++) h = this.block(this.layers[i], h, B, T, offset, cache, i);
+    for (let i = 0; i < this.NL; i++) {
+      const input = h;
+      // One scope per layer, so each layer's intermediates can be freed once
+      // consumed rather than all held until the caller's scope ends (see
+      // Qwen3.decoderLayers). Nothing is evaluated here.
+      [h] = tidy(() => {
+        const out = this.block(this.layers[i], input, B, T, offset, cache, i);
+        const kv = cache[i] as { k: MX; v: MX };
+        return [out, kv.k, kv.v];
+      });
+      input.free();
+    }
     h = this.finalNorm.forward(h);
     const last = h.takeAxis(fromI32(Int32Array.from([T - 1]), [1]), 1).reshape([B, this.D]);
     return this.lmHead.forward(last);                      // untied lm_head -> [B, vocab]

@@ -579,10 +579,19 @@ export class MX {
   // on a bfloat16 array returns null, and reading from it segfaults rather than
   // erroring — which is exactly what a bf16 checkpoint's logits do.
   toF32(): number[] {
+    return Array.from(this.toF32Array());
+  }
+  /**
+   * The values as a Float32Array — a copy, so it outlives this array. Prefer it
+   * over `toF32()` for anything large: converting to `number[]` costs about
+   * 20 ns per element (3 ms for a 152k-token vocabulary), the copy a fraction
+   * of that.
+   */
+  toF32Array(): Float32Array {
     if (this.dtype !== FLOAT32) {
       const c = this.astype(FLOAT32);
       try {
-        return c.toF32();
+        return c.toF32Array();
       } finally {
         c.free();
       }
@@ -591,14 +600,14 @@ export class MX {
     if (!this.contiguous) {
       const c = this.copy();
       try {
-        return c.toF32();
+        return c.toF32Array();
       } finally {
         c.free();
       }
     }
     const n = this.size;
     const p = Number(m.mlx_array_data_float32(this.h));
-    return Array.from(new Float32Array(toArrayBuffer(p, 0, n * 4)));
+    return new Float32Array(toArrayBuffer(p, 0, n * 4)).slice();
   }
 }
 

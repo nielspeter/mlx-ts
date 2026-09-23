@@ -55,6 +55,25 @@ Notable changes, newest first. Hand-written.
   how it is opened; if Hugging Face's copy is incomplete, the whole set is
   downloaded into mlx-ts's cache rather than mixed across the two.
 
+- **`MX.toF32Array()`** returns an array's values as a `Float32Array`, by plain
+  copy. `toF32()` builds a `number[]` one element at a time, about 20 ns each:
+  2.77 ms for a 151,936-entry vocabulary against 0.05 ms. `toF32()` is
+  unchanged; the log-Mel front-end and Whisper's language detection now use the
+  faster one.
+
+### Changed
+
+- **Qwen3 and OLMoE free each layer's intermediates during the forward pass.**
+  Every layer ran inside the caller's single `tidy()`, whose JS handles kept all
+  of its intermediates alive until the scope ended, so MLX could free none of
+  them mid-pass. Each layer now has its own scope and hands on only its output
+  and KV entries. Nothing extra is evaluated — MLX keeps what the lazy graph
+  still needs — so there is no speed cost, and memory now matches what mlx-lm
+  gets from Python's reference counting. Peak for a Qwen3-0.6B-4bit prefill of
+  223 tokens: 847 → 723 MB (mlx-lm 635 MB); at batch 8: 3,727 → 1,374 MB
+  (mlx-lm 1,306 MB). Generation is token-for-token unchanged against MLX Python
+  for both models.
+
 ### Fixed
 
 - **Untied Qwen3 checkpoints computed logits through the wrong matrix.** The

@@ -155,7 +155,7 @@ export class Whisper {
   private detectLanguage(audio: MX): number {
     const cache: WCache[] = Array.from({ length: this.dec.length }, () => ({ sk: null, sv: null, ck: null, cv: null }));
     const lg = tidy(() => this.decoderStep(Int32Array.from([this.sp.sot]), 1, 0, audio, cache).reshape([this.tokEmb.shape[0]]));
-    const v = lg.copy().toF32(); lg.free();
+    const v = lg.copy().toF32Array(); lg.free();
     let best = this.sp.langStart, bv = -Infinity;
     for (let i = 0; i < this.sp.nLang; i++) { const x = v[this.sp.langStart + i]; if (x > bv) { bv = x; best = this.sp.langStart + i; } }
     return best;

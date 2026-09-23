@@ -147,7 +147,13 @@ generalizes this: any opaque `mlx_*` type → `ptr`.
    near instabilities). Validation criterion: identical start + both converge.
 9. The codegen **skips function-pointer params** (closures) → `dlopen`
    `mlx_closure_new_func` by hand (see `src/nn/autograd.ts` / `validation/spike-train.ts`).
-10. **`vmap` has no public mlx-c symbol**, but is **recoverable** over FFI from
+10. **One `tidy()` around a whole forward pass holds every layer's
+    intermediates** until it ends — MLX can free nothing mid-pass while a JS
+    handle refers to it. For inference, give each layer its own `tidy()` and
+    return only its outputs; no `eval` is needed inside (gotcha 6). This is how
+    `Qwen3` and `OLMoE` run. Training keeps one scope: the backward pass needs
+    those intermediates.
+11. **`vmap` has no public mlx-c symbol**, but is **recoverable** over FFI from
     the internal `mlx_detail_vmap_trace`/`_replace` primitives (`spikes/spike-vmap.ts`:
     single-input, shared-input `-1` axis, and per-sample gradients `vmap(grad)` all
     validated). Not needed for minibatch training anyway. Caveat: `mlx_detail_*`

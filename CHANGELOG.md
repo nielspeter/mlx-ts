@@ -61,6 +61,29 @@ Notable changes, newest first. Hand-written.
   unchanged; the log-Mel front-end and Whisper's language detection now use the
   faster one.
 
+- **`checkpoint(fn)`: gradient checkpointing** (`mlx.core.checkpoint`). Inside
+  `valueAndGrad`, a checkpointed function keeps only its inputs for the backward
+  pass and runs again when its gradient is needed, so a stack of checkpointed
+  layers holds one layer's intermediates instead of all of them. LoRA on 4-bit
+  Qwen3, one step over the 8 longest of a set of ~950-token prompts: peak
+  7,925 → 2,334 MB on 0.6B and 10,710 → 3,272 MB on 1.7B, for about a third
+  more step time; 4B then trains at 4.5 GB. Output, loss and every gradient
+  match the unchecked function within 1e-6.
+
+  Arrays `fn` closes over are constants to the gradient: trainable ones (an
+  adapter) must be passed as inputs. A first version kept every intermediate's
+  JS handle alive in the caller's `tidy()` and used *more* memory than no
+  checkpointing (9.9 GB on 0.6B); each call now has its own scope.
+
+- **`vjpOf(fn)`: vector-Jacobian products** (`mlx.core.vjp`). Carries a
+  gradient for `fn`'s output back to its inputs, so a backward pass can be
+  taken one layer at a time — each layer's gradient evaluated and its weights
+  released before the next layer back. A layer-by-layer backward matches
+  `valueAndGrad` within 1e-6 on a test stack, and within float32 rounding
+  (≈ 4e-5 relative) on real Qwen3-0.6B gradients. It is what LoRA training with
+  a model's layers read from disk needs: Qwen3-4B trained that way peaked at
+  3.4 GB (that trainer is not part of this change).
+
 ### Changed
 
 - **Qwen3 and OLMoE free each layer's intermediates during the forward pass.**

@@ -192,6 +192,11 @@ for (let i = 0; i <= STEPS; i++) {
 }
 ```
 
+When activations outgrow memory, `checkpoint(layer)` keeps only a layer's
+inputs and recomputes the rest during the backward pass, and `vjpOf(layer)`
+carries a gradient back through one layer at a time — for a backward pass that
+never holds the whole model.
+
 **A custom Metal kernel, written inline.** EnCodec's LSTM is one of these, not a
 demo — `examples/metal-kernel.ts` is Apple's own LSTM kernel, verbatim.
 

@@ -255,7 +255,7 @@ export function parakeetMel(pcm: Float32Array, o: { nMels?: number; preemphasis?
   // log(x + 2^-24), then zero-mean unit-variance per mel bin across time. The
   // variance divides by (n - 1), not n: the sample variance, not the population
   // one, which is a real difference at short utterances.
-  const f = raw.toF32();
+  const f = raw.toF32Array();
   raw.free();
   const LOG_GUARD = 2 ** -24,
     EPS = 1e-5;
@@ -432,7 +432,7 @@ export function logMel(
       im = fr.matmul(sin);
     return re.mul(re).add(im.mul(im)).matmul(filtersT); // |rfft|^2 @ mel  [F, nMels]
   });
-  const raw = melPow.toF32();
+  const raw = melPow.toF32Array();
   melPow.free();
   cos.free();
   sin.free();

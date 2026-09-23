@@ -120,7 +120,21 @@ class Qwen3 implements Decoder {
   private decoderLayers(h: MX, B: number, L: number, offset: number, cache: KV[], window: number): MX {
     const store = this.store;
     if (!store) {
-      for (let i = 0; i < this.NL; i++) h = this.block(this.layers[i], i, h, B, L, offset, cache, window);
+      for (let i = 0; i < this.NL; i++) {
+        const input = h;
+        // One scope per layer, as in the streaming path below but without the
+        // eval: each layer's intermediates lose their JS handles as soon as the
+        // layer's graph is built. MLX keeps whatever the graph still needs until
+        // eval (gotcha 6) and then frees each buffer once it is consumed — what
+        // Python gets from reference counting. In the caller's single scope,
+        // every layer's intermediates stayed alive until that scope ended.
+        [h] = tidy(() => {
+          const out = this.block(this.layers[i], i, input, B, L, offset, cache, window);
+          const kv = cache[i] as { k: MX; v: MX };
+          return [out, kv.k, kv.v];
+        });
+        input.free();
+      }
       return h;
     }
     for (let i = 0; i < this.NL; i++) {
